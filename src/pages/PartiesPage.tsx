@@ -88,7 +88,7 @@ export function PartiesPage() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Card>
             <p className="text-sm text-muted-foreground">إجمالي الجهات</p>
-            <p className="mt-1 text-2xl tabular">{pf.total}</p>
+            <p className="mt-1 text-2xl tabular">{qty(pf.total, 0)}</p>
           </Card>
           <Card>
             <p className="text-sm text-muted-foreground">عملاء نشطين</p>
@@ -101,7 +101,7 @@ export function PartiesPage() {
           </Card>
           <Card>
             <p className="text-sm text-muted-foreground">معرّض للفقد</p>
-            <p className="mt-1 text-2xl tabular text-danger">{pf.atRisk}</p>
+            <p className="mt-1 text-2xl tabular text-danger">{qty(pf.atRisk, 0)}</p>
           </Card>
         </div>
       ) : null}
@@ -112,7 +112,7 @@ export function PartiesPage() {
           <div>
             <h3 className="text-base">تركيز خطر في المبيعات</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              {Math.round(pf.topShare ?? 0)}٪ من مبيعاتك من {pf.topNames.slice(0, 3).join("، ")}. لو واحد منهم وقف، الدخل
+              {qty(pf.topShare ?? 0, 0)}٪ من مبيعاتك من {pf.topNames.slice(0, 3).join("، ")}. لو واحد منهم وقف، الدخل
               هيتأثر بشكل مباشر.
             </p>
           </div>

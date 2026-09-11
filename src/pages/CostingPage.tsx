@@ -188,7 +188,7 @@ export function CostingPage() {
                     {r.score === null ? (
                       <span className="text-xs text-muted-foreground">مش كفاية</span>
                     ) : (
-                      <Badge tone={r.verdict ? VERDICT[r.verdict].tone : "muted"}>{r.score}</Badge>
+                      <Badge tone={r.verdict ? VERDICT[r.verdict].tone : "muted"}>{qty(r.score, 0)}</Badge>
                     )}
                   </td>
                 </tr>
@@ -386,7 +386,7 @@ export function CostingTeaser() {
       <p className="mt-1 text-sm text-muted-foreground">
         متوسط الهامش {dash.avgMarginPct === null ? "—" : `${qty(Math.round(dash.avgMarginPct), 0)}٪`} مقابل هدف{" "}
         {qty(dash.targetMarginPct, 0)}٪
-        {best ? ` · أعلى سكور: ${best.product.name} (${best.score})` : ""}
+        {best ? ` · أعلى سكور: ${best.product.name} (${qty(best.score ?? 0, 0)})` : ""}
         {alerts.length ? ` · ${qty(alerts.length, 0)} تنبيه ربحية` : ""}
       </p>
     </Card>

@@ -48,7 +48,7 @@ export function CostsPage() {
               <div className="text-left">
                 <Money value={item.amount} />
                 {item.due > 0 ? (
-                  <p className="text-xs text-warn">باقي {Math.round(item.due)}</p>
+                  <p className="text-xs text-warn">باقي {qty(item.due, 0)}</p>
                 ) : (
                   <p className="text-xs text-ok">اتدفع</p>
                 )}
@@ -131,7 +131,7 @@ export function CostItemPage() {
                 <Money value={e.amount} />
               </div>
               <div className="mt-2 flex items-center justify-between text-sm">
-                {due > 0.5 ? <Badge tone="warn">باقي {Math.round(due)}</Badge> : <Badge tone="ok">اتدفع</Badge>}
+                {due > 0.5 ? <Badge tone="warn">باقي {qty(due, 0)}</Badge> : <Badge tone="ok">اتدفع</Badge>}
                 {can.edit && due > 0.5 ? (
                   <Button size="sm" variant="outline" onClick={() => setPayId(e.id)}>
                     دفعة

@@ -83,7 +83,7 @@ export function IntelligencePage() {
         </Card>
         <Card>
           <p className="text-sm text-muted-foreground">عليهم مؤشر خطر</p>
-          <p className="mt-1 text-2xl tabular text-danger">{pf.atRisk}</p>
+          <p className="mt-1 text-2xl tabular text-danger">{qty(pf.atRisk, 0)}</p>
         </Card>
       </div>
 
@@ -115,7 +115,7 @@ export function IntelligencePage() {
             <div className="min-w-0 flex-1">
               <h3 className="text-base">تركيز الإيرادات</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                أكبر {pf.top5.length} عملاء = {Math.round(pf.top5Share)}٪ من مبيعاتك.
+                أكبر {qty(pf.top5.length, 0)} عملاء = {qty(pf.top5Share, 0)}٪ من مبيعاتك.
                 {pf.concentrationRisk ? " المصنع معتمد على عدد قليل — لو واحد وقف، الدخل هيتأثر فورًا." : ""}
               </p>
               <ul className="mt-2 list-none space-y-1.5">
@@ -123,7 +123,7 @@ export function IntelligencePage() {
                   <li key={t.name}>
                     <div className="flex items-baseline justify-between gap-3 text-sm">
                       <span className="truncate">{t.name}</span>
-                      <span className="shrink-0 tabular text-muted-foreground">{Math.round(t.share)}٪</span>
+                      <span className="shrink-0 tabular text-muted-foreground">{qty(t.share, 0)}٪</span>
                     </div>
                     <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
                       <div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(100, t.share)}%` }} />
@@ -141,10 +141,10 @@ export function IntelligencePage() {
           <h3 className="text-base">أكبر عميل مش دايمًا أفضل عميل</h3>
           <p className="mt-1 text-sm text-muted-foreground">
             <strong className="font-medium text-foreground">{pf.biggestBySales.party.name}</strong> هو الأكبر مبيعات (
-            {Math.round(pf.biggestBySales.sales).toLocaleString("ar-EG")} ج) بسكور {pf.biggestBySales.total} وهامش{" "}
+            {qty(pf.biggestBySales.sales, 0)} ج) بسكور {qty(pf.biggestBySales.total ?? 0, 0)} وهامش{" "}
             {pf.biggestBySales.marginPct === null ? "غير مسجّل" : `${qty(pf.biggestBySales.marginPct, 0)}٪`}، بينما{" "}
             <strong className="font-medium text-foreground">{pf.bestByScore.party.name}</strong> أعلى سكور (
-            {pf.bestByScore.total}) بمبيعات {Math.round(pf.bestByScore.sales).toLocaleString("ar-EG")} ج وهامش{" "}
+            {qty(pf.bestByScore.total ?? 0, 0)}) بمبيعات {qty(pf.bestByScore.sales, 0)} ج وهامش{" "}
             {pf.bestByScore.marginPct === null ? "غير مسجّل" : `${qty(pf.bestByScore.marginPct, 0)}٪`}.
           </p>
         </Card>
@@ -208,13 +208,13 @@ export function IntelligencePage() {
                     {r.total === null ? (
                       <span className="text-xs text-muted-foreground">مش كفاية</span>
                     ) : (
-                      <Badge tone={scoreTone(r.total)}>{r.total}</Badge>
+                      <Badge tone={scoreTone(r.total)}>{qty(r.total, 0)}</Badge>
                     )}
                   </td>
                   <td className="p-2.5 text-left tabular">
                     <Money value={r.sales} />
                   </td>
-                  <td className="p-2.5 text-left tabular">{Math.round(r.collectionRate)}٪</td>
+                  <td className="p-2.5 text-left tabular">{qty(r.collectionRate, 0)}٪</td>
                   <td className="p-2.5 text-left tabular">
                     {r.marginPct === null ? "—" : `${qty(r.marginPct, 0)}٪`}
                   </td>
@@ -241,7 +241,7 @@ export function IntelligencePage() {
           {pf.tiers.map((t) => (
             <Card key={t.key} className="p-3">
               <p className="text-xs text-muted-foreground">{t.label}</p>
-              <p className="mt-0.5 text-xl tabular">{t.count}</p>
+              <p className="mt-0.5 text-xl tabular">{qty(t.count, 0)}</p>
             </Card>
           ))}
         </div>
@@ -375,8 +375,8 @@ export function IntelligenceTeaser() {
         </Link>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
-        أعلى سكور: {top[0].party.name} ({top[0].total}) — تحصيل {Math.round(m.collectionRate)}٪
-        {pf.atRisk ? ` · ${pf.atRisk} عميل عليهم مؤشر خطر` : ""}
+        أعلى سكور: {top[0].party.name} ({qty(top[0].total ?? 0, 0)}) — تحصيل {qty(m.collectionRate, 0)}٪
+        {pf.atRisk ? ` · ${qty(pf.atRisk, 0)} عميل عليهم مؤشر خطر` : ""}
       </p>
     </Card>
   );

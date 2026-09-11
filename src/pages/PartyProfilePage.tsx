@@ -117,7 +117,7 @@ export function PartyProfilePage() {
             <Money value={party.balance} className="text-xl" />
             {credit.hasLimit ? (
               <p className={credit.overLimit ? "text-xs text-danger" : "text-xs text-muted-foreground"}>
-                حد الائتمان {Math.round(credit.limit)} — متاح {Math.round(credit.available)}
+                حد الائتمان {qty(credit.limit, 0)} — متاح {qty(credit.available, 0)}
               </p>
             ) : null}
           </div>
@@ -287,7 +287,7 @@ function Overview({
                   ) : (
                     <span className={stats.growthPct >= 0 ? "tabular text-ok" : "tabular text-danger"}>
                       {stats.growthPct >= 0 ? "+" : ""}
-                      {Math.round(stats.growthPct)}٪
+                      {qty(stats.growthPct, 0)}٪
                     </span>
                   )}
                 </DataRow>
@@ -362,7 +362,7 @@ function Overview({
               <li key={r.name}>
                 <div className="flex items-baseline justify-between gap-3 text-sm">
                   <span>{r.name}</span>
-                  <span className="tabular text-muted-foreground">{Math.round(r.share)}٪</span>
+                  <span className="tabular text-muted-foreground">{qty(r.share, 0)}٪</span>
                 </div>
                 <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
                   <div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(100, r.share)}%` }} />
@@ -389,7 +389,7 @@ function ScoreCard({ score }: { score: PartyScore }) {
     <Card>
       <div className="flex items-baseline justify-between gap-3">
         <h3 className="text-base">سكور العلاقة</h3>
-        <Badge tone={scoreTone(score.total ?? 0)}>{score.total} / 100</Badge>
+        <Badge tone={scoreTone(score.total ?? 0)}>{qty(score.total ?? 0, 0)} / ١٠٠</Badge>
       </div>
       <ul className="mt-3 list-none space-y-2.5">
         {score.parts.map((p) => (
@@ -458,7 +458,7 @@ function AccountTab({
           </dl>
           {credit.overLimit ? (
             <p className="mt-1 text-sm text-danger">
-              عدّى الحد بـ{Math.round(credit.exposure - credit.limit)} جنيه — أي توريد جديد محتاج موافقة.
+              عدّى الحد بـ{qty(credit.exposure - credit.limit, 0)} جنيه — أي توريد جديد محتاج موافقة.
             </p>
           ) : null}
         </Card>
@@ -1262,8 +1262,8 @@ function DeliveryPanel({
     >
       {over ? (
         <div className="mb-3 rounded-md border border-danger/30 bg-danger-soft/40 p-3 text-sm">
-          التوريد بيعدي الائتمان المتاح ({Math.round(credit.available)} جنيه) بـ
-          {Math.round(value - credit.available)} جنيه. النظام مش هيمنعك، بس محتاج موافقتك.
+          التوريد بيعدي الائتمان المتاح ({qty(credit.available, 0)} جنيه) بـ
+          {qty(value - credit.available, 0)} جنيه. النظام مش هيمنعك، بس محتاج موافقتك.
         </div>
       ) : null}
       <Field label="التاريخ">

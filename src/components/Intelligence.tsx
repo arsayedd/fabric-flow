@@ -42,7 +42,7 @@ export function ScoreSummary({ partyId, onOpen }: { partyId: string; onOpen: () 
           <h3 className="text-base">سكور العميل</h3>
           <p className="mt-1 text-3xl tabular">
             {qty(score.total ?? 0, 0)}
-            <span className="text-base text-muted-foreground"> / 100</span>
+            <span className="text-base text-muted-foreground"> / ١٠٠</span>
           </p>
         </div>
         <div className="flex flex-col items-end gap-1">
@@ -248,7 +248,7 @@ function ScoreHeader({ score }: { score: CustomerScore }) {
           <p className="text-sm text-muted-foreground">سكور العميل</p>
           <p className="text-4xl tabular">
             {qty(score.total ?? 0, 0)}
-            <span className="text-lg text-muted-foreground"> / 100</span>
+            <span className="text-lg text-muted-foreground"> / ١٠٠</span>
           </p>
           <Badge tone={score.tier?.tone ?? "muted"} className="mt-1">
             {score.tier?.label}
@@ -258,7 +258,7 @@ function ScoreHeader({ score }: { score: CustomerScore }) {
           <p className="text-sm text-muted-foreground">مؤشر الخطر</p>
           <p className="text-2xl tabular">
             {qty(score.risk.total, 0)}
-            <span className="text-base text-muted-foreground"> / 100</span>
+            <span className="text-base text-muted-foreground"> / ١٠٠</span>
           </p>
           <Badge tone={score.risk.level === "high" ? "danger" : score.risk.level === "medium" ? "warn" : "ok"}>
             {score.risk.levelLabel}
@@ -306,13 +306,13 @@ function BlockCard({ block, coverage }: { block: ScoreBlock; coverage: number })
         <span className="flex-1">
           <span className="font-medium">{block.label}</span>
           <span className="block text-xs text-muted-foreground">
-            وزنه {block.weight}٪{block.score !== null && effective !== block.weight ? ` (فعليًا ${effective}٪)` : ""}
+            وزنه {qty(block.weight, 0)}٪{block.score !== null && effective !== block.weight ? ` (فعليًا ${qty(effective, 0)}٪)` : ""}
           </span>
         </span>
         {block.score === null ? (
           <Badge>بيانات مش كفاية</Badge>
         ) : (
-          <Badge tone={scoreTone(block.score)}>{block.score}</Badge>
+          <Badge tone={scoreTone(block.score)}>{qty(block.score ?? 0, 0)}</Badge>
         )}
       </summary>
       <div className="border-t border-border px-3.5 py-3">
