@@ -154,9 +154,9 @@ export function demoDb(): Db {
   const whFg = tpl.warehouses[1].id;
 
   const products = [
-    { id: "p1", factoryId: FID, sku: "P-001", name: "قميص قطني", categoryId: cat("قمصان"), unitId: unitPiece, sellPrice: 210, minStock: 50 },
-    { id: "p2", factoryId: FID, sku: "P-002", name: "فستان صيفي", categoryId: cat("فساتين"), unitId: unitPiece, sellPrice: 380, minStock: 20 },
-    { id: "p3", factoryId: FID, sku: "P-003", name: "تيشيرت مطبوع", categoryId: cat("تيشيرتات"), unitId: unitPiece, sellPrice: 60, minStock: 100 },
+    { id: "p1", factoryId: FID, sku: "P-001", name: "قميص قطني", categoryId: cat("قمصان"), unitId: unitPiece, sellPrice: 265, minStock: 50 },
+    { id: "p2", factoryId: FID, sku: "P-002", name: "فستان صيفي", categoryId: cat("فساتين"), unitId: unitPiece, sellPrice: 520, minStock: 20 },
+    { id: "p3", factoryId: FID, sku: "P-003", name: "تيشيرت مطبوع", categoryId: cat("تيشيرتات"), unitId: unitPiece, sellPrice: 165, minStock: 100 },
   ];
 
   const boms = [
@@ -241,9 +241,9 @@ export function demoDb(): Db {
     mv("material", mat("كيس تغليف"), whMat, "issue", -300, cost("كيس تغليف"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
     mv("material", mat("قماش قطن"), whMat, "waste", -12, cost("قماش قطن"), addDays(today, -9), "order", "o1", "هالك قص"),
     // إنتاج تام
-    mv("product", "p1", whFg, "receipt_fg", 190, 145, addDays(today, -3), "order", "o1", "تام جزئي"),
-    mv("product", "p3", whFg, "receipt_fg", 160, 44, addDays(today, -5), "order", "o5"),
-    mv("product", "p3", whFg, "delivery", -160, 44, addDays(today, -2), "delivery", "d5", "تسليم تيشيرت"),
+    mv("product", "p1", whFg, "receipt_fg", 190, 212, addDays(today, -3), "order", "o1", "تام جزئي"),
+    mv("product", "p3", whFg, "receipt_fg", 160, 114, addDays(today, -5), "order", "o5"),
+    mv("product", "p3", whFg, "delivery", -160, 114, addDays(today, -2), "delivery", "d5", "تسليم تيشيرت"),
   ];
 
   const clients = [
@@ -316,11 +316,11 @@ export function demoDb(): Db {
   ];
 
   const orders = [
-    { id: "o1", factoryId: FID, code: "SN-1042", clientId: "cl-1", model: "قميص قطني", productId: "p1", bomId: "b1", materialsIssuedAt: addDays(today, -10), line: "الخط الثاني", quantity: 300, progress: 64, pieceCost: 145, piecePrice: 210, dueDate: today, status: "running" as const, notes: "" },
-    { id: "o2", factoryId: FID, code: "SN-1043", clientId: "cl-4", model: "فستان صيفي", productId: "p2", bomId: "b2", materialsIssuedAt: null, line: "الخط الأول", quantity: 40, progress: 88, pieceCost: 260, piecePrice: 380, dueDate: addDays(today, 2), status: "running" as const, notes: "" },
+    { id: "o1", factoryId: FID, code: "SN-1042", clientId: "cl-1", model: "قميص قطني", productId: "p1", bomId: "b1", materialsIssuedAt: addDays(today, -10), line: "الخط الثاني", quantity: 300, progress: 64, pieceCost: 212, piecePrice: 265, dueDate: today, status: "running" as const, notes: "" },
+    { id: "o2", factoryId: FID, code: "SN-1043", clientId: "cl-4", model: "فستان صيفي", productId: "p2", bomId: "b2", materialsIssuedAt: null, line: "الخط الأول", quantity: 40, progress: 88, pieceCost: 403, piecePrice: 520, dueDate: addDays(today, 2), status: "running" as const, notes: "" },
     { id: "o3", factoryId: FID, code: "SN-1044", clientId: "cl-5", model: "طقم تصدير", productId: null, bomId: null, materialsIssuedAt: null, line: "الخط الثالث", quantity: 250, progress: 25, pieceCost: 220, piecePrice: 380, dueDate: addDays(today, 20), status: "running" as const, notes: "" },
     { id: "o4", factoryId: FID, code: "SN-1039", clientId: "cl-2", model: "بدلة مكتبية", productId: null, bomId: null, materialsIssuedAt: null, line: "خط التشطيب", quantity: 40, progress: 100, pieceCost: 1180, piecePrice: 1525, dueDate: addDays(today, -6), status: "done" as const, notes: "" },
-    { id: "o5", factoryId: FID, code: "SN-1041", clientId: "cl-3", model: "تيشيرت مطبوع", productId: "p3", bomId: "b3", materialsIssuedAt: null, line: "الخط الأول", quantity: 160, progress: 40, pieceCost: 44, piecePrice: 60, dueDate: addDays(today, -2), status: "late" as const, notes: "المطبعة متأخرة" },
+    { id: "o5", factoryId: FID, code: "SN-1041", clientId: "cl-3", model: "تيشيرت مطبوع", productId: "p3", bomId: "b3", materialsIssuedAt: null, line: "الخط الأول", quantity: 160, progress: 40, pieceCost: 114, piecePrice: 165, dueDate: addDays(today, -2), status: "late" as const, notes: "المطبعة متأخرة" },
     { id: "o6", factoryId: FID, code: "SN-1045", clientId: null, model: "جاكت شتوي", productId: null, bomId: null, materialsIssuedAt: null, line: "الخط الثاني", quantity: 120, progress: 12, pieceCost: 320, piecePrice: 460, dueDate: addDays(today, 30), status: "stopped" as const, notes: "مستني وصول القماش" },
   ];
 

@@ -27,3 +27,6 @@ dist-ssr
 *.sw?
 
 dev-debug.log
+
+# أدوات محلية للوكيل
+agent-tools
