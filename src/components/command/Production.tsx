@@ -136,8 +136,7 @@ export function LiveOrders({ limit = 6 }: { limit?: number }) {
       hint="نسبة الخطر محسوبة من الجدول الحقيقي: الشغل الباقي، الأوامر اللي قبله، ونقص الخامات"
       to="/orders"
     >
-      <Card className="overflow-hidden p-0">
-        <div className="-mx-px overflow-x-auto">
+      <div className="overflow-x-auto rounded-lg border border-border bg-card">
           <table className="w-full min-w-[620px] text-sm">
             <thead className="border-b border-border bg-muted/40">
               <tr>
@@ -185,8 +184,7 @@ export function LiveOrders({ limit = 6 }: { limit?: number }) {
               ))}
             </tbody>
           </table>
-        </div>
-      </Card>
+      </div>
       {rows.length > limit ? (
         <p className="mt-1.5 text-xs text-muted-foreground">
           معروض {qty(limit, 0)} من {qty(rows.length, 0)} أمر، بترتيب الخطر.

@@ -70,7 +70,8 @@ export function FactoryHealthCard() {
 
           <ul className="mt-2 grid list-none gap-x-5 gap-y-2 sm:grid-cols-2">
             {scored.map((b) => (
-              <li key={b.key}>
+              // min-w-0: عنصر الشبكة عرضه الافتراضي auto، فبدونها النص الطويل بيوسّع الكارت
+              <li key={b.key} className="min-w-0">
                 <Link to={HEALTH_ROUTE[b.key]} className="group block">
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="min-w-0 truncate text-sm group-hover:underline">

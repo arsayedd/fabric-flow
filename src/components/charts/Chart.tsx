@@ -604,7 +604,7 @@ export function Heatmap({
   const max = Math.max(...values, 1);
 
   return (
-    <div className="-mx-1 overflow-x-auto px-1">
+    <div className="overflow-x-auto">
       <table className="w-full min-w-[420px] border-separate border-spacing-1 text-sm">
         <thead>
           <tr>
