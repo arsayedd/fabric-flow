@@ -85,7 +85,12 @@ export function Explain({ text, label }: { text: string; label: string }) {
         type="button"
         aria-label={`إزاي اتحسب ${label}`}
         aria-expanded={open}
-        onClick={() => setOpen(!open)}
+        onClick={(e) => {
+          // الأيقونة جوه كارت قابل للفتح، فلازم تمنع الفتح ده
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen(!open);
+        }}
         onBlur={() => setOpen(false)}
         className="text-muted-foreground hover:text-foreground"
       >
@@ -233,14 +238,25 @@ export function KpiCard({ kpi }: { kpi: Kpi }) {
   const targetHit =
     kpi.target !== null && kpi.value !== null ? (kpi.upIsGood ? kpi.value >= kpi.target : kpi.value <= kpi.target) : null;
 
-  const body = (
-    <Card className="h-full transition-colors hover:border-accent/60">
+  return (
+    <Card className="group h-full transition-colors hover:border-accent/60">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-1">
-          <p className="text-sm text-muted-foreground">{kpi.label}</p>
+          {/* العنوان هو الرابط، والأيقونة زرار لوحده: زرار جوه رابط مش HTML سليم */}
+          {kpi.to ? (
+            <Link to={kpi.to} className="text-sm text-muted-foreground underline-offset-4 hover:underline">
+              {kpi.label}
+            </Link>
+          ) : (
+            <p className="text-sm text-muted-foreground">{kpi.label}</p>
+          )}
           <Explain text={kpi.explain} label={kpi.label} />
         </div>
-        {kpi.to ? <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden /> : null}
+        {kpi.to ? (
+          <Link to={kpi.to} aria-label={`افتح ${kpi.label}`} className="shrink-0 text-muted-foreground hover:text-foreground">
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </Link>
+        ) : null}
       </div>
 
       {kpi.value === null ? (
@@ -286,14 +302,6 @@ export function KpiCard({ kpi }: { kpi: Kpi }) {
         </>
       )}
     </Card>
-  );
-
-  return kpi.to ? (
-    <Link to={kpi.to} className="block">
-      {body}
-    </Link>
-  ) : (
-    body
   );
 }
 

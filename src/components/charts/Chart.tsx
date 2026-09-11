@@ -448,7 +448,11 @@ export function Gauge({
         </g>
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-        <span className="text-3xl tabular leading-none">{qty(Math.round(value), 0)}</span>
+        <span className="text-3xl tabular leading-none">
+          {qty(Math.round(value), 0)}
+          {/* المقام مكتوب: درجة بلا مقام مش درجة */}
+          <span className="text-sm text-muted-foreground"> / ١٠٠</span>
+        </span>
         {label ? <span className="mt-0.5 text-xs text-muted-foreground">{label}</span> : null}
         {sub ? <span className="text-xs text-muted-foreground">{sub}</span> : null}
       </div>
