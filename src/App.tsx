@@ -13,6 +13,7 @@ import { OrdersPage } from "@/pages/OrdersPage";
 import { OrderDetailPage } from "@/pages/OrderDetailPage";
 import { PlanningPage } from "@/pages/PlanningPage";
 import { CostingPage } from "@/pages/CostingPage";
+import { DashboardPage } from "@/pages/DashboardPage";
 import { ProductsPage, ProductDetailPage } from "@/pages/ProductsPage";
 import { MaterialsPage, MaterialDetailPage } from "@/pages/MaterialsPage";
 import { AuditPage, SettingsPage, StaffPage } from "@/pages/StaffPage";
@@ -58,6 +59,14 @@ export default function App() {
           element={
             <Finance>
               <PartyProfilePage />
+            </Finance>
+          }
+        />
+        <Route
+          path="/dashboard"
+          element={
+            <Finance>
+              <DashboardPage />
             </Finance>
           }
         />

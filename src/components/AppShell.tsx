@@ -6,6 +6,7 @@ import {
   Coins,
   Factory,
   Home,
+  LayoutDashboard,
   Package,
   LogOut,
   MoreHorizontal,
@@ -40,6 +41,7 @@ const supervisorNav = [
 ];
 
 const moreLinks = [
+  { to: "/dashboard", label: "لوحة الإدارة", icon: LayoutDashboard },
   { to: "/planning", label: "التخطيط والطاقة", icon: CalendarClock },
   { to: "/costing", label: "التكلفة والربحية", icon: Coins },
   { to: "/intelligence", label: "ذكاء العملاء", icon: Brain },

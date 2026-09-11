@@ -1019,6 +1019,8 @@ export type ProfitAlert = {
   tone: "danger" | "warn" | "ok";
   text: string;
   why: string;
+  /** الخطوة المقترحة — بتختلف باختلاف نوع التنبيه */
+  action: string;
 };
 
 export function profitAlerts(db: Db): ProfitAlert[] {
@@ -1035,6 +1037,7 @@ export function profitAlerts(db: Db): ProfitAlert[] {
         name: p.name,
         tone: "danger",
         text: "الموديل بقى خسران",
+        action: "أوقف الإنتاج أو أعِد التسعير قبل أي دفعة جديدة",
         why: `سعر البيع ${round(sheet.sellPrice)} ج وتكلفة القطعة ${round(sheet.total)} ج`,
       });
     } else if (sheet.priceKnown && sheet.sellPrice < sheet.minPrice) {
@@ -1043,6 +1046,7 @@ export function profitAlerts(db: Db): ProfitAlert[] {
         name: p.name,
         tone: "danger",
         text: "سعر البيع أقل من أقل سعر مقبول",
+        action: "ارفع السعر للحد الأدنى أو خفّض أكبر بند في التكلفة",
         why: `أقل سعر يحقّق هامش ${round(sheet.targetMarginPct)}٪ هو ${round(sheet.minPrice)} ج`,
       });
     } else if (sheet.priceKnown && (sheet.marginPct ?? 0) < sheet.targetMarginPct) {
@@ -1051,6 +1055,7 @@ export function profitAlerts(db: Db): ProfitAlert[] {
         name: p.name,
         tone: "warn",
         text: `الهامش تحت الهدف`,
+        action: "شوف أكبر بند في ورقة التكلفة وقرّر: سعر أعلى ولا تكلفة أقل",
         why: `${round(sheet.marginPct ?? 0)}٪ مقابل هدف ${round(sheet.targetMarginPct)}٪`,
       });
     } else if (sheet.priceKnown) {
@@ -1059,6 +1064,7 @@ export function profitAlerts(db: Db): ProfitAlert[] {
         name: p.name,
         tone: "ok",
         text: "فوق الهامش المستهدف",
+        action: "موديل يستاهل كميات أكبر",
         why: `${round(sheet.marginPct ?? 0)}٪ مقابل هدف ${round(sheet.targetMarginPct)}٪`,
       });
     }
@@ -1072,6 +1078,7 @@ export function profitAlerts(db: Db): ProfitAlert[] {
           name: p.name,
           tone: "warn",
           text: `التكلفة ارتفعت ${round(((last.total - first.total) / first.total) * 100)}٪`,
+          action: "راجع سعر الخامة اللي طلعت، أو دوّر على مورّد تاني",
           why: last.changed,
         });
       }
@@ -1082,6 +1089,7 @@ export function profitAlerts(db: Db): ProfitAlert[] {
         name: p.name,
         tone: "warn",
         text: `الهالك أعلى من المخطط`,
+        action: "راجع القص ونسبة الهالك في قائمة الخامات",
         why: `${waste.rows[0].name}: ${round(waste.rows[0].wastePct)}٪ مقابل ${round(waste.rows[0].plannedPct)}٪`,
       });
     }

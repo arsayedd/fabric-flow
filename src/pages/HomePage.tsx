@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ChevronLeft, CircleAlert, CircleCheck } from "lucide-react";
+import { ChevronLeft, CircleCheck } from "lucide-react";
 import { Money } from "@/components/Money";
 import { Badge, STATUS } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cairoToday, formatDate } from "@/lib/utils";
 import { useFactory } from "@/store/context";
+import { ExceptionsCard, HealthTeaser } from "@/components/Health";
 import { IntelligenceTeaser } from "./IntelligencePage";
 import { PlanningTeaser } from "./PlanningPage";
 import { CostingTeaser } from "./CostingPage";
@@ -15,11 +16,8 @@ export function HomePage() {
   const { can, computed } = useFactory();
   if (!can.finance) return <SupervisorHome />;
 
-  const { rec, treasuryTotal, monthPnl, owe, orders, stock } = computed;
-  const dueNow = rec.overdue.length + rec.today.length;
+  const { rec, treasuryTotal, monthPnl, owe, orders } = computed;
   const running = orders.filter((o) => o.status === "running");
-  const stuck = orders.filter((o) => o.status === "late" || o.status === "stopped");
-  const lowStock = stock.filter((s) => s.state !== "ok");
 
   return (
     <div className="space-y-5">
@@ -40,47 +38,9 @@ export function HomePage() {
         <Stat label="عليك للموردين" value={<Money value={owe.vendorTotal} />} to="/costs" />
       </div>
 
-      {dueNow > 0 || rec.pending.length > 0 || stuck.length > 0 || lowStock.length > 0 ? (
-        <Card className="border-r-2 border-r-accent">
-          <div className="mb-2 flex items-center gap-2">
-            <CircleAlert className="h-4 w-4 text-accent" />
-            <h3 className="text-base">محتاج منك النهارده</h3>
-          </div>
-          <ul className="list-none space-y-1 text-sm text-muted-foreground">
-            {rec.overdue.length ? <li>{rec.overdue.length} مبلغ متأخر على العملاء</li> : null}
-            {rec.today.length ? <li>{rec.today.length} مبلغ مستحق النهارده</li> : null}
-            {rec.pending.length ? <li>{rec.pending.length} تحويل مستني تأكيد وصوله</li> : null}
-            {stuck.length ? <li>{stuck.length} أمر إنتاج متأخر أو متوقف</li> : null}
-            {lowStock.length ? (
-              <li>
-                {lowStock.length} خامة خلصت أو قرّبت تخلص — أولها {lowStock[0].name}
-              </li>
-            ) : null}
-          </ul>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button asChild size="sm">
-              <Link to="/collections">افتح التحصيل</Link>
-            </Button>
-            {stuck.length ? (
-              <Button asChild size="sm" variant="outline">
-                <Link to="/orders">أوامر الإنتاج</Link>
-              </Button>
-            ) : null}
-            {lowStock.length ? (
-              <Button asChild size="sm" variant="outline">
-                <Link to="/materials">المخزن</Link>
-              </Button>
-            ) : null}
-          </div>
-        </Card>
-      ) : (
-        <Card>
-          <div className="flex items-center gap-2 text-ok">
-            <CircleCheck className="h-4 w-4" />
-            <span className="text-sm">مفيش استحقاق متأخر ولا أمر إنتاج متعطل.</span>
-          </div>
-        </Card>
-      )}
+      <ExceptionsCard limit={3} />
+
+      <HealthTeaser />
 
       <PlanningTeaser />
 
