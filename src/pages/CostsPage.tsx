@@ -8,7 +8,7 @@ import { Field, Panel } from "@/components/Panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, selectClass } from "@/components/ui/input";
-import { cairoToday, formatDate } from "@/lib/utils";
+import { cairoToday, formatDate, qty } from "@/lib/utils";
 import { costEntryPaid } from "@/store/compute";
 import { useFactory } from "@/store/context";
 import { partiesWithRole } from "@/store/parties";
@@ -42,7 +42,7 @@ export function CostsPage() {
               <div>
                 <p className="font-medium">{item.name}</p>
                 <p className="text-sm text-muted-foreground">
-                  {item.unit} · {item.entries.length} حركة
+                  {item.unit} · {qty(item.entries.length)} حركة
                 </p>
               </div>
               <div className="text-left">

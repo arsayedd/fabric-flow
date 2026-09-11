@@ -8,7 +8,7 @@ import { Field, Panel } from "@/components/Panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, selectClass } from "@/components/ui/input";
-import { cairoToday, fileToDataUrl, formatDate } from "@/lib/utils";
+import { cairoToday, fileToDataUrl, formatDate, qty } from "@/lib/utils";
 import { methodNeedsReceipt, whatsappReminder } from "@/store/compute";
 import { clientBalance } from "@/store/compute";
 import { useFactory } from "@/store/context";
@@ -56,7 +56,7 @@ export function CollectionsPage() {
             className={`shrink-0 rounded-full px-3 py-1.5 text-sm ${tab === t.id ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"}`}
           >
             {t.label}
-            <span className="mr-1 opacity-70">{counts[t.id]}</span>
+            <span className="mr-1 opacity-70">{qty(counts[t.id])}</span>
           </button>
         ))}
       </div>

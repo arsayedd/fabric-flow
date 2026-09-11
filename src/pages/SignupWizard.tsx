@@ -34,7 +34,9 @@ import type { Role } from "@/store/types";
 
 const STEP_LABELS = ["الحساب", "المصنع", "الـWorkspace", "التجهيز", "الفريق", "تم"];
 
-const DEFAULT_MODULES: ModuleKey[] = ["production", "inventory", "workers", "parties", "finance", "costing"];
+/** الافتراضي: كل اللي مبني مختار، والمستخدم يشيل اللي مش محتاجه — أحسن من إنه
+ *  يكتشف بعد كده إن فيه شاشات مخبّية عنه */
+const DEFAULT_MODULES: ModuleKey[] = MODULE_KEYS.filter((k) => MODULE_READY[k]);
 
 type AccountDraft = {
   fullName: string;

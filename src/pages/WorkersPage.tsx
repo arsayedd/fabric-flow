@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, selectClass } from "@/components/ui/input";
-import { cairoToday, formatDate } from "@/lib/utils";
+import { cairoToday, formatDate, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
 import { PAY_TYPE_LABEL, WORKER_PAY_TYPES, type WorkerPayType } from "@/store/types";
 
@@ -42,7 +42,7 @@ export function WorkersPage() {
         <div className="flex items-center justify-between">
           <h3 className="text-base">حضور {formatDate(today)}</h3>
           <span className="text-sm text-muted-foreground">
-            {present.size} من {computed.workers.length}
+            {qty(present.size)} من {qty(computed.workers.length)}
           </span>
         </div>
         <div className="mt-3 space-y-1.5">
