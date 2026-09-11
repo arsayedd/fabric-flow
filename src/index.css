@@ -1,0 +1,92 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: "Cairo", ui-sans-serif, system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-brass: var(--brass);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-late: var(--late);
+  --radius-sm: 0.4rem;
+  --radius-md: 0.7rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.4rem;
+}
+
+:root {
+  --background: #f3eee4;
+  --foreground: #17221f;
+  --card: #fffaf2;
+  --card-foreground: #17221f;
+  --popover: #fffaf2;
+  --popover-foreground: #17221f;
+  --primary: #1c3d36;
+  --primary-foreground: #f6f1e6;
+  --secondary: #e7decc;
+  --secondary-foreground: #1c3d36;
+  --muted: #ebe3d4;
+  --muted-foreground: #5d685f;
+  --accent: #d4b36a;
+  --accent-foreground: #2a2416;
+  --destructive: #b42318;
+  --border: #ddd2bc;
+  --input: #ddd2bc;
+  --ring: #1c3d36;
+  --brass: #b68a3a;
+  --ok: #1f6b4a;
+  --warn: #9a6700;
+  --late: #b42318;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: #d4b36a55;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

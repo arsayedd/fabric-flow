@@ -1,0 +1,264 @@
+import { useState } from "react";
+import { Wallet } from "lucide-react";
+import { toast } from "sonner";
+import { EmptyState } from "@/components/EmptyState";
+import { Money } from "@/components/Money";
+import { Field, Panel } from "@/components/Panel";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { cairoToday, formatDate } from "@/lib/utils";
+import { pnl } from "@/store/compute";
+import { useFactory } from "@/store/context";
+
+export function TreasuryPage() {
+  const { computed, db, can, addManualTx, addAccount } = useFactory();
+  const [from, setFrom] = useState(cairoToday().slice(0, 7) + "-01");
+  const [to, setTo] = useState(cairoToday());
+  const report = pnl(db, from, to);
+  const [txOpen, setTxOpen] = useState(false);
+  const [accOpen, setAccOpen] = useState(false);
+
+  const movements = [
+    ...db.collections.filter((c) => c.status === "confirmed").map((c) => ({
+      id: c.id,
+      date: c.date,
+      label: `تحصيل · ${db.clients.find((x) => x.id === c.clientId)?.name ?? ""}`,
+      amount: c.amount,
+      accountId: c.accountId,
+    })),
+    ...db.costPayments.map((p) => ({
+      id: p.id,
+      date: p.date,
+      label: "دفع مصروف",
+      amount: -p.amount,
+      accountId: p.accountId,
+    })),
+    ...db.workerPayments
+      .filter((p) => p.accountId && (p.kind === "pay" || p.kind === "advance"))
+      .map((p) => ({
+        id: p.id,
+        date: p.date,
+        label: p.kind === "pay" ? "قبض عامل" : "سلفة",
+        amount: -p.amount,
+        accountId: p.accountId as string,
+      })),
+    ...db.manualTx.map((t) => ({ id: t.id, date: t.date, label: t.notes || "حركة يدوية", amount: t.amount, accountId: t.accountId })),
+  ].sort((a, b) => b.date.localeCompare(a.date));
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-extrabold">الخزينة</h2>
+          <p className="text-sm text-muted-foreground">رصيد كل حساب، الأرباح والخسائر، وكل اللي عليك.</p>
+        </div>
+        {can.edit ? (
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setAccOpen(true)}>حساب</Button>
+            <Button onClick={() => setTxOpen(true)}>حركة</Button>
+          </div>
+        ) : null}
+      </div>
+
+      <Card>
+        <p className="text-xs text-muted-foreground">إجمالي الحسابات</p>
+        <Money value={computed.treasuryTotal} className="text-2xl" />
+      </Card>
+
+      <div className="grid gap-2 md:grid-cols-2">
+        {computed.accounts.map((a) => (
+          <Card key={a.id}>
+            <p className="text-sm text-muted-foreground">{a.name}</p>
+            <Money value={a.balance} className="text-lg" />
+          </Card>
+        ))}
+      </div>
+
+      <Card>
+        <h3 className="font-bold">أرباح وخسائر</h3>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <Field label="من">
+            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+          </Field>
+          <Field label="إلى">
+            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+          </Field>
+        </div>
+        <dl className="mt-2 space-y-1 text-sm">
+          <Row k="التوريدات" v={report.revenue} />
+          <Row k="بنود التكلفة" v={-report.costs} />
+          <Row k="أجور العمال" v={-report.labor} />
+          <Row k="حركات خارجة" v={-report.otherOut} />
+          <div className="flex justify-between border-t pt-2 font-bold">
+            <dt>الصافي</dt>
+            <dd>
+              <Money value={report.net} signed />
+            </dd>
+          </div>
+        </dl>
+      </Card>
+
+      <Card>
+        <h3 className="font-bold">كل اللي عليك</h3>
+        <p className="mt-2 text-sm">
+          موردين <Money value={computed.owe.vendorTotal} /> · عمال <Money value={computed.owe.workerTotal} />
+        </p>
+        <ul className="mt-2 space-y-1 text-sm">
+          {computed.owe.vendor.slice(0, 5).map((v) => (
+            <li key={v.id} className="flex justify-between">
+              <span>{v.vendor || v.itemName}</span>
+              <Money value={v.due} />
+            </li>
+          ))}
+        </ul>
+      </Card>
+
+      <section>
+        <h3 className="mb-2 font-bold">الحركات</h3>
+        {movements.length === 0 ? (
+          <EmptyState icon={Wallet} title="الخزينة فاضية" body="التحصيلات والمدفوعات هتظهر هنا." />
+        ) : (
+          <ul className="space-y-2">
+            {movements.slice(0, 40).map((m) => (
+              <li key={m.id} className="flex items-center justify-between rounded-xl border bg-card px-3 py-2 text-sm">
+                <span>
+                  {formatDate(m.date)} · {m.label}
+                  <span className="mr-1 text-muted-foreground">
+                    · {db.accounts.find((a) => a.id === m.accountId)?.name}
+                  </span>
+                </span>
+                <Money value={m.amount} signed />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <TxPanel open={txOpen} onClose={() => setTxOpen(false)} onSave={addManualTx} />
+      <AccPanel open={accOpen} onClose={() => setAccOpen(false)} onSave={addAccount} />
+    </div>
+  );
+}
+
+function Row({ k, v }: { k: string; v: number }) {
+  return (
+    <div className="flex justify-between">
+      <dt>{k}</dt>
+      <dd>
+        <Money value={v} signed />
+      </dd>
+    </div>
+  );
+}
+
+function TxPanel({
+  open,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSave: (row: { date: string; accountId: string; amount: number; notes: string }) => void;
+}) {
+  const { db } = useFactory();
+  const [date, setDate] = useState(cairoToday());
+  const [accountId, setAccountId] = useState(db.accounts[0]?.id ?? "");
+  const [amount, setAmount] = useState("");
+  const [dir, setDir] = useState<"in" | "out">("in");
+  const [notes, setNotes] = useState("");
+  return (
+    <Panel
+      open={open}
+      title="حركة يدوية"
+      onClose={onClose}
+      footer={
+        <Button
+          className="w-full"
+          onClick={() => {
+            const n = Number(amount);
+            if (!n) return toast.error("المبلغ مطلوب");
+            onSave({ date, accountId, amount: dir === "in" ? n : -n, notes });
+            toast.success("الحركة اتحفظت.");
+            onClose();
+          }}
+        >
+          حفظ
+        </Button>
+      }
+    >
+      <Field label="اتجاه">
+        <div className="flex gap-2">
+          <Button type="button" variant={dir === "in" ? "default" : "outline"} onClick={() => setDir("in")}>
+            داخل
+          </Button>
+          <Button type="button" variant={dir === "out" ? "default" : "outline"} onClick={() => setDir("out")}>
+            خارج
+          </Button>
+        </div>
+      </Field>
+      <Field label="التاريخ">
+        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+      </Field>
+      <Field label="الحساب">
+        <select className="h-11 w-full rounded-xl border bg-card px-3" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+          {db.accounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="المبلغ">
+        <Input inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} />
+      </Field>
+      <Field label="البيان">
+        <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
+      </Field>
+    </Panel>
+  );
+}
+
+function AccPanel({
+  open,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSave: (name: string, kind: "cash" | "bank" | "instapay" | "wallet") => void;
+}) {
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState<"cash" | "bank" | "instapay" | "wallet">("cash");
+  return (
+    <Panel
+      open={open}
+      title="حساب فلوس"
+      onClose={onClose}
+      footer={
+        <Button
+          className="w-full"
+          onClick={() => {
+            if (!name.trim()) return;
+            onSave(name, kind);
+            onClose();
+          }}
+        >
+          إضافة
+        </Button>
+      }
+    >
+      <Field label="الاسم">
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="خزينة فرع 2" />
+      </Field>
+      <Field label="النوع">
+        <select className="h-11 w-full rounded-xl border bg-card px-3" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
+          <option value="cash">كاش</option>
+          <option value="bank">بنك</option>
+          <option value="instapay">إنستاباي</option>
+          <option value="wallet">محفظة</option>
+        </select>
+      </Field>
+    </Panel>
+  );
+}
