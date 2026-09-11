@@ -13,6 +13,7 @@ import { Input, selectClass } from "@/components/ui/input";
 import { qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
 import { activeBom, bomLines, productCost, routingLines, unitName } from "@/store/manufacturing";
+import { useSeen } from "@/store/recents";
 
 export function ProductsPage() {
   const { db, can } = useFactory();
@@ -181,6 +182,7 @@ export function ProductDetailPage() {
   const { db, can, addBomItem, removeBomItem, addRoutingStep, removeRoutingStep, updateProduct, deleteProduct } =
     useFactory();
   const product = db.products.find((p) => p.id === id);
+  useSeen(db.factory?.id ?? "", product ? { kind: "product", id: product.id, label: product.name, to: `/products/${product.id}` } : null);
   const [materialId, setMaterialId] = useState("");
   const [amount, setAmount] = useState("");
   const [waste, setWaste] = useState("0");

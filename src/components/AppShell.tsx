@@ -1,123 +1,83 @@
-import {
-  Banknote,
-  Boxes,
-  Brain,
-  CalendarClock,
-  Coins,
-  Factory,
-  Home,
-  LayoutDashboard,
-  Package,
-  LogOut,
-  MoreHorizontal,
-  ScrollText,
-  Settings,
-  UserRound,
-  Users,
-  UsersRound,
-  Wallet,
-  Warehouse,
-} from "lucide-react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { useCallback, useState } from "react";
+import { ChevronDown, Home, LogOut, MoreHorizontal, X } from "lucide-react";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { Mark } from "@/components/Brand";
+import { CommandPalette } from "@/components/CommandPalette";
+import { useCommandKey } from "@/lib/useCommandKey";
+import { Topbar } from "@/components/Topbar";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { cn } from "@/lib/utils";
-import { MODULE_ROUTES } from "@/store/account";
 import { useFactory } from "@/store/context";
+import { NAV, crumbs, sectionOf, type NavItem, type NavSection } from "@/store/nav";
 import { ROLE_LABEL } from "@/store/types";
 
-const financeNav = [
-  { to: "/", label: "الرئيسية", icon: Home, end: true },
-  { to: "/orders", label: "الإنتاج", icon: Factory },
-  { to: "/collections", label: "التحصيل", icon: Banknote },
-  { to: "/parties", label: "الجهات", icon: Users },
-  { to: "/more", label: "المزيد", icon: MoreHorizontal },
-];
-
-const supervisorNav = [
-  { to: "/", label: "الرئيسية", icon: Home, end: true },
-  { to: "/orders", label: "الإنتاج", icon: Factory },
-  { to: "/materials", label: "المخزن", icon: Boxes },
-  { to: "/workers", label: "العمال", icon: UsersRound },
-  { to: "/settings", label: "إعدادات", icon: Settings },
-];
-
-const moreLinks = [
-  { to: "/dashboard", label: "لوحة الإدارة", icon: LayoutDashboard },
-  { to: "/planning", label: "التخطيط والطاقة", icon: CalendarClock },
-  { to: "/costing", label: "التكلفة والربحية", icon: Coins },
-  { to: "/intelligence", label: "ذكاء العملاء", icon: Brain },
-  { to: "/products", label: "المنتجات", icon: Package },
-  { to: "/materials", label: "المخزن", icon: Boxes },
-  { to: "/costs", label: "التكاليف", icon: Warehouse },
-  { to: "/workers", label: "العمال", icon: UsersRound },
-  { to: "/treasury", label: "الخزينة", icon: Wallet },
-  { to: "/staff", label: "الموظفين", icon: UserRound, owner: true },
-  { to: "/audit", label: "سجل التعديلات", icon: ScrollText, owner: true },
-  { to: "/settings", label: "الإعدادات", icon: Settings },
-];
-
 /**
- * اللي المستخدم اختاره في التجهيز بيحدّد الروابط اللي بتظهر.
- * الرئيسية والإعدادات والصلاحيات بتفضل دايمًا — ومفيش رابط بيتشال لو
- * المصنع مالوش اختيارات محفوظة (المصانع القديمة بتشوف كل حاجة زي ما كانت).
+ * قشرة النظام.
+ *
+ * القائمة شجرة أقسام مش قايمة طويلة، وبتتفتح على القسم اللي أنت فيه بس —
+ * عشان المستخدم مايتخضّش من ٤٠ رابط في أول يوم. واللي بيحدّد اللي بيظهر
+ * تلات أسئلة بالترتيب:
+ *   ١. الصلاحية: الدور ده له حق العرض في الموديول ده؟
+ *   ٢. اختيار التجهيز: المصنع قال إنه بيدير الحاجة دي؟
+ *   ٣. مبني فعلًا؟ اللي مش مبني بيبان مطفي ومكتوب عليه «قريب»، مش مخفي،
+ *      عشان المستخدم يعرف الطريق رايح فين بدل ما نوعده بلينك ميّت.
  */
-function useVisible() {
-  const { account } = useFactory();
+
+/** أهم خمس شاشات للموبايل — الباقي في الدرج */
+const MOBILE_PRIMARY = ["/", "/orders", "/collections", "/parties", "/workers", "/materials"];
+
+function useTree() {
+  const { can, account } = useFactory();
   const picked = account.workspace?.modules ?? [];
-  if (!picked.length) return () => true;
-  const allowed = new Set(["/", "/more", "/settings", "/staff", "/audit"]);
-  for (const key of picked) for (const route of MODULE_ROUTES[key]) allowed.add(route);
-  return (to: string) => allowed.has(to);
+  const chose = picked.length > 0;
+
+  const out: NavSection[] = [];
+  for (const section of NAV) {
+    const items = section.items.filter((it) => {
+      if (!can.do(it.perm, "view")) return false;
+      // مصنع مالوش اختيارات محفوظة (المصانع القديمة) بيشوف كل حاجة زي ما كانت
+      if (chose && it.module && !picked.includes(it.module)) return false;
+      return true;
+    });
+    if (!items.length) continue;
+    // قسم كله لسه مش مبني بيتخفي، إلا لو المصنع طلب الموديول ده بنفسه
+    const anyReady = items.some((it) => it.ready);
+    const requested = chose && items.some((it) => it.module && picked.includes(it.module));
+    if (!anyReady && !requested) continue;
+    out.push({ ...section, items });
+  }
+  return out;
 }
 
 export function AppShell() {
-  const { session, can, logout } = useFactory();
+  const { session, logout } = useFactory();
   const loc = useLocation();
-  const visible = useVisible();
-  const nav = (can.finance ? financeNav : supervisorNav).filter((l) => visible(l.to));
-  const onMore = loc.pathname === "/more";
-  const sidebarLinks = (
-    can.finance ? [...financeNav.filter((x) => x.to !== "/more"), ...moreLinks.filter((l) => !("owner" in l) || can.staff)] : supervisorNav
-  ).filter((l) => visible(l.to));
+  const tree = useTree();
+  const [drawer, setDrawer] = useState(false);
+  const [palette, setPalette] = useState(false);
+  useCommandKey(useCallback(() => setPalette(true), []));
+
+  const here = sectionOf(loc.pathname);
+  const flat = tree.flatMap((s) => s.items);
+  const mobileNav = MOBILE_PRIMARY.map((to) => flat.find((i) => i.to === to && i.ready))
+    .filter((i): i is NavItem => !!i)
+    .slice(0, 4);
+  const sectionIcon = new Map(tree.flatMap((s) => s.items.map((i) => [i.to, s.icon])));
 
   return (
     <div className="flex min-h-dvh flex-col md:flex-row">
-      <aside className="hidden w-64 shrink-0 border-l border-[#1d2733] bg-primary text-primary-foreground md:flex md:flex-col">
+      <aside className="hidden w-64 shrink-0 flex-col border-l border-[#1d2733] bg-primary text-primary-foreground md:flex">
         <div className="px-3 pt-3">
           <WorkspaceSwitcher />
         </div>
-        <div className="mx-5 mb-4 mt-3 flex items-center justify-between border-t border-[#1d2733] pt-3">
+        <div className="mx-5 mb-3 mt-3 flex items-center justify-between border-t border-[#1d2733] pt-3">
           <p className="text-xs text-accent">{session ? ROLE_LABEL[session.role] : ""}</p>
           <span className="flex items-center gap-1.5 text-primary-foreground/40">
             <Mark className="h-4 w-4" />
             <span className="latin text-[10px]">SANAA</span>
           </span>
         </div>
-        <nav className="flex-1 space-y-0.5 px-3">
-          {sidebarLinks.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={"end" in item ? item.end : false}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors",
-                  isActive
-                    ? "bg-[#1b2634] text-primary-foreground"
-                    : "text-primary-foreground/65 hover:bg-[#161f2a] hover:text-primary-foreground",
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <item.icon className={cn("h-4 w-4", isActive && "text-accent")} />
-                  {item.label}
-                </>
-              )}
-            </NavLink>
-          ))}
-        </nav>
+        <Tree tree={tree} openKey={here?.key ?? "home"} className="flex-1 overflow-y-auto px-3 pb-3" />
         <button
           onClick={logout}
           className="m-3 flex items-center gap-2 rounded-md px-3 py-2 text-sm text-primary-foreground/60 hover:bg-[#161f2a]"
@@ -128,60 +88,208 @@ export function AppShell() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col pb-20 md:pb-0">
-        <header className="sticky top-0 z-20 flex items-center gap-2 border-b border-border bg-background/95 px-2 py-1.5 backdrop-blur md:hidden">
-          <div className="min-w-0 flex-1">
-            <WorkspaceSwitcher tone="light" />
-          </div>
-          <span className="shrink-0 pl-2 text-xs text-muted-foreground">{session ? ROLE_LABEL[session.role] : ""}</span>
-        </header>
-        <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-5 md:px-8 md:py-7">
+        <Topbar onMenu={() => setDrawer(true)} onSearch={() => setPalette(true)} />
+        <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-4 md:px-8 md:py-6">
+          <Crumbs />
           <Outlet />
         </main>
       </div>
 
+      {/* درج الموبايل: نفس الشجرة بالظبط، مش قايمة تانية بترتيب مختلف */}
+      {drawer ? (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <button className="absolute inset-0 bg-[#0f1720]/60" aria-label="إغلاق" onClick={() => setDrawer(false)} />
+          {/* أي لينك جوه الدرج بيقفله — مفيش درج فاضل مفتوح فوق الصفحة الجديدة */}
+          <div
+            onClick={() => setDrawer(false)}
+            className="absolute inset-y-0 end-0 flex w-[85%] max-w-xs flex-col bg-primary text-primary-foreground shadow-2xl"
+          >
+            <div className="flex items-center justify-between px-3 pt-3">
+              <div className="min-w-0 flex-1">
+                <WorkspaceSwitcher />
+              </div>
+              <button onClick={() => setDrawer(false)} className="rounded-md p-2 text-primary-foreground/60" aria-label="إغلاق">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <Tree tree={tree} openKey={here?.key ?? "home"} className="flex-1 overflow-y-auto px-3 py-3" />
+          </div>
+        </div>
+      ) : null}
+
       <nav
         className="fixed inset-x-0 bottom-0 z-30 grid border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
-        style={{ gridTemplateColumns: `repeat(${nav.length}, 1fr)` }}
+        style={{ gridTemplateColumns: `repeat(${mobileNav.length + 1}, 1fr)` }}
       >
-        {nav.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={"end" in item ? item.end : false}
-            className={({ isActive }) =>
-              cn(
-                "flex flex-col items-center gap-1 py-2.5 text-xs",
-                isActive || (item.to === "/more" && onMore) ? "text-primary" : "text-muted-foreground",
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <item.icon className={cn("h-5 w-5", (isActive || (item.to === "/more" && onMore)) && "text-accent")} />
-                {item.label}
-              </>
-            )}
-          </NavLink>
-        ))}
+        {mobileNav.map((item) => {
+          const Icon = sectionIcon.get(item.to) ?? Home;
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) =>
+                cn("flex flex-col items-center gap-1 py-2.5 text-[11px]", isActive ? "text-primary" : "text-muted-foreground")
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon className={cn("h-5 w-5", isActive && "text-accent")} />
+                  {item.label.split(" ")[0]}
+                </>
+              )}
+            </NavLink>
+          );
+        })}
+        <button onClick={() => setDrawer(true)} className="flex flex-col items-center gap-1 py-2.5 text-[11px] text-muted-foreground">
+          <MoreHorizontal className="h-5 w-5" />
+          المزيد
+        </button>
       </nav>
+
+      {palette ? <CommandPalette onClose={() => setPalette(false)} /> : null}
     </div>
   );
 }
 
+/** الشجرة: القسم اللي أنت فيه مفتوح، والباقي مقفول لحد ما تفتحه */
+function Tree({ tree, openKey, className }: { tree: NavSection[]; openKey: string; className?: string }) {
+  // القسم اللي أنت فيه مفتوح لوحده، واللي المستخدم فتحه أو قفله بإيده بيغلب
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  return (
+    <nav className={className}>
+      {tree.map((section) => {
+        const single = section.items.length === 1;
+        const expanded = touched[section.key] ?? section.key === openKey;
+        if (single) return <Row key={section.key} item={section.items[0]} icon={section.icon} />;
+        return (
+          <div key={section.key} className="mb-0.5">
+            <button
+              onClick={() => setTouched((prev) => ({ ...prev, [section.key]: !expanded }))}
+              className={cn(
+                "flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm",
+                expanded ? "text-primary-foreground" : "text-primary-foreground/65 hover:bg-[#161f2a]",
+              )}
+            >
+              <section.icon className={cn("h-4 w-4", expanded && "text-accent")} />
+              <span className="flex-1 text-right">{section.label}</span>
+              <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-180")} />
+            </button>
+            {expanded ? (
+              <div className="mb-1 ms-6 border-s border-[#1d2733] ps-2">
+                {section.items.map((item) => (
+                  <Row key={`${item.to}-${item.label}`} item={item} nested />
+                ))}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
+
+function Row({ item, icon: Icon, nested }: { item: NavItem; icon?: NavSection["icon"]; nested?: boolean }) {
+  if (!item.ready) {
+    return (
+      <span
+        className={cn(
+          "flex cursor-not-allowed items-center gap-3 rounded-md px-3 py-2 text-sm text-primary-foreground/30",
+          nested && "py-1.5",
+        )}
+        title="لسه مش مبني"
+      >
+        {Icon ? <Icon className="h-4 w-4" /> : null}
+        <span className="flex-1">{item.label}</span>
+        <span className="rounded bg-[#1b2634] px-1.5 py-0.5 text-[10px] text-primary-foreground/50">قريب</span>
+      </span>
+    );
+  }
+  return (
+    <NavLink
+      to={item.to}
+      end={item.end}
+      className={({ isActive }) =>
+        cn(
+          "flex items-center gap-3 rounded-md px-3 text-sm transition-colors",
+          nested ? "py-1.5" : "py-2.5",
+          isActive
+            ? "bg-[#1b2634] text-primary-foreground"
+            : "text-primary-foreground/65 hover:bg-[#161f2a] hover:text-primary-foreground",
+        )
+      }
+    >
+      {({ isActive }) => (
+        <>
+          {Icon ? <Icon className={cn("h-4 w-4", isActive && "text-accent")} /> : null}
+          <span className="flex-1">{item.label}</span>
+        </>
+      )}
+    </NavLink>
+  );
+}
+
+/** «أنا فين؟» — أول سؤال لازم كل صفحة تجاوب عليه */
+function Crumbs() {
+  const loc = useLocation();
+  const rows = crumbs(loc.pathname);
+  if (rows.length < 2) return null;
+  return (
+    <nav className="mb-3 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+      <Link to="/" className="hover:text-foreground">
+        المصنع
+      </Link>
+      {rows.map((c, i) => (
+        <span key={`${c.label}-${i}`} className="flex items-center gap-1.5">
+          <span className="text-muted-foreground/50">/</span>
+          {c.to ? (
+            <Link to={c.to} className="hover:text-foreground">
+              {c.label}
+            </Link>
+          ) : (
+            <span className={i === rows.length - 1 ? "text-foreground" : undefined}>{c.label}</span>
+          )}
+        </span>
+      ))}
+    </nav>
+  );
+}
+
+/** صفحة «المزيد» القديمة بتفضل شغالة: نفس الشجرة في صفحة كاملة */
 export function MorePage() {
-  const { can, logout } = useFactory();
-  const links = moreLinks.filter((l) => !("owner" in l) || can.staff);
+  const tree = useTree();
+  const { logout } = useFactory();
   return (
     <div className="space-y-3">
-      <h2 className="text-2xl">المزيد</h2>
-      <div className="overflow-hidden rounded-lg border border-border bg-card">
-        {links.map((l) => (
-          <NavLink key={l.to} to={l.to} className="flex items-center gap-3 border-b border-border px-4 py-3.5 last:border-0">
-            <l.icon className="h-5 w-5 text-muted-foreground" />
-            <span>{l.label}</span>
-          </NavLink>
-        ))}
-      </div>
+      <h2 className="text-2xl">كل أقسام المصنع</h2>
+      {tree.map((section) => (
+        <div key={section.key} className="overflow-hidden rounded-lg border border-border bg-card">
+          <p className="flex items-center gap-2 border-b border-border px-4 py-2.5 text-sm text-muted-foreground">
+            <section.icon className="h-4 w-4" />
+            {section.label}
+          </p>
+          {section.items.map((item) =>
+            item.ready ? (
+              <NavLink
+                key={`${item.to}-${item.label}`}
+                to={item.to}
+                className="flex items-center justify-between border-b border-border px-4 py-3 text-sm last:border-0"
+              >
+                {item.label}
+              </NavLink>
+            ) : (
+              <span
+                key={`${item.to}-${item.label}`}
+                className="flex items-center justify-between border-b border-border px-4 py-3 text-sm text-muted-foreground last:border-0"
+              >
+                {item.label}
+                <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px]">قريب</span>
+              </span>
+            ),
+          )}
+        </div>
+      ))}
       <button
         onClick={logout}
         className="flex w-full items-center gap-3 rounded-lg border border-border bg-card px-4 py-3.5 text-danger"

@@ -12,6 +12,7 @@ import { Input, selectClass } from "@/components/ui/input";
 import { cairoToday, formatDate, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
 import { PAY_TYPE_LABEL, WORKER_PAY_TYPES, type WorkerPayType } from "@/store/types";
+import { useSeen } from "@/store/recents";
 
 export function WorkersPage() {
   const { computed, can, markAttendance, addWorker } = useFactory();
@@ -165,6 +166,7 @@ export function WorkerProfilePage() {
   const nav = useNavigate();
   const { computed, db, addPieceWork, can, deleteWorker } = useFactory();
   const w = computed.workers.find((x) => x.id === id);
+  useSeen(db.factory?.id ?? "", w ? { kind: "worker", id: w.id, label: w.name, to: `/workers/${w.id}` } : null);
   const [payOpen, setPayOpen] = useState<"pay" | "advance" | "deduction" | null>(null);
   const [pieces, setPieces] = useState("");
 

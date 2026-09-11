@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { AlertTriangle, Contact, Search } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
 import {
   customerSegments,
@@ -41,7 +42,17 @@ export function PartiesPage() {
   const { db, computed, can } = useFactory();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
-  const [filter, setFilter] = useState<PartyRole | "all">("all");
+  // الدور جاي من العنوان: نفس الصفحة بتخدم «العملاء» و«التجار» و«الموردين»
+  // في القائمة بدل تلات شاشات بنفس الجدول.
+  const [params, setParams] = useSearchParams();
+  const fromUrl = params.get("role") as PartyRole | null;
+  const filter: PartyRole | "all" = fromUrl && PARTY_ROLES.includes(fromUrl) ? fromUrl : "all";
+  const setFilter = (role: PartyRole | "all") => {
+    const next = new URLSearchParams(params);
+    if (role === "all") next.delete("role");
+    else next.set("role", role);
+    setParams(next, { replace: true });
+  };
 
   const term = q.trim();
   const list = useMemo(
@@ -148,7 +159,7 @@ export function PartiesPage() {
                   : "shrink-0 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground"
               }
             >
-              {f.label} {count ? <span className="tabular">({count})</span> : null}
+              {f.label} {count ? <span className="tabular">({qty(count, 0)})</span> : null}
             </button>
           );
         })}

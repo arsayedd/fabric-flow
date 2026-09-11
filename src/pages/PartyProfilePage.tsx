@@ -40,6 +40,7 @@ import {
 } from "@/store/types";
 import { CustomerIntelligence, ScoreSummary } from "@/components/Intelligence";
 import { CollectPanel } from "./CollectionsPage";
+import { useSeen } from "@/store/recents";
 
 const TABS = ["overview", "intelligence", "account", "timeline", "comms", "info"] as const;
 type Tab = (typeof TABS)[number];
@@ -66,6 +67,7 @@ export function PartyProfilePage() {
   const [colOpen, setColOpen] = useState(false);
 
   const party = computed.parties.find((p) => p.id === id);
+  useSeen(db.factory?.id ?? "", party ? { kind: "party", id: party.id, label: party.name, to: `/parties/${party.id}` } : null);
   if (!party) {
     return (
       <EmptyState

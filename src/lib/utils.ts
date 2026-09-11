@@ -54,6 +54,26 @@ export function moneyPlain(amount: number): string {
   }).format(Math.round(amount));
 }
 
+/**
+ * توحيد النص قبل المقارنة.
+ *
+ * البحث العربي لازم يلاقي «أحمد» لما تكتب «احمد»، و«فاطمه» لما تكتب «فاطمة».
+ * فبنشيل التشكيل والتطويل، ونوحّد الألف بأشكالها والياء والتاء المربوطة،
+ * ونحوّل الأرقام العربية للاتينية — عشان «١٠٤٢» تلاقي «1042».
+ */
+export function normalize(text: string): string {
+  return (text ?? "")
+    .replace(/[\u064B-\u0652\u0640]/g, "")
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/[ؤ]/g, "و")
+    .replace(/[ئ]/g, "ي")
+    .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+    .toLowerCase()
+    .trim();
+}
+
 export function daysBetween(from: string, to: string): number {
   const a = Date.parse(`${from}T00:00:00`);
   const b = Date.parse(`${to}T00:00:00`);

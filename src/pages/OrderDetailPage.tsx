@@ -10,11 +10,13 @@ import { cairoToday, formatDate, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
 import { partyById } from "@/store/parties";
 import { bottleneck, orderCost, orderRequirements, orderStages, productById } from "@/store/manufacturing";
+import { useSeen } from "@/store/recents";
 
 export function OrderDetailPage() {
   const { id = "" } = useParams();
   const { db, can, issueOrderMaterials, addStageEntry } = useFactory();
   const order = db.orders.find((o) => o.id === id);
+  useSeen(db.factory?.id ?? "", order ? { kind: "order", id: order.id, label: `${order.code} — ${order.model}`, to: `/orders/${order.id}` } : null);
   const [operationId, setOperationId] = useState("");
   const [workerId, setWorkerId] = useState("");
   const [good, setGood] = useState("");

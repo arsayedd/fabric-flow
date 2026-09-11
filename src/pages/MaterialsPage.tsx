@@ -22,6 +22,7 @@ import {
   type MaterialStock,
 } from "@/store/manufacturing";
 import { STOCK_KIND_LABEL, type StockKind } from "@/store/types";
+import { useSeen } from "@/store/recents";
 
 const STATE: Record<MaterialStock["state"], { label: string; tone: Tone }> = {
   out: { label: "خلصت", tone: "danger" },
@@ -209,6 +210,7 @@ export function MaterialDetailPage() {
   const { id = "" } = useParams();
   const { db, can, addStockMovement, updateMaterial } = useFactory();
   const material = db.materials.find((m) => m.id === id);
+  useSeen(db.factory?.id ?? "", material ? { kind: "material", id: material.id, label: material.name, to: `/materials/${material.id}` } : null);
   const [kind, setKind] = useState<StockKind>("purchase");
   const [amount, setAmount] = useState("");
   const [unitCost, setUnitCost] = useState("");

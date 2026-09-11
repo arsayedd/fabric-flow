@@ -8,6 +8,8 @@ import { SignupWizard } from "@/pages/SignupWizard";
 import { FactoryPickerPage } from "@/pages/FactoryPickerPage";
 import { TenantMissingPage } from "@/pages/TenantMissingPage";
 import { HomePage } from "@/pages/HomePage";
+import { AlertsPage, TasksPage } from "@/pages/InboxPage";
+import { HelpPage } from "@/pages/HelpPage";
 import { IntelligencePage } from "@/pages/IntelligencePage";
 import { PartiesPage } from "@/pages/PartiesPage";
 import { PartyProfilePage } from "@/pages/PartyProfilePage";
@@ -24,6 +26,7 @@ import { ProductsPage, ProductDetailPage } from "@/pages/ProductsPage";
 import { MaterialsPage, MaterialDetailPage } from "@/pages/MaterialsPage";
 import { AuditPage, SettingsPage, StaffPage } from "@/pages/StaffPage";
 import { useFactory } from "@/store/context";
+import type { PermModule } from "@/store/permissions";
 import type { ReactNode } from "react";
 
 export default function App() {
@@ -74,126 +77,55 @@ function appRoutes() {
       <Route element={<AppShell />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/more" element={<MorePage />} />
-        <Route path="/workers" element={<WorkersPage />} />
-        <Route path="/workers/:id" element={<WorkerProfilePage />} />
-        <Route path="/orders" element={<OrdersPage />} />
-        <Route path="/orders/:id" element={<OrderDetailPage />} />
-        <Route path="/planning" element={<PlanningPage />} />
-        <Route path="/products" element={<ProductsPage />} />
-        <Route path="/products/:id" element={<ProductDetailPage />} />
-        <Route path="/materials" element={<MaterialsPage />} />
-        <Route path="/materials/:id" element={<MaterialDetailPage />} />
-        <Route
-          path="/collections"
-          element={
-            <Finance>
-              <CollectionsPage />
-            </Finance>
-          }
-        />
-        <Route
-          path="/parties"
-          element={
-            <Finance>
-              <PartiesPage />
-            </Finance>
-          }
-        />
-        <Route
-          path="/parties/:id"
-          element={
-            <Finance>
-              <PartyProfilePage />
-            </Finance>
-          }
-        />
-        <Route
-          path="/dashboard"
-          element={
-            <Finance>
-              <DashboardPage />
-            </Finance>
-          }
-        />
-        <Route
-          path="/costing"
-          element={
-            <Finance>
-              <CostingPage />
-            </Finance>
-          }
-        />
-        <Route
-          path="/intelligence"
-          element={
-            <Finance>
-              <IntelligencePage />
-            </Finance>
-          }
-        />
+        {guarded("/tasks", "parties", <TasksPage />)}
+        {guarded("/alerts", "reports", <AlertsPage />)}
+        <Route path="/help" element={<HelpPage />} />
+        {guarded("/workers", "workers", <WorkersPage />)}
+        {guarded("/workers/:id", "workers", <WorkerProfilePage />)}
+        {guarded("/orders", "production", <OrdersPage />)}
+        {guarded("/orders/:id", "production", <OrderDetailPage />)}
+        {guarded("/planning", "planning", <PlanningPage />)}
+        {guarded("/products", "sales", <ProductsPage />)}
+        {guarded("/products/:id", "sales", <ProductDetailPage />)}
+        {guarded("/materials", "inventory", <MaterialsPage />)}
+        {guarded("/materials/:id", "inventory", <MaterialDetailPage />)}
+        {guarded("/collections", "finance", <CollectionsPage />)}
+        {guarded("/treasury", "finance", <TreasuryPage />)}
+        {guarded("/parties", "parties", <PartiesPage />)}
+        {guarded("/parties/:id", "parties", <PartyProfilePage />)}
+        {guarded("/intelligence", "parties", <IntelligencePage />)}
+        {guarded("/dashboard", "reports", <DashboardPage />)}
+        {guarded("/costing", "costing", <CostingPage />)}
+        {guarded("/costs", "purchasing", <CostsPage />)}
+        {guarded("/costs/:id", "purchasing", <CostItemPage />)}
+        {guarded("/staff", "staff", <StaffPage />)}
+        {guarded("/audit", "audit", <AuditPage />)}
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="/clients" element={<Navigate to="/parties" replace />} />
         <Route path="/clients/:id" element={<LegacyClient />} />
-        <Route
-          path="/costs"
-          element={
-            <Finance>
-              <CostsPage />
-            </Finance>
-          }
-        />
-        <Route
-          path="/costs/:id"
-          element={
-            <Finance>
-              <CostItemPage />
-            </Finance>
-          }
-        />
-        <Route
-          path="/treasury"
-          element={
-            <Finance>
-              <TreasuryPage />
-            </Finance>
-          }
-        />
-        <Route
-          path="/staff"
-          element={
-            <Owner>
-              <StaffPage />
-            </Owner>
-          }
-        />
-        <Route
-          path="/audit"
-          element={
-            <Owner>
-              <AuditPage />
-            </Owner>
-          }
-        />
-        <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </>
   );
 }
 
+/**
+ * الصفحة نفسها بتتحقق من الصلاحية، مش القائمة بس.
+ * اللي يكتب العنوان بإيده بيتحوّل للرئيسية بدل ما يشوف بيانات مش من حقه —
+ * ودي نفس الخانة اللي في مصفوفة الصلاحيات، مش شرط تاني مكتوب في مكان تاني.
+ */
+function guarded(path: string, module: PermModule, page: ReactNode) {
+  return <Route path={path} element={<Guard module={module}>{page}</Guard>} />;
+}
+
+function Guard({ module, children }: { module: PermModule; children: ReactNode }) {
+  const { can } = useFactory();
+  if (!can.do(module, "view")) return <Navigate to="/" replace />;
+  return children;
+}
+
 /** الروابط القديمة للعملاء بتفضل شغالة بعد ما بقوا جهات تعامل */
 function LegacyClient() {
   const { id } = useParams();
   return <Navigate to={`/parties/${id}`} replace />;
-}
-
-function Finance({ children }: { children: ReactNode }) {
-  const { can } = useFactory();
-  if (!can.finance) return <Navigate to="/" replace />;
-  return children;
-}
-
-function Owner({ children }: { children: ReactNode }) {
-  const { can } = useFactory();
-  if (!can.staff) return <Navigate to="/" replace />;
-  return children;
 }
