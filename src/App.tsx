@@ -94,7 +94,8 @@ function appRoutes() {
         {guarded("/parties", "parties", <PartiesPage />)}
         {guarded("/parties/:id", "parties", <PartyProfilePage />)}
         {guarded("/intelligence", "parties", <IntelligencePage />)}
-        {guarded("/dashboard", "reports", <CommandPage />)}
+        {/* الصلاحية هنا على مستوى القسم مش الصفحة: المشرف بيفتحها ويشوف وضع أرض المصنع بس */}
+        <Route path="/dashboard" element={<CommandPage />} />
         {guarded("/costing", "costing", <CostingPage />)}
         {guarded("/costs", "purchasing", <CostsPage />)}
         {guarded("/costs/:id", "purchasing", <CostItemPage />)}

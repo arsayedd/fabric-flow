@@ -14,7 +14,6 @@ import {
   lineStats,
   liveOrders,
   orderMix,
-  stageLoads,
   type Range,
 } from "@/store/command";
 import { capacityBase, minutesLabel } from "@/store/planning";
@@ -30,7 +29,6 @@ export function ProductionOverview({ range }: { range: Range }) {
   const produced = series.reduce((s, p) => s + p.units, 0);
   const capMin = capacityMinutes(db, range);
   const earned = earnedMinutes(db, range.from, range.to);
-  const stages = stageLoads(db);
   const cap = capacityBase(db);
 
   return (
@@ -72,41 +70,6 @@ export function ProductionOverview({ range }: { range: Range }) {
           <Needs what="زمن معياري في مسار العمليات + مراحل مسجّلة" />
         </div>
       )}
-
-      {stages.length ? (
-        <ul className="mt-3 list-none space-y-2 border-t border-border pt-3">
-          {stages.map((s) => (
-            <li key={s.operationId}>
-              <div className="flex items-baseline justify-between gap-3 text-sm">
-                <span className="min-w-0 truncate">
-                  {s.name}
-                  {s.isBottleneck ? (
-                    <Badge tone="danger" className="mr-2">
-                      اختناق
-                    </Badge>
-                  ) : null}
-                </span>
-                <span className="shrink-0 tabular text-xs text-muted-foreground">
-                  وصل {qty(Math.round(s.arrived), 0)} · خرج {qty(Math.round(s.good), 0)} · واقف{" "}
-                  <span className={s.waiting > 0 ? "text-warn" : ""}>{qty(Math.round(s.waiting), 0)}</span>
-                </span>
-              </div>
-              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
-                <div
-                  className={`h-full rounded-full ${s.throughPct >= 85 ? "bg-ok" : s.throughPct >= 55 ? "bg-warn" : "bg-danger"}`}
-                  style={{ width: `${Math.min(100, s.throughPct)}%` }}
-                />
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      <p className="mt-2 text-xs text-muted-foreground">
-        النسبة جنب كل مرحلة = اللي خرج منها ÷ اللي وصلها. «وصل» بيتحسب لكل أمر على حدة من مخرج المرحلة اللي قبلها في
-        مسار الموديل نفسه، فالأرقام بين المراحل مش بالضرورة تطرح على بعضها لما الموديلات مسارها مختلف. وطاقة كل مرحلة
-        لوحدها لسه مش مسجّلة، فمبنقولش «طاقتها كام في اليوم».
-      </p>
     </Card>
   );
 }

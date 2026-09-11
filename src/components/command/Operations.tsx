@@ -375,7 +375,7 @@ export function QualitySection({ range }: { range: Range }) {
 
   if (total === 0) {
     return (
-      <Section title="الجودة" to="/production">
+      <Section title="الجودة" to="/orders">
         <Card>
           <Needs what="تسجيل المراحل بكميات سليم وتالف ومعاد" />
         </Card>
@@ -386,7 +386,7 @@ export function QualitySection({ range }: { range: Range }) {
   const okPct = (good / total) * 100;
 
   return (
-    <Section title="الجودة" hint="العيب بيتولد فين، وبيكلّف كام" to="/production">
+    <Section title="الجودة" hint="العيب بيتولد فين، وبيكلّف كام" to="/orders">
       <div className="grid gap-3 lg:grid-cols-3">
         <Card>
           <div className="flex flex-wrap items-start justify-between gap-3">

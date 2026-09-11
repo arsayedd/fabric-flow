@@ -180,7 +180,10 @@ export function FunnelCard() {
           <li key={s.operationId}>
             <div className="flex items-baseline justify-between gap-3 text-sm">
               <span className="truncate">
-                {s.name}
+                {/* المرحلة مش رقم على الشاشة: بتفتح الأوامر اللي القطع واقفة فيها */}
+                <Link to="/orders" className="underline-offset-4 hover:underline">
+                  {s.name}
+                </Link>
                 {bn && bn.step.operationId === s.operationId ? (
                   <Badge tone="danger" className="mr-2">
                     اختناق

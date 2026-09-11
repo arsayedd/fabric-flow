@@ -187,7 +187,8 @@ export const NAV: NavSection[] = [
     label: "التقارير والتحليلات",
     icon: BarChart3,
     items: [
-      item("/dashboard", "غرفة التحكم", "reports", "reports"),
+      // غرفة التحكم مفتوحة للكل: كل قسم جواها بيتشال لوحده لو الصلاحية ناقصة
+      item("/dashboard", "غرفة التحكم", "production", "reports"),
       item("/intelligence", "ذكاء العملاء", "parties", "parties"),
       item("/reports", "بانِي التقارير", "reports", "reports", false),
     ],

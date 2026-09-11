@@ -1,7 +1,7 @@
 import { addDays, cairoToday, daysBetween, formatDate, moneyPlain, qty as num } from "@/lib/utils";
 import { allAccountBalances, payables, receivables } from "./compute";
 import { costSheet, modelVolume, profitRanking, targetMarginOf } from "./costing";
-import { factoryBottleneck, factoryFunnel } from "./health";
+import { factoryBottleneck } from "./health";
 import { materialStock, orderStages, routingLines, stockQty, unitName } from "./manufacturing";
 import { capacityBase, isWorkDay, mrp, openOrders, schedule, workDaysBetween } from "./planning";
 import type { Db } from "./types";
@@ -399,7 +399,7 @@ export function kpis(db: Db, range: Range, cmp: Range | null): Kpi[] {
       spark: series.map((p) => p.units),
       explain: "كمية آخر مرحلة في مسار كل أمر، عشان القطعة متتعدّش مرتين وهي بتمشي بين المراحل.",
       sub: null,
-      to: "/production",
+      to: "/orders",
       missing: null,
     },
     {
@@ -440,7 +440,7 @@ export function kpis(db: Db, range: Range, cmp: Range | null): Kpi[] {
       spark: [],
       explain: "القطع السليمة ÷ (السليمة + المرفوضة + المعادة) من تسجيل المراحل.",
       sub: good + bad > 0 ? `مرفوض ومعاد ${num(Math.round(bad), 0)} قطعة` : null,
-      to: "/production",
+      to: "/orders",
       missing: good + bad > 0 ? null : "تسجيل المراحل بكميات سليم وتالف",
     },
     {
@@ -532,34 +532,6 @@ export function kpis(db: Db, range: Range, cmp: Range | null): Kpi[] {
 }
 
 /* ── ٤) الإنتاج ────────────────────────────────────────────────── */
-
-export type StageLoad = {
-  operationId: string;
-  name: string;
-  arrived: number;
-  good: number;
-  waiting: number;
-  scrap: number;
-  rework: number;
-  /** نسبة اللي خرج من اللي وصل */
-  throughPct: number;
-  isBottleneck: boolean;
-};
-
-export function stageLoads(db: Db): StageLoad[] {
-  const bn = factoryBottleneck(db);
-  return factoryFunnel(db).map((s) => ({
-    operationId: s.operationId,
-    name: s.name,
-    arrived: s.arrived,
-    good: s.done,
-    waiting: s.waiting,
-    scrap: s.scrap,
-    rework: s.rework,
-    throughPct: s.arrived > 0 ? (s.done / s.arrived) * 100 : 0,
-    isBottleneck: bn?.step.operationId === s.operationId,
-  }));
-}
 
 export type LineStat = {
   line: string;
@@ -1639,7 +1611,7 @@ export function decisions(db: Db, range: Range, cmp: Range | null): Decision[] {
         impact: extra * 30,
         impactLabel: `الفرق ده يعني ${num(Math.round(extra), 0)} قطعة زيادة في التالف`,
         action: "راجع المرحلة اللي بيظهر فيها العيب على الخط ده مع المشرف",
-        to: "/production",
+        to: "/orders",
         evidence: [`${num(Math.round(bad.units), 0)} قطعة على الخط في الفترة`],
       });
     }

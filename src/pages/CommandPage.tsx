@@ -238,10 +238,11 @@ const SECTIONS: Record<string, SectionDef> = {
     perm: "production",
     wave: 0,
     render: ({ range }) => (
-      <Section title="الإنتاج" to="/production">
+      <Section title="الإنتاج" to="/orders">
         <div className="grid gap-3 lg:grid-cols-3">
-          <div className="lg:col-span-2">
+          <div className="space-y-3 lg:col-span-2">
             <ProductionOverview range={range} />
+            <FunnelCard />
           </div>
           <div className="space-y-3">
             <BottleneckCard />
@@ -256,12 +257,9 @@ const SECTIONS: Record<string, SectionDef> = {
     perm: "production",
     wave: 2,
     render: ({ range }) => (
-      <div className="space-y-3">
-        <FunnelCard />
-        <div className="grid gap-3 lg:grid-cols-2">
-          <OrderMixCard />
-          <LineComparison range={range} />
-        </div>
+      <div className="grid gap-3 lg:grid-cols-2">
+        <OrderMixCard />
+        <LineComparison range={range} />
       </div>
     ),
   },

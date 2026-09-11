@@ -21,9 +21,9 @@ import { Explain, Needs, Section } from "./Kit";
 
 /** كل مؤشر في الدرجة بيفتح الشاشة اللي بتتحل فيها — مفيش رقم بلا طريق */
 const HEALTH_ROUTE: Record<HealthKey, string> = {
-  production: "/production",
+  production: "/orders",
   cost: "/costing",
-  quality: "/production",
+  quality: "/orders",
   inventory: "/materials",
   workforce: "/workers",
   delivery: "/planning",
