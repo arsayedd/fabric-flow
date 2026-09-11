@@ -325,7 +325,8 @@ function AccountStep({
           <select
             value={acc.countryCode}
             onChange={(e) => setAcc((p) => ({ ...p, countryCode: e.target.value }))}
-            className={cn(selectClass, "latin w-28 shrink-0")}
+            className={cn(selectClass, "latin w-28 shrink-0 text-left")}
+            dir="ltr"
           >
             {COUNTRIES.filter((c) => c.dial !== "+").map((c) => (
               <option key={c.dial} value={c.dial}>
@@ -595,7 +596,9 @@ function WorkspaceStep({
 
   const state = slugState(slug, rows);
   const alts = useMemo(
-    () => (state === "free" ? [] : slugSuggestions(slugify(slug || name) || "factory", rows, city ? [city] : [])),
+    // البدائل مبنية على اسم المصنع، مش على اللي اتكتب — لو «admin» محجوز
+    // البديل يبقى «alnoor-eg» مش «admin-eg»
+    () => (state === "free" ? [] : slugSuggestions(slugify(name) || slug || "factory", rows, city ? [city] : [])),
     [state, slug, name, city, rows],
   );
 

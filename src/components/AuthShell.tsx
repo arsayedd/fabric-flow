@@ -28,7 +28,7 @@ export function AuthShell({
             <ArrowRight className="h-4 w-4" />
             الصفحة الرئيسية
           </Link>
-          <Lockup className="w-28" />
+          <Lockup className="w-24" />
         </div>
         <div className="mt-8 flex-1">
           <h1 className="text-2xl">{title}</h1>

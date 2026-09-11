@@ -35,7 +35,14 @@ export function setupSteps(db: Db, workspace: Workspace | null): SetupStep[] {
     },
     { key: "workers", label: "إضافة العمال", to: "/workers", done: db.workers.length > 0 },
     { key: "suppliers", label: "إضافة الموردين", to: "/parties", done: suppliers > 0 },
-    { key: "materials", label: "إضافة الخامات", to: "/materials", done: db.materials.length > 0 },
+    // الخامات نفسها بتتجهّز مع قالب النشاط، فالخطوة الحقيقية هي إدخال رصيد
+    // بسعره — ده اللي بيخلي التكلفة والمخزون يشتغلوا
+    {
+      key: "materials",
+      label: "إدخال رصيد الخامات بأسعارها",
+      to: "/materials",
+      done: db.stockMovements.some((m) => m.itemType === "material" && m.kind === "purchase"),
+    },
     { key: "products", label: "إضافة المنتجات", to: "/products", done: db.products.length > 0 },
     { key: "customers", label: "إضافة العملاء", to: "/parties", done: customers > 0 },
     { key: "order", label: "أول أمر إنتاج", to: "/orders", done: db.orders.length > 0 },

@@ -3,7 +3,7 @@ import { ArrowLeft, Factory as FactoryIcon, LogOut, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { AuthShell } from "@/components/AuthShell";
 import { Button } from "@/components/ui/button";
-import { formatDate } from "@/lib/utils";
+import { formatDate, qty } from "@/lib/utils";
 import { ROLE_EXPLAIN, workspaceUrl } from "@/store/account";
 import { useFactory } from "@/store/context";
 import { INDUSTRY_LABEL, ROLE_LABEL, type Industry } from "@/store/types";
@@ -18,7 +18,7 @@ export function FactoryPickerPage() {
     <AuthShell
       wide
       title="اختار المصنع"
-      subtitle={`أهلًا ${account.user?.fullName ?? ""} — عندك ${rows.length === 1 ? "مصنع واحد" : `${rows.length} مصانع`} على حسابك. كل مصنع بياناته وصلاحياته لوحده.`}
+      subtitle={`أهلًا ${account.user?.fullName ?? ""} — عندك ${rows.length === 1 ? "مصنع واحد" : `${qty(rows.length)} مصانع`} على حسابك. كل مصنع بياناته وصلاحياته لوحده.`}
       footer={
         <button onClick={signOut} className="inline-flex items-center gap-1.5 hover:text-foreground">
           <LogOut className="h-4 w-4" />

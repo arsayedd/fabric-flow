@@ -404,7 +404,9 @@ export function slugify(name: string): string {
     .replace(/[\u064B-\u0652\u0640]/g, "")
     .split(/[\s\-_]+/)
     .filter(Boolean)
-    .filter((w) => !STOP_WORDS.includes(w));
+    // الكلمات اللي بتبدأ بـ«لل» وصف للنشاط («للملابس»، «للشنط»)، فاسم الـworkspace
+    // بياخد الاسم المميّز بس
+    .filter((w) => !STOP_WORDS.includes(w) && !/^لل/.test(w));
   if (!words.length) words = name.trim().split(/\s+/).filter(Boolean);
 
   const latin = words
