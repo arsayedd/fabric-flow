@@ -99,9 +99,14 @@ export function AppShell() {
       {drawer ? (
         <div className="fixed inset-0 z-50 md:hidden">
           <button className="absolute inset-0 bg-[#0f1720]/60" aria-label="إغلاق" onClick={() => setDrawer(false)} />
-          {/* أي لينك جوه الدرج بيقفله — مفيش درج فاضل مفتوح فوق الصفحة الجديدة */}
+          {/*
+            اللينك بيقفل الدرج، إنما فتح قسم لأ — القسم بيتفتح جوه الدرج
+            عشان تشوف اللي جواه قبل ما تختار.
+          */}
           <div
-            onClick={() => setDrawer(false)}
+            onClick={(e) => {
+              if ((e.target as HTMLElement).closest("a")) setDrawer(false);
+            }}
             className="absolute inset-y-0 end-0 flex w-[85%] max-w-xs flex-col bg-primary text-primary-foreground shadow-2xl"
           >
             <div className="flex items-center justify-between px-3 pt-3">

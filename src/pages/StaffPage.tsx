@@ -15,7 +15,6 @@ import {
   MODULE_LABEL as PERM_MODULE_LABEL,
   PERM_ACTIONS,
   PERM_MODULES,
-  ROLE_DEFAULTS,
   allowed,
   roleMatrix,
   toggle,
@@ -243,7 +242,7 @@ function PermissionsCard() {
             size="sm"
             variant="outline"
             onClick={() => {
-              setPermissions(target, ROLE_DEFAULTS[target]);
+              setPermissions(target, null);
               toast.success("رجعت لصلاحيات الدور الافتراضية.");
             }}
           >

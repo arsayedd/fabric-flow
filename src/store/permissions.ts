@@ -141,11 +141,18 @@ export function toggle(matrix: PermMatrix, module: PermModule, action: PermActio
 }
 
 /**
+ * الرفض بسبب صلاحية نوع مختلف عن خطأ التحقق: ده مش «البيانات غلط»، ده
+ * «مش من حقك». فبيتميّز بنوعه عشان الطبقة اللي فوق تعرف توصّله للمستخدم
+ * بنفس الشكل في كل شاشة بدل ما كل صفحة تتصرف بطريقتها.
+ */
+export class PermissionError extends Error {}
+
+/**
  * رسالة الرفض بتقول الصلاحية الناقصة بالاسم، مش «غير مسموح».
  * المستخدم لازم يعرف يطلب إيه من صاحب المصنع.
  */
-export function denied(module: PermModule, action: PermAction): Error {
-  return new Error(`محتاج صلاحية «${ACTION_LABEL[action]} ${MODULE_LABEL[module]}» — اطلبها من صاحب المصنع.`);
+export function denied(module: PermModule, action: PermAction): PermissionError {
+  return new PermissionError(`محتاج صلاحية «${ACTION_LABEL[action]} ${MODULE_LABEL[module]}» — اطلبها من صاحب المصنع.`);
 }
 
 /* ── مستويات الوصول للبيانات ────────────────────────────────── */

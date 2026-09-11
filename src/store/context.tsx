@@ -412,7 +412,8 @@ type FactoryApi = {
     staff: boolean;
     audit: boolean;
   };
-  setPermissions: (role: Role, matrix: PermMatrix) => void;
+  /** `null` معناها ارجع للافتراضي — بنشيل الاستثناء مش بنخزّن الافتراضي كاستثناء */
+  setPermissions: (role: Role, matrix: PermMatrix | null) => void;
   addParty: (input: Partial<Party> & { name: string }) => string;
   updateParty: (id: string, patch: Partial<Party>) => void;
   deleteParty: (id: string) => void;
@@ -824,13 +825,20 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
       },
       login,
       logout: () => setSession(null),
+      /**
+       * تجربة النظام بدور. لو التجربة موجودة على الجهاز بالفعل، بنفتحها زي ما
+       * هي وبنبدّل الدور بس — تبديل الدور مش سبب إننا نمسح اللي المستخدم
+       * عدّله. اللي عايز تجربة نضيفة بيرجّعها من الإعدادات.
+       */
       startDemo: (r) => {
         const seeded = demoDb();
         const key = dbKeyOf(seeded.factory!.id);
-        setBook({ key, data: seeded });
+        const saved = readDb(key);
+        const data = saved?.factory ? saved : seeded;
+        setBook({ key, data });
         setMissing(null);
-        registerDeviceFactory(seeded, key);
-        const member = seeded.members.find((m) => m.role === r) ?? seeded.members[0];
+        registerDeviceFactory(data, key);
+        const member = data.members.find((m) => m.role === r) ?? data.members[0];
         login(member);
       },
       createFactory: (name, industry) => {
@@ -849,8 +857,11 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         need("staff", "edit");
         if (target === "owner") throw new Error("صلاحيات صاحب المصنع مابتتقلّصش — ده اللي بيفتح الباب لو حصلت مشكلة.");
         const before = db.settings.permissions?.[target] ?? null;
+        const all = { ...db.settings.permissions };
+        if (next) all[target] = next;
+        else delete all[target];
         mutate(
-          { settings: { ...db.settings, permissions: { ...db.settings.permissions, [target]: next } } },
+          { settings: { ...db.settings, permissions: all } },
           { action: "update", table: "settings", recordId: `permissions:${target}`, before, after: next },
         );
       },
