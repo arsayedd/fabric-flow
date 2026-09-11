@@ -136,9 +136,9 @@ export function IntelligencePage() {
         </Card>
       ) : null}
 
-      {pf.bestByScore && pf.biggestBySales && pf.bestByScore.party.id !== pf.biggestBySales.party.id ? (
+      {pf.scoreBeatsSize && pf.bestByScore && pf.biggestBySales ? (
         <Card className="border-accent/30 bg-accent-soft/50">
-          <h3 className="text-base">أكبر عميل ≠ أفضل عميل</h3>
+          <h3 className="text-base">أكبر عميل مش دايمًا أفضل عميل</h3>
           <p className="mt-1 text-sm text-muted-foreground">
             <strong className="font-medium text-foreground">{pf.biggestBySales.party.name}</strong> هو الأكبر مبيعات (
             {Math.round(pf.biggestBySales.sales).toLocaleString("ar-EG")} ج) بسكور {pf.biggestBySales.total} وهامش{" "}
@@ -276,6 +276,11 @@ export function IntelligencePage() {
               </tbody>
             </table>
           </div>
+          {groups.length && pf.withHistory / groups.length < 2 ? (
+            <p className="mt-2 text-xs text-warn">
+              كل فوج فيه عميل أو اتنين بس — النسب دي مش دلالة إحصائية لحد ما عدد عملائك يكبر.
+            </p>
+          ) : null}
           <p className="mt-2 text-xs text-muted-foreground">
             «بعد 3 شهور» معناها: نسبة عملاء الشهر ده اللي طلبوا تاني بعد 3 شهور من أول طلب. الخلايا اللي لسه
             مجالهاش الوقت مكتوب فيها «لسه بدري» بدل رقم مضلّل.

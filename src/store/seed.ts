@@ -116,7 +116,7 @@ const PLANS: CustomerPlan[] = [
   { clientId: "cl-2", monthsBack: 20, cycle: 21, base: 46000, growth: 0.12, term: 30, payLag: 48, unitPrice: 1400, models: ["بدلة مكتبية", "قميص قطن"], method: "bank" },
   { clientId: "cl-3", monthsBack: 12, cycle: 10, base: 7200, growth: 0.06, term: 14, payLag: 4, unitPrice: 60, models: ["تيشيرت مطبوع"], method: "cash" },
   { clientId: "cl-4", monthsBack: 15, cycle: 24, base: 17000, growth: -0.22, term: 20, payLag: 19, unitPrice: 380, models: ["فستان صيفي", "بلوزة"], method: "instapay", stoppedSince: 125 },
-  { clientId: "cl-5", monthsBack: 22, cycle: 30, base: 118000, growth: 0.26, term: 30, payLag: 36, unitPrice: 360, models: ["طقم تصدير"], method: "bank" },
+  { clientId: "cl-5", monthsBack: 22, cycle: 30, base: 118000, growth: 0.26, term: 30, payLag: 54, unitPrice: 360, models: ["طقم تصدير"], method: "bank" },
 ];
 
 /** مولّد ثابت: نفس البذرة = نفس البيانات في كل تشغيل */
@@ -192,7 +192,7 @@ function history(today: string, cash: string, bank: string, insta: string, walle
 
   [...months.entries()]
     .filter(([month]) => month < thisMonth)
-    .forEach(([month, revenue], idx) => {
+    .forEach(([month, revenue]) => {
       const day = `${month}-05`;
       const add = (suffix: string, costItemId: string, partyId: string, vendor: string, amount: number, quantity: number) => {
         const id = `hce-${month}-${suffix}`;
@@ -203,8 +203,8 @@ function history(today: string, cash: string, bank: string, insta: string, walle
           costEntryId: id,
           date: addDays(day, 3),
           amount: Math.round(amount),
-          accountId: idx % 2 === 0 ? bank : cash,
-          method: idx % 2 === 0 ? "bank" : "cash",
+          accountId: bank,
+          method: "bank",
         });
       };
       add("fabric", "ci-1", "sup-1", "مصبغة السلام", revenue * 0.4, Math.round(revenue / 45));
@@ -212,14 +212,24 @@ function history(today: string, cash: string, bank: string, insta: string, walle
       add("outsource", "ci-10", "ws-1", "ورشة عم شريف للخياطة", revenue * 0.07, Math.round(revenue / 120));
       add("rent", "ci-14", "sup-4", "المالك", 18000, 1);
       add("power", "ci-15", "sup-3", "شركة الكهرباء", 2900, 1);
-      manualTx.push({
-        id: `hmt-${month}`,
-        factoryId: FID,
-        date: `${month}-28`,
-        accountId: cash,
-        amount: -Math.round(revenue * 0.19),
-        notes: "أجور الشهر ومسحوبات المالك",
-      });
+      manualTx.push(
+        {
+          id: `hmt-w-${month}`,
+          factoryId: FID,
+          date: `${month}-28`,
+          accountId: cash,
+          amount: -Math.round(revenue * 0.13),
+          notes: "أجور العمال — ملخص الشهر",
+        },
+        {
+          id: `hmt-d-${month}`,
+          factoryId: FID,
+          date: `${month}-28`,
+          accountId: bank,
+          amount: -Math.round(revenue * 0.15),
+          notes: "مسحوبات المالك",
+        },
+      );
     });
 
   return { deliveries, collections, costEntries, costPayments, manualTx };

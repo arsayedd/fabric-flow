@@ -1116,6 +1116,7 @@ export type PortfolioStats = {
   concentrationRisk: boolean;
   bestByScore: RankRow | null;
   biggestBySales: RankRow | null;
+  scoreBeatsSize: boolean;
 };
 
 export function portfolioStats(db: Db): PortfolioStats {
@@ -1146,6 +1147,12 @@ export function portfolioStats(db: Db): PortfolioStats {
     concentrationRisk: sales > 0 && withHistory.length >= 3 && pct(top5Sales, sales) >= 60,
     bestByScore: byScore[0] ?? null,
     biggestBySales: sorted[0]?.row ?? null,
+    // المقارنة تستحق العرض بس لما فيه فرق حقيقي في السكور
+    scoreBeatsSize:
+      !!byScore[0] &&
+      !!sorted[0] &&
+      byScore[0].party.id !== sorted[0].row.party.id &&
+      (byScore[0].total ?? 0) >= (sorted[0].row.total ?? 0) + 3,
   };
 }
 
