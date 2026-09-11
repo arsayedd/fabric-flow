@@ -248,6 +248,8 @@ export type OrderProfit = {
   estTotal: number;
   /** فعلي: خامات مصروفة + أجور مسجّلة + أوفرهيد على المنتَج */
   actMaterials: number;
+  /** الكمية اللي الخامات اتصرفت عليها — أكبر من المنتَج لو الصرف كان للأمر كله */
+  materialBaseQty: number;
   actLabor: number;
   actOverhead: number;
   actTotal: number;
@@ -260,6 +262,14 @@ export type OrderProfit = {
   reasons: VarianceReason[];
   hasActuals: boolean;
 };
+
+/**
+ * الكمية اللي الخامات اتصرفت عليها فعلًا. لو خامات الأمر اتصرفت كلها مرة واحدة،
+ * المقارنة لازم تكون على كمية الأمر — وإلا الخامة اللي لسه في الشغل تبان هالك.
+ */
+function materialBase(order: Order, produced: number): number {
+  return order.materialsIssuedAt ? order.quantity : produced || order.quantity;
+}
 
 export function orderProfit(db: Db, order: Order): OrderProfit {
   const sheet = order.productId ? costSheet(db, order.productId) : null;
@@ -278,7 +288,11 @@ export function orderProfit(db: Db, order: Order): OrderProfit {
     .reduce((s, m) => s + Math.abs(m.qty) * m.unitCost, 0);
   const actLabor = db.stageEntries.filter((e) => e.orderId === order.id).reduce((s, e) => s + e.qtyGood * e.rate, 0);
   const actOverhead = overheadRate * produced;
-  const actTotal = actMaterials + actLabor + actOverhead;
+  const matBase = materialBase(order, produced);
+  // الخامات اتصرفت للأمر كله، فاللي خلّص يتحمّل نصيبه بس — الباقي لسه في الشغل
+  const matShare = matBase > 0 && produced > 0 ? Math.min(1, produced / matBase) : 1;
+  const actMaterialsOnProduced = actMaterials * matShare;
+  const actTotal = actMaterialsOnProduced + actLabor + actOverhead;
   const revenue = order.piecePrice * produced;
 
   /* أسباب الفرق — كل سبب برقمه، مش تفسير عام */
@@ -293,13 +307,13 @@ export function orderProfit(db: Db, order: Order): OrderProfit {
         .filter((m) => m.itemId === l.materialId && m.kind === "waste")
         .reduce((s, m) => s + Math.abs(m.qty), 0);
       if (!issued && !wasted) continue;
-      const expected = l.effectiveQty * (produced || order.quantity);
+      const expected = l.effectiveQty * matBase;
       const over = issued - expected;
       if (over > 0.01) {
         reasons.push({
           label: `استهلاك زيادة في ${l.name}`,
           amount: over * l.unitCost,
-          why: `المصروف ${round(issued)} ${l.unit} والمخطط ${round(expected)} ${l.unit} لـ${round(produced || order.quantity)} قطعة`,
+          why: `المصروف ${round(issued)} ${l.unit} والمخطط ${round(expected)} ${l.unit} لـ${round(matBase)} قطعة`,
         });
       }
       if (wasted > 0.01) {
@@ -358,7 +372,8 @@ export function orderProfit(db: Db, order: Order): OrderProfit {
     rework,
     estPerPiece,
     estTotal,
-    actMaterials,
+    actMaterials: actMaterialsOnProduced,
+    materialBaseQty: matBase,
     actLabor,
     actOverhead,
     actTotal,
@@ -472,13 +487,18 @@ export function wasteIntel(db: Db, productId: string): WasteIntel {
   const orderIds = vol.orders.map((o) => o.id);
   const moves = db.stockMovements.filter((m) => m.refType === "order" && orderIds.includes(m.refId ?? ""));
   const base = vol.producedQty || 0;
+  // المقارنة على الكمية اللي الخامات اتصرفت عليها، مش على اللي خلّص لحد دلوقتي
+  const matBase = vol.orders.reduce((s, o) => {
+    const stages = orderStages(db, o);
+    return s + materialBase(o, stages.length ? stages[stages.length - 1].good : 0);
+  }, 0);
 
   const rows: WasteRow[] = lines
     .map((l) => {
       const issued = moves
         .filter((m) => m.itemId === l.materialId && (m.kind === "issue" || m.kind === "waste"))
         .reduce((s, m) => s + Math.abs(m.qty), 0);
-      const expected = l.qtyPerUnit * base;
+      const expected = l.qtyPerUnit * matBase;
       const waste = issued - expected;
       return {
         materialId: l.materialId,

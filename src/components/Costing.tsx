@@ -236,6 +236,12 @@ export function CostingSection({ productId }: { productId: string }) {
                   متوقع <Money value={p.estPerPiece} /> للقطعة · فعلي{" "}
                   {p.actPerPiece === null ? "—" : <Money value={p.actPerPiece} />} على {qty(p.produced, 0)} قطعة منتَجة
                 </p>
+                {p.materialBaseQty > p.produced ? (
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    الخامات اتصرفت لـ{qty(p.materialBaseQty, 0)} قطعة، فالمنتَج اتحمّل نصيبه منها بس — الباقي لسه
+                    في الشغل مش هالك.
+                  </p>
+                ) : null}
                 {p.reasons.length ? (
                   <ul className="mt-2 list-none space-y-1 text-sm">
                     {p.reasons.slice(0, 4).map((r) => (
@@ -290,7 +296,8 @@ export function CostingSection({ productId }: { productId: string }) {
             </table>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
-            «مخطط» = الكمية المفروضة للقطع المنتَجة من قائمة الخامات، و«الفرق» هو الهالك الحقيقي فوقها.
+            «مخطط» = الكمية المفروضة من قائمة الخامات للكمية اللي الخامات اتصرفت عليها، و«الفرق» هو الهالك
+            الحقيقي فوقها.
             {waste.scrapPct !== null ? ` نسبة القطع المرفوضة ${qty(Math.round(waste.scrapPct), 0)}٪.` : ""}
           </p>
         </Card>
