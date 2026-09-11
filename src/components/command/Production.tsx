@@ -87,7 +87,7 @@ export function ProductionOverview({ range }: { range: Range }) {
                   ) : null}
                 </span>
                 <span className="shrink-0 tabular text-xs text-muted-foreground">
-                  خرج {qty(Math.round(s.good), 0)} · واقف{" "}
+                  وصل {qty(Math.round(s.arrived), 0)} · خرج {qty(Math.round(s.good), 0)} · واقف{" "}
                   <span className={s.waiting > 0 ? "text-warn" : ""}>{qty(Math.round(s.waiting), 0)}</span>
                 </span>
               </div>
@@ -103,7 +103,9 @@ export function ProductionOverview({ range }: { range: Range }) {
       ) : null}
 
       <p className="mt-2 text-xs text-muted-foreground">
-        النسبة جنب كل مرحلة = اللي خرج منها ÷ اللي وصلها. طاقة كل مرحلة لوحدها لسه مش مسجّلة، فمبنقولش «طاقتها كام في اليوم».
+        النسبة جنب كل مرحلة = اللي خرج منها ÷ اللي وصلها. «وصل» بيتحسب لكل أمر على حدة من مخرج المرحلة اللي قبلها في
+        مسار الموديل نفسه، فالأرقام بين المراحل مش بالضرورة تطرح على بعضها لما الموديلات مسارها مختلف. وطاقة كل مرحلة
+        لوحدها لسه مش مسجّلة، فمبنقولش «طاقتها كام في اليوم».
       </p>
     </Card>
   );

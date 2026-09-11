@@ -112,7 +112,8 @@ export function CommandHeader({
   modes: DashMode[];
 }) {
   const { session, db } = useFactory();
-  const firstName = (session?.name ?? "").split(" ")[0];
+  // الاسم بالكامل: أول كلمة لوحدها بتطلّع نداء أعرج زي «يا صاحب»
+  const name = (session?.name ?? "").trim();
 
   return (
     <header className="space-y-3">
@@ -121,7 +122,7 @@ export function CommandHeader({
           <p className="text-sm text-muted-foreground">{formatDate(cairoToday())}</p>
           <h2 className="text-2xl">
             {greeting()}
-            {firstName ? ` يا ${firstName}` : ""}
+            {name ? ` يا ${name}` : ""}
           </h2>
           <p className="text-sm text-muted-foreground">
             ده اللي بيحصل في {db.factory?.name ?? "المصنع"} دلوقتي — والقرارات اللي مستنية منك.

@@ -355,7 +355,7 @@ export function kpis(db: Db, range: Range, cmp: Range | null): Kpi[] {
     },
     {
       key: "margin",
-      label: "هامش الربح",
+      label: "هامش الفترة",
       format: "pct",
       value: margin,
       prev: marginBefore,
@@ -364,7 +364,8 @@ export function kpis(db: Db, range: Range, cmp: Range | null): Kpi[] {
       target: targetMarginOf(db),
       targetLabel: "الهدف من الإعدادات",
       spark: series.map((p) => p.marginPct ?? 0),
-      explain: "الربح ÷ الإيراد. الهدف اللي مكتوب جنبه هو اللي أنت سجّلته في الإعدادات، مش رقم مفترض.",
+      explain:
+        "الربح ÷ الإيراد على حركة الفترة كلها. ده مش نفس «هامش الموديل» في لوحة التكلفة: ده على المقبوض والمنصرف فعليًا في الفترة، وده على قائمة تكاليف القطعة. الهدف جنبه هو اللي سجّلته في الإعدادات، مش رقم مفترض.",
       sub: null,
       to: "/costing",
       missing: margin === null ? "توريدات في الفترة" : null,
@@ -535,6 +536,7 @@ export function kpis(db: Db, range: Range, cmp: Range | null): Kpi[] {
 export type StageLoad = {
   operationId: string;
   name: string;
+  arrived: number;
   good: number;
   waiting: number;
   scrap: number;
@@ -549,6 +551,7 @@ export function stageLoads(db: Db): StageLoad[] {
   return factoryFunnel(db).map((s) => ({
     operationId: s.operationId,
     name: s.name,
+    arrived: s.arrived,
     good: s.done,
     waiting: s.waiting,
     scrap: s.scrap,
@@ -1951,6 +1954,8 @@ export type TargetRow = {
   actual: number | null;
   target: number | null;
   variancePct: number | null;
+  /** الفرق في مؤشر نسبته مئوية بيتقال بالنقط — «٦٦٪ مقابل هدف ٤٠٪» فرقه ٢٦ نقطة مش ٦٤٪ */
+  variancePoints: number | null;
   tone: "ok" | "warn" | "danger" | "muted";
   source: string;
 };
@@ -1969,6 +1974,7 @@ export function targets(db: Db, range: Range): TargetRow[] {
       actual: k.value,
       target: k.target,
       variancePct,
+      variancePoints: k.format === "pct" ? k.value - k.target : null,
       tone: good ? "ok" : variancePct !== null && Math.abs(variancePct) > 15 ? "danger" : "warn",
       source: k.targetLabel ?? "",
     });
@@ -1995,7 +2001,7 @@ export const DASH_MODE_HINT: Record<DashMode, string> = {
 
 /** الترتيب بيتغيّر بالوضع: كل دور بيشوف اللي بيهمه فوق */
 export const MODE_SECTIONS: Record<DashMode, string[]> = {
-  exec: ["health", "decisions", "kpis", "quick", "finance", "margin", "waterfall", "cash", "aging", "customers", "models", "forecast", "targets", "timeline"],
+  exec: ["health", "decisions", "kpis", "quick", "finance", "margin", "waterfall", "cash", "aging", "production", "pipeline", "customers", "models", "forecast", "targets", "timeline"],
   manager: ["health", "decisions", "kpis", "quick", "production", "pipeline", "live", "quality", "inventory", "suppliers", "workforce", "targets", "timeline"],
   floor: ["production", "live", "pipeline", "workforce", "quality", "inventory", "quick"],
 };

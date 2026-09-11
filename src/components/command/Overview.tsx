@@ -147,12 +147,14 @@ export function TargetsCard({ range }: { range: Range }) {
                   <td className="py-1.5 tabular">{fmt(r.actual as number)}</td>
                   <td className="py-1.5 tabular text-muted-foreground">{fmt(r.target as number)}</td>
                   <td className="py-1.5">
-                    {r.variancePct === null ? (
+                    {r.variancePoints === null && r.variancePct === null ? (
                       "—"
                     ) : (
                       <span className={`tabular ${r.tone === "ok" ? "text-ok" : r.tone === "danger" ? "text-danger" : "text-warn"}`}>
-                        {r.variancePct > 0 ? "+" : ""}
-                        {qty(Math.round(r.variancePct), 0)}٪
+                        {(r.variancePoints ?? r.variancePct ?? 0) > 0 ? "+" : ""}
+                        {r.variancePoints !== null
+                          ? `${qty(Math.round(r.variancePoints), 0)} نقطة`
+                          : `${qty(Math.round(r.variancePct as number), 0)}٪`}
                       </span>
                     )}
                   </td>

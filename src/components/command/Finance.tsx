@@ -230,7 +230,7 @@ export function ProfitWaterfall({ range }: { range: Range }) {
   return (
     <Card className="h-full">
       <div className="flex items-center gap-1">
-        <h3 className="text-base">الإيراد رِحل فين</h3>
+        <h3 className="text-base">الإيراد راح فين</h3>
         <Explain
           label="شلال الربح"
           text="بنبدأ من الإيراد، وننزّل كل بند مصروف بترتيب حجمه، لحد ما نوصل لصافي الربح. طول العمود = نصيب البند من الإيراد."
@@ -548,9 +548,11 @@ export function ModelSection() {
   }
 
   const best = rows.filter((r) => r.marginPct !== null && (r.marginPct as number) >= target).slice(0, 5);
+  // الترتيب بالأثر بالجنيه مش بالنسبة: هامش ناقص على إيراد كبير أهم من نسبة أقل على موديل ماباعش
+  const gapMoney = (r: (typeof rows)[number]) => ((target - (r.marginPct as number)) / 100) * r.revenue;
   const weak = rows
     .filter((r) => r.marginPct !== null && (r.marginPct as number) < target)
-    .sort((a, b) => (a.marginPct as number) - (b.marginPct as number))
+    .sort((a, b) => gapMoney(b) - gapMoney(a) || (a.marginPct as number) - (b.marginPct as number))
     .slice(0, 5);
 
   return (
@@ -597,8 +599,8 @@ export function ModelSection() {
                     </Badge>
                   </div>
                   <p className="text-xs tabular text-muted-foreground">
-                    الهدف {qty(Math.round(target), 0)}٪ · فرق{" "}
-                    {qty(Math.round(target - (r.marginPct as number)), 0)} نقطة على إيراد {money(r.revenue)}
+                    الهدف {qty(Math.round(target), 0)}٪ · فرق {qty(Math.round(target - (r.marginPct as number)), 0)} نقطة
+                    {r.revenue > 0 ? <> على إيراد {money(r.revenue)}</> : " — لسه مفيش توريد مسجّل عليه"}
                   </p>
                 </li>
               ))}
