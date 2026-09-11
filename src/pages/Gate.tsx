@@ -5,7 +5,7 @@ import { Lockup } from "@/components/Brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useFactory } from "@/store/context";
-import { ROLE_LABEL, type BackupFile } from "@/store/types";
+import { INDUSTRIES, INDUSTRY_LABEL, ROLE_LABEL, type BackupFile, type Industry } from "@/store/types";
 
 export function Gate() {
   const { db, login } = useFactory();
@@ -46,6 +46,7 @@ function Welcome() {
   const { createFactory, startDemo, importBackup } = useFactory();
   const [mode, setMode] = useState<"home" | "create" | "restore">("home");
   const [name, setName] = useState("");
+  const [industry, setIndustry] = useState<Industry>("apparel");
 
   const onRestore = async (file: File) => {
     try {
@@ -61,14 +62,30 @@ function Welcome() {
   if (mode === "create") {
     const submit = (e: FormEvent) => {
       e.preventDefault();
-      createFactory(name);
+      createFactory(name, industry);
     };
     return (
       <Shell>
         <form onSubmit={submit} className="space-y-4">
-          <h2 className="text-2xl">اسم مصنعك</h2>
-          <p className="text-sm text-muted-foreground">هيتكتب على الشاشات وأوامر الإنتاج والنسخة الاحتياطية.</p>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="مصنع النور للملابس الجاهزة" required />
+          <h2 className="text-2xl">مصنعك بيشتغل في إيه؟</h2>
+          <p className="text-sm text-muted-foreground">
+            هنجهّزلك الوحدات والفئات والخامات والعمليات المناسبة للنشاط، وتقدر تعدّلها في أي وقت.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {INDUSTRIES.map((k) => (
+              <button
+                type="button"
+                key={k}
+                onClick={() => setIndustry(k)}
+                className={`rounded-md border px-3 py-3 text-sm transition-colors ${
+                  industry === k ? "border-accent bg-accent-soft font-medium" : "border-border bg-background hover:border-accent/50"
+                }`}
+              >
+                {INDUSTRY_LABEL[k]}
+              </button>
+            ))}
+          </div>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="اسم المصنع" required />
           <div className="flex gap-2">
             <Button type="submit" className="flex-1" size="lg">
               ابدأ التسجيل
@@ -111,10 +128,10 @@ function Welcome() {
 
   return (
     <Shell>
-      <h1 className="text-2xl leading-relaxed">كل جنيه داخل وخارج المصنع، في سيستم واحد.</h1>
+      <h1 className="text-2xl leading-relaxed">نظام تشغيل مصنعك، من الخامة للتحصيل.</h1>
       <p className="mt-3 text-sm leading-7 text-muted-foreground">
-        من القماش والإبرة لحد التوريد للعميل وتحصيل فلوسه. أوامر الإنتاج بخطوطها، والشاشات بتتغير حسب دورك، والتطبيق
-        يتثبت على الموبايل زي أي تطبيق.
+        صنعة بيشتغل مع أي نشاط إنتاجي — ملابس، شنط، أحذية، مفروشات، أغذية. خامات وقوائم تصنيع وأوامر إنتاج ومخزون
+        وعمال وتحصيل، في سيستم واحد يتثبت على الموبايل.
       </p>
 
       <div className="mt-7 grid gap-2">

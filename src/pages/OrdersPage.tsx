@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Factory } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ChevronLeft, Factory } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
 import { Money } from "@/components/Money";
@@ -10,12 +11,9 @@ import { Card, DataRow } from "@/components/ui/card";
 import { Input, selectClass } from "@/components/ui/input";
 import { cairoToday, formatDate } from "@/lib/utils";
 import { useFactory } from "@/store/context";
-import {
-  ORDER_STATUSES,
-  ORDER_STATUS_LABEL,
-  PRODUCTION_LINES,
-  type OrderStatus,
-} from "@/store/types";
+import { productCost } from "@/store/manufacturing";
+import { TEMPLATES } from "@/store/templates";
+import { ORDER_STATUSES, ORDER_STATUS_LABEL, type OrderStatus } from "@/store/types";
 
 const FILTERS: { id: "all" | OrderStatus; label: string }[] = [
   { id: "all", label: "الكل" },
@@ -71,14 +69,14 @@ export function OrdersPage() {
             return (
               <Card key={o.id}>
                 <div className="flex items-center justify-between gap-3 border-b pb-3">
-                  <h3 className="text-base">
+                  <Link to={`/orders/${o.id}`} className="text-base hover:text-accent">
                     أمر إنتاج <span className="latin tabular">#{o.code}</span>
-                  </h3>
+                  </Link>
                   <Badge tone={status.tone}>{status.label}</Badge>
                 </div>
                 <dl className="mt-1 divide-y divide-border/60">
                   <DataRow label="المنتج">
-                    {o.model} — دفعة {o.quantity} قطعة
+                    {o.model} — دفعة {o.quantity}
                   </DataRow>
                   <DataRow label="خط الإنتاج">{o.line}</DataRow>
                   <DataRow label="نسبة الإنجاز">
@@ -100,6 +98,16 @@ export function OrdersPage() {
                 <p className="mt-2 text-xs text-muted-foreground">
                   تكلفة القطعة {Math.round(o.pieceCost)} · بيع {Math.round(o.piecePrice)} · هامش {Math.round(o.margin)}٪
                 </p>
+
+                <div className="mt-3">
+                  <Link
+                    to={`/orders/${o.id}`}
+                    className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-accent"
+                  >
+                    الخامات والمراحل والتكلفة الفعلية
+                    <ChevronLeft className="h-4 w-4" />
+                  </Link>
+                </div>
 
                 {can.edit ? (
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -151,6 +159,9 @@ function OrderForm({
   onSave: (row: {
     clientId: string | null;
     model: string;
+    productId: string | null;
+    bomId: string | null;
+    materialsIssuedAt: string | null;
     line: string;
     quantity: number;
     progress: number;
@@ -162,8 +173,10 @@ function OrderForm({
   }) => void;
 }) {
   const { db, can } = useFactory();
+  const lines = TEMPLATES[db.settings.industry].lines;
+  const [productId, setProductId] = useState("");
   const [model, setModel] = useState("");
-  const [line, setLine] = useState<string>(PRODUCTION_LINES[0]);
+  const [line, setLine] = useState<string>(lines[0]);
   const [clientId, setClientId] = useState(db.clients[0]?.id ?? "");
   const [quantity, setQuantity] = useState("");
   const [pieceCost, setPieceCost] = useState("");
@@ -184,6 +197,9 @@ function OrderForm({
               onSave({
                 clientId: can.finance ? clientId || null : null,
                 model: model.trim(),
+                productId: productId || null,
+                bomId: null,
+                materialsIssuedAt: null,
                 line,
                 quantity: Number(quantity) || 0,
                 progress: 0,
@@ -207,12 +223,42 @@ function OrderForm({
         </div>
       }
     >
+      {db.products.length ? (
+        <Field label="اختَر منتج مسجّل">
+          <select
+            className={selectClass}
+            value={productId}
+            onChange={(e) => {
+              const id = e.target.value;
+              setProductId(id);
+              const p = db.products.find((x) => x.id === id);
+              if (!p) return;
+              const c = productCost(db, p.id);
+              setModel(p.name);
+              setPieceCost(String(Math.round(c.total)));
+              setPiecePrice(String(p.sellPrice));
+            }}
+          >
+            <option value="">من غير منتج — أكتب الاسم بإيدي</option>
+            {db.products.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          {productId ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              التكلفة اتحسبت من قائمة الخامات والعمليات. تقدر تعدّلها لو الأمر ده مختلف.
+            </p>
+          ) : null}
+        </Field>
+      ) : null}
       <Field label="المنتج">
-        <Input value={model} onChange={(e) => setModel(e.target.value)} placeholder="قميص قطني" />
+        <Input value={model} onChange={(e) => setModel(e.target.value)} placeholder="اسم المنتج" />
       </Field>
       <Field label="خط الإنتاج">
         <select className={selectClass} value={line} onChange={(e) => setLine(e.target.value)}>
-          {PRODUCTION_LINES.map((l) => (
+          {lines.map((l) => (
             <option key={l} value={l}>
               {l}
             </option>
@@ -231,7 +277,7 @@ function OrderForm({
           </select>
         </Field>
       ) : null}
-      <Field label="الكمية (قطعة)">
+      <Field label="الكمية">
         <Input inputMode="numeric" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
       </Field>
       <Field label="تكلفة القطعة">

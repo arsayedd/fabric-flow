@@ -1,5 +1,16 @@
 import { addDays, cairoToday, nid } from "@/lib/utils";
-import { DEFAULT_COST_ITEMS, type Db, type Member } from "./types";
+import { TEMPLATES } from "./templates";
+import {
+  DEFAULT_COST_ITEMS,
+  type Category,
+  type Db,
+  type Industry,
+  type Material,
+  type Member,
+  type Operation,
+  type Unit,
+  type Warehouse,
+} from "./types";
 
 const FID = "factory-demo-1";
 
@@ -9,10 +20,70 @@ export const DEMO_MEMBERS: Member[] = [
   { id: "m-sup", factoryId: FID, email: "supervisor@factory.demo", name: "حسام المشرف", role: "supervisor" },
 ];
 
-export function emptyDb(factoryName: string): Db {
+type TemplateData = {
+  units: Unit[];
+  categories: Category[];
+  warehouses: Warehouse[];
+  materials: Material[];
+  operations: Operation[];
+};
+
+/** يبذر بيانات قالب الصناعة: وحدات، فئات، مخازن، خامات، عمليات */
+export function templateData(factoryId: string, industry: Industry, id: (prefix: string, i: number) => string): TemplateData {
+  const t = TEMPLATES[industry];
+  const units: Unit[] = t.units.map((name, i) => ({ id: id("un", i + 1), factoryId, name }));
+  const unitId = (name: string) => units.find((u) => u.name === name)?.id ?? null;
+
+  const productCats: Category[] = t.productCategories.map((name, i) => ({
+    id: id("pc", i + 1),
+    factoryId,
+    name,
+    kind: "product" as const,
+  }));
+  const materialCats: Category[] = t.materialCategories.map((name, i) => ({
+    id: id("mc", i + 1),
+    factoryId,
+    name,
+    kind: "material" as const,
+  }));
+  const catId = (name: string) => materialCats.find((c) => c.name === name)?.id ?? null;
+
+  return {
+    units,
+    categories: [...productCats, ...materialCats],
+    warehouses: [
+      { id: id("wh", 1), factoryId, name: "مخزن الخامات", kind: "material" },
+      { id: id("wh", 2), factoryId, name: "مخزن الإنتاج التام", kind: "finished" },
+    ],
+    materials: t.materials.map(([name, unit, cat, cost], i) => ({
+      id: id("mat", i + 1),
+      factoryId,
+      sku: `M-${String(i + 1).padStart(3, "0")}`,
+      name,
+      categoryId: catId(cat),
+      unitId: unitId(unit),
+      avgCost: cost,
+      reorderPoint: 0,
+      leadTimeDays: 7,
+      defaultVendor: "",
+    })),
+    operations: t.operations.map(([name, rate, minutes, out], i) => ({
+      id: id("op", i + 1),
+      factoryId,
+      name,
+      defaultRate: rate,
+      defaultMinutes: minutes,
+      isOutsourced: out,
+    })),
+  };
+}
+
+export function emptyDb(factoryName: string, industry: Industry = "custom"): Db {
   const factoryId = nid();
+  const tpl = templateData(factoryId, industry, () => nid());
   return {
     factory: { id: factoryId, name: factoryName, createdAt: new Date().toISOString() },
+    settings: { industry, overheadPerUnit: 0 },
     members: [
       { id: "m-owner", factoryId, email: "owner@factory.demo", name: "صاحب المصنع", role: "owner" },
     ],
@@ -23,6 +94,17 @@ export function emptyDb(factoryName: string): Db {
       { id: nid(), factoryId, name: "إنستاباي", kind: "instapay" },
       { id: nid(), factoryId, name: "محفظة فودافون كاش", kind: "wallet" },
     ],
+    units: tpl.units,
+    categories: tpl.categories,
+    warehouses: tpl.warehouses,
+    materials: tpl.materials,
+    products: [],
+    boms: [],
+    bomItems: [],
+    operations: tpl.operations,
+    routingSteps: [],
+    stockMovements: [],
+    stageEntries: [],
     costItems: DEFAULT_COST_ITEMS.map((c) => ({ id: nid(), factoryId, ...c })),
     costEntries: [],
     costPayments: [],
@@ -44,7 +126,7 @@ export function emptyDb(factoryName: string): Db {
         table: "factories",
         recordId: factoryId,
         before: null,
-        after: { name: factoryName },
+        after: { name: factoryName, industry },
         at: new Date().toISOString(),
       },
     ],
@@ -57,17 +139,118 @@ export function demoDb(): Db {
   const bank = "acc-bank";
   const insta = "acc-insta";
   const wallet = "acc-wallet";
+  const tpl = templateData(FID, "apparel", (p, i) => `${p}-${i}`);
   const items = DEFAULT_COST_ITEMS.map((c, i) => ({
     id: `ci-${i + 1}`,
     factoryId: FID,
     ...c,
   }));
 
+  const unitPiece = tpl.units.find((u) => u.name === "قطعة")?.id ?? null;
+  const cat = (name: string) => tpl.categories.find((c) => c.name === name)?.id ?? null;
+  const mat = (name: string) => tpl.materials.find((m) => m.name === name)!.id;
+  const op = (name: string) => tpl.operations.find((o) => o.name === name)!.id;
+  const whMat = tpl.warehouses[0].id;
+  const whFg = tpl.warehouses[1].id;
+
+  const products = [
+    { id: "p1", factoryId: FID, sku: "P-001", name: "قميص قطني", categoryId: cat("قمصان"), unitId: unitPiece, sellPrice: 210, minStock: 50 },
+    { id: "p2", factoryId: FID, sku: "P-002", name: "فستان صيفي", categoryId: cat("فساتين"), unitId: unitPiece, sellPrice: 380, minStock: 20 },
+    { id: "p3", factoryId: FID, sku: "P-003", name: "تيشيرت مطبوع", categoryId: cat("تيشيرتات"), unitId: unitPiece, sellPrice: 60, minStock: 100 },
+  ];
+
+  const boms = [
+    { id: "b1", factoryId: FID, productId: "p1", version: 1, status: "active" as const, notes: "" },
+    { id: "b2", factoryId: FID, productId: "p2", version: 1, status: "active" as const, notes: "" },
+    { id: "b3", factoryId: FID, productId: "p3", version: 1, status: "active" as const, notes: "" },
+  ];
+
+  const bomItems = [
+    { id: nid(), factoryId: FID, bomId: "b1", materialId: mat("قماش قطن"), qtyPerUnit: 1.6, wastePct: 8 },
+    { id: nid(), factoryId: FID, bomId: "b1", materialId: mat("خيط بوليستر"), qtyPerUnit: 0.05, wastePct: 0 },
+    { id: nid(), factoryId: FID, bomId: "b1", materialId: mat("أزرار"), qtyPerUnit: 7, wastePct: 2 },
+    { id: nid(), factoryId: FID, bomId: "b1", materialId: mat("تيكت وباركود"), qtyPerUnit: 1, wastePct: 0 },
+    { id: nid(), factoryId: FID, bomId: "b1", materialId: mat("كيس تغليف"), qtyPerUnit: 1, wastePct: 0 },
+    { id: nid(), factoryId: FID, bomId: "b2", materialId: mat("قماش كتان"), qtyPerUnit: 2.2, wastePct: 10 },
+    { id: nid(), factoryId: FID, bomId: "b2", materialId: mat("بطانة"), qtyPerUnit: 1.1, wastePct: 5 },
+    { id: nid(), factoryId: FID, bomId: "b2", materialId: mat("سوست"), qtyPerUnit: 1, wastePct: 0 },
+    { id: nid(), factoryId: FID, bomId: "b2", materialId: mat("كيس تغليف"), qtyPerUnit: 1, wastePct: 0 },
+    { id: nid(), factoryId: FID, bomId: "b3", materialId: mat("قماش قطن"), qtyPerUnit: 0.9, wastePct: 6 },
+    { id: nid(), factoryId: FID, bomId: "b3", materialId: mat("خيط بوليستر"), qtyPerUnit: 0.03, wastePct: 0 },
+    { id: nid(), factoryId: FID, bomId: "b3", materialId: mat("كيس تغليف"), qtyPerUnit: 1, wastePct: 0 },
+  ];
+
+  const routingSteps = [
+    { id: nid(), factoryId: FID, productId: "p1", operationId: op("قص"), seq: 1, rate: 6, stdMinutes: 4 },
+    { id: nid(), factoryId: FID, productId: "p1", operationId: op("خياطة"), seq: 2, rate: 22, stdMinutes: 18 },
+    { id: nid(), factoryId: FID, productId: "p1", operationId: op("مكوى"), seq: 3, rate: 5, stdMinutes: 3 },
+    { id: nid(), factoryId: FID, productId: "p1", operationId: op("فحص جودة"), seq: 4, rate: 3, stdMinutes: 2 },
+    { id: nid(), factoryId: FID, productId: "p1", operationId: op("تعبئة"), seq: 5, rate: 3, stdMinutes: 2 },
+    { id: nid(), factoryId: FID, productId: "p2", operationId: op("قص"), seq: 1, rate: 9, stdMinutes: 6 },
+    { id: nid(), factoryId: FID, productId: "p2", operationId: op("خياطة"), seq: 2, rate: 40, stdMinutes: 30 },
+    { id: nid(), factoryId: FID, productId: "p2", operationId: op("مكوى"), seq: 3, rate: 7, stdMinutes: 4 },
+    { id: nid(), factoryId: FID, productId: "p2", operationId: op("تعبئة"), seq: 4, rate: 4, stdMinutes: 2 },
+    { id: nid(), factoryId: FID, productId: "p3", operationId: op("قص"), seq: 1, rate: 4, stdMinutes: 3 },
+    { id: nid(), factoryId: FID, productId: "p3", operationId: op("خياطة"), seq: 2, rate: 12, stdMinutes: 9 },
+    { id: nid(), factoryId: FID, productId: "p3", operationId: op("تعبئة"), seq: 3, rate: 2, stdMinutes: 2 },
+  ];
+
+  const materials = tpl.materials.map((m) => {
+    const reorder: Record<string, number> = {
+      "قماش قطن": 400,
+      "قماش كتان": 150,
+      بطانة: 120,
+      "خيط بوليستر": 40,
+      أزرار: 1500,
+      سوست: 200,
+      "تيكت وباركود": 500,
+      "كيس تغليف": 500,
+    };
+    return { ...m, reorderPoint: reorder[m.name] ?? 0, defaultVendor: "مورد السوق" };
+  });
+
+  const mv = (
+    itemType: "material" | "product",
+    itemId: string,
+    warehouseId: string,
+    kind: Db["stockMovements"][number]["kind"],
+    qty: number,
+    unitCost: number,
+    date: string,
+    refType = "",
+    refId: string | null = null,
+    notes = "",
+  ) => ({ id: nid(), factoryId: FID, date, itemType, itemId, warehouseId, kind, qty, unitCost, refType, refId, notes });
+
+  const cost = (name: string) => materials.find((m) => m.name === name)!.avgCost;
+
+  const stockMovements = [
+    mv("material", mat("قماش قطن"), whMat, "purchase", 850, cost("قماش قطن"), addDays(today, -14), "cost_entry", "ce1", "أقمشة قمصان"),
+    mv("material", mat("قماش كتان"), whMat, "purchase", 200, cost("قماش كتان"), addDays(today, -20)),
+    mv("material", mat("بطانة"), whMat, "purchase", 300, cost("بطانة"), addDays(today, -20)),
+    mv("material", mat("خيط بوليستر"), whMat, "purchase", 120, cost("خيط بوليستر"), addDays(today, -25)),
+    mv("material", mat("أزرار"), whMat, "purchase", 4000, cost("أزرار"), addDays(today, -25)),
+    mv("material", mat("سوست"), whMat, "purchase", 300, cost("سوست"), addDays(today, -25)),
+    mv("material", mat("تيكت وباركود"), whMat, "purchase", 2000, cost("تيكت وباركود"), addDays(today, -25)),
+    mv("material", mat("كيس تغليف"), whMat, "purchase", 1500, cost("كيس تغليف"), addDays(today, -25)),
+    // صرف خامات أمر SN-1042
+    mv("material", mat("قماش قطن"), whMat, "issue", -518.4, cost("قماش قطن"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
+    mv("material", mat("خيط بوليستر"), whMat, "issue", -15, cost("خيط بوليستر"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
+    mv("material", mat("أزرار"), whMat, "issue", -2142, cost("أزرار"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
+    mv("material", mat("تيكت وباركود"), whMat, "issue", -300, cost("تيكت وباركود"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
+    mv("material", mat("كيس تغليف"), whMat, "issue", -300, cost("كيس تغليف"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
+    mv("material", mat("قماش قطن"), whMat, "waste", -12, cost("قماش قطن"), addDays(today, -9), "order", "o1", "هالك قص"),
+    // إنتاج تام
+    mv("product", "p1", whFg, "receipt_fg", 190, 145, addDays(today, -3), "order", "o1", "تام جزئي"),
+    mv("product", "p3", whFg, "receipt_fg", 160, 44, addDays(today, -5), "order", "o5"),
+    mv("product", "p3", whFg, "delivery", -160, 44, addDays(today, -2), "delivery", "d5", "تسليم تيشيرت"),
+  ];
+
   const clients = [
     { id: "cl-1", factoryId: FID, name: "محلات البرنس", phone: "01012345678", notes: "عميل جملة — شارع الهرم" },
     { id: "cl-2", factoryId: FID, name: "شركة الأناقة للتجارة", phone: "01298765432", notes: "فاتورة شهرية" },
     { id: "cl-3", factoryId: FID, name: "تاجر العباسية", phone: "01155556666", notes: "كاش غالباً" },
-    { id: "cl-4", factoryId: FID, name: "بوتيك نورا", phone: "01544443333", notes: "موديلات صيفي" },
+    { id: "cl-4", factoryId: FID, name: "بوتيك نورا", phone: "01544443333", notes: "طلبات صيفي" },
     { id: "cl-5", factoryId: FID, name: "تصدير الخليج", phone: "01000001111", notes: "شحنات كبيرة — آجل 30 يوم" },
   ];
 
@@ -133,12 +316,24 @@ export function demoDb(): Db {
   ];
 
   const orders = [
-    { id: "o1", factoryId: FID, code: "SN-1042", clientId: "cl-1", model: "قميص قطني", line: "الخط الثاني", quantity: 300, progress: 64, pieceCost: 145, piecePrice: 210, dueDate: today, status: "running" as const, notes: "" },
-    { id: "o2", factoryId: FID, code: "SN-1043", clientId: "cl-4", model: "فستان صيفي", line: "الخط الأول", quantity: 40, progress: 88, pieceCost: 260, piecePrice: 380, dueDate: addDays(today, 2), status: "running" as const, notes: "" },
-    { id: "o3", factoryId: FID, code: "SN-1044", clientId: "cl-5", model: "طقم تصدير", line: "الخط الثالث", quantity: 250, progress: 25, pieceCost: 220, piecePrice: 380, dueDate: addDays(today, 20), status: "running" as const, notes: "" },
-    { id: "o4", factoryId: FID, code: "SN-1039", clientId: "cl-2", model: "بدلة مكتبية", line: "خط التشطيب", quantity: 40, progress: 100, pieceCost: 1180, piecePrice: 1525, dueDate: addDays(today, -6), status: "done" as const, notes: "" },
-    { id: "o5", factoryId: FID, code: "SN-1041", clientId: "cl-3", model: "تيشيرت مطبوع", line: "الخط الأول", quantity: 160, progress: 40, pieceCost: 44, piecePrice: 60, dueDate: addDays(today, -2), status: "late" as const, notes: "المطبعة متأخرة" },
-    { id: "o6", factoryId: FID, code: "SN-1045", clientId: null, model: "جاكت شتوي", line: "الخط الثاني", quantity: 120, progress: 12, pieceCost: 320, piecePrice: 460, dueDate: addDays(today, 30), status: "stopped" as const, notes: "مستني وصول القماش" },
+    { id: "o1", factoryId: FID, code: "SN-1042", clientId: "cl-1", model: "قميص قطني", productId: "p1", bomId: "b1", materialsIssuedAt: addDays(today, -10), line: "الخط الثاني", quantity: 300, progress: 64, pieceCost: 145, piecePrice: 210, dueDate: today, status: "running" as const, notes: "" },
+    { id: "o2", factoryId: FID, code: "SN-1043", clientId: "cl-4", model: "فستان صيفي", productId: "p2", bomId: "b2", materialsIssuedAt: null, line: "الخط الأول", quantity: 40, progress: 88, pieceCost: 260, piecePrice: 380, dueDate: addDays(today, 2), status: "running" as const, notes: "" },
+    { id: "o3", factoryId: FID, code: "SN-1044", clientId: "cl-5", model: "طقم تصدير", productId: null, bomId: null, materialsIssuedAt: null, line: "الخط الثالث", quantity: 250, progress: 25, pieceCost: 220, piecePrice: 380, dueDate: addDays(today, 20), status: "running" as const, notes: "" },
+    { id: "o4", factoryId: FID, code: "SN-1039", clientId: "cl-2", model: "بدلة مكتبية", productId: null, bomId: null, materialsIssuedAt: null, line: "خط التشطيب", quantity: 40, progress: 100, pieceCost: 1180, piecePrice: 1525, dueDate: addDays(today, -6), status: "done" as const, notes: "" },
+    { id: "o5", factoryId: FID, code: "SN-1041", clientId: "cl-3", model: "تيشيرت مطبوع", productId: "p3", bomId: "b3", materialsIssuedAt: null, line: "الخط الأول", quantity: 160, progress: 40, pieceCost: 44, piecePrice: 60, dueDate: addDays(today, -2), status: "late" as const, notes: "المطبعة متأخرة" },
+    { id: "o6", factoryId: FID, code: "SN-1045", clientId: null, model: "جاكت شتوي", productId: null, bomId: null, materialsIssuedAt: null, line: "الخط الثاني", quantity: 120, progress: 12, pieceCost: 320, piecePrice: 460, dueDate: addDays(today, 30), status: "stopped" as const, notes: "مستني وصول القماش" },
+  ];
+
+  const stageEntries = [
+    { id: nid(), factoryId: FID, orderId: "o1", operationId: op("قص"), date: addDays(today, -9), workerId: "w1", qtyGood: 300, qtyRework: 0, qtyScrap: 4, rate: 6 },
+    { id: nid(), factoryId: FID, orderId: "o1", operationId: op("خياطة"), date: addDays(today, -6), workerId: "w2", qtyGood: 240, qtyRework: 8, qtyScrap: 2, rate: 22 },
+    { id: nid(), factoryId: FID, orderId: "o1", operationId: op("مكوى"), date: addDays(today, -4), workerId: "w4", qtyGood: 200, qtyRework: 0, qtyScrap: 0, rate: 5 },
+    { id: nid(), factoryId: FID, orderId: "o1", operationId: op("فحص جودة"), date: addDays(today, -3), workerId: "w5", qtyGood: 192, qtyRework: 6, qtyScrap: 2, rate: 3 },
+    { id: nid(), factoryId: FID, orderId: "o1", operationId: op("تعبئة"), date: addDays(today, -3), workerId: "w5", qtyGood: 190, qtyRework: 0, qtyScrap: 0, rate: 3 },
+    { id: nid(), factoryId: FID, orderId: "o2", operationId: op("قص"), date: addDays(today, -5), workerId: "w1", qtyGood: 40, qtyRework: 0, qtyScrap: 0, rate: 9 },
+    { id: nid(), factoryId: FID, orderId: "o2", operationId: op("خياطة"), date: addDays(today, -2), workerId: "w2", qtyGood: 36, qtyRework: 2, qtyScrap: 0, rate: 40 },
+    { id: nid(), factoryId: FID, orderId: "o5", operationId: op("قص"), date: addDays(today, -8), workerId: "w1", qtyGood: 160, qtyRework: 0, qtyScrap: 3, rate: 4 },
+    { id: nid(), factoryId: FID, orderId: "o5", operationId: op("خياطة"), date: addDays(today, -6), workerId: "w2", qtyGood: 64, qtyRework: 0, qtyScrap: 0, rate: 12 },
   ];
 
   const manualTx = [
@@ -148,7 +343,8 @@ export function demoDb(): Db {
   ];
 
   return {
-    factory: { id: FID, name: "مصنع النور للملابس الجاهزة", createdAt: addDays(today, -90) + "T08:00:00.000Z" },
+    factory: { id: FID, name: "مصنع النور للإنتاج", createdAt: addDays(today, -90) + "T08:00:00.000Z" },
+    settings: { industry: "apparel", overheadPerUnit: 12 },
     members: DEMO_MEMBERS,
     invites: [
       { id: nid(), factoryId: FID, email: "new.staff@example.com", role: "accountant", createdAt: new Date().toISOString(), status: "pending" },
@@ -159,6 +355,17 @@ export function demoDb(): Db {
       { id: insta, factoryId: FID, name: "إنستاباي", kind: "instapay" },
       { id: wallet, factoryId: FID, name: "محفظة فودافون كاش", kind: "wallet" },
     ],
+    units: tpl.units,
+    categories: tpl.categories,
+    warehouses: tpl.warehouses,
+    materials,
+    products,
+    boms,
+    bomItems,
+    operations: tpl.operations,
+    routingSteps,
+    stockMovements,
+    stageEntries,
     costItems: items,
     costEntries,
     costPayments,

@@ -12,11 +12,21 @@ import {
   workerAdvance,
   workerBalance,
 } from "./compute";
-import { demoDb, emptyDb } from "./seed";
+import { activeBom, bomLines, computedProgress, materialStock, orderRequirements, stockQty } from "./manufacturing";
+import { demoDb, emptyDb, templateData } from "./seed";
 import { PRODUCTION_LINES } from "./types";
 import type {
   Account,
   AuditEntry,
+  Bom,
+  BomItem,
+  Industry,
+  Material,
+  Operation,
+  Product,
+  RoutingStep,
+  StageEntry,
+  StockMovement,
   BackupFile,
   Client,
   Collection,
@@ -52,11 +62,29 @@ function loadDb(): Db | null {
   }
 }
 
-/** دفاتر محفوظة قبل أوامر الإنتاج: تكمّل الترقيم والخط ونسبة الإنجاز */
+/**
+ * ترحيل الدفاتر المحفوظة قبل نواة التصنيع — إضافي بالكامل:
+ * يكمّل الحقول الناقصة ولا يمسح ولا يغيّر أي بيانات موجودة.
+ */
 function migrate(db: Db): Db {
   let seq = 1040;
+  const factoryId = db.factory?.id ?? "";
+  const industry = db.settings?.industry ?? "apparel";
+  const seeded = db.operations?.length ? null : templateData(factoryId, industry, () => nid());
   return {
     ...db,
+    settings: db.settings ?? { industry, overheadPerUnit: 0 },
+    units: db.units ?? seeded?.units ?? [],
+    categories: db.categories ?? seeded?.categories ?? [],
+    warehouses: db.warehouses ?? seeded?.warehouses ?? [],
+    materials: db.materials ?? seeded?.materials ?? [],
+    products: db.products ?? [],
+    boms: db.boms ?? [],
+    bomItems: db.bomItems ?? [],
+    operations: db.operations ?? seeded?.operations ?? [],
+    routingSteps: db.routingSteps ?? [],
+    stockMovements: db.stockMovements ?? [],
+    stageEntries: db.stageEntries ?? [],
     orders: (db.orders ?? []).map((o) => {
       const status: OrderStatus = (o.status as OrderStatus | "open") === "open" ? "running" : o.status;
       return {
@@ -64,6 +92,9 @@ function migrate(db: Db): Db {
         status,
         code: o.code ?? `SN-${++seq}`,
         line: o.line ?? PRODUCTION_LINES[0],
+        productId: o.productId ?? null,
+        bomId: o.bomId ?? null,
+        materialsIssuedAt: o.materialsIssuedAt ?? null,
         progress: typeof o.progress === "number" ? o.progress : status === "done" ? 100 : 0,
       };
     }),
@@ -102,7 +133,21 @@ type FactoryApi = {
   login: (member: Member) => void;
   logout: () => void;
   startDemo: (role: Role) => void;
-  createFactory: (name: string) => void;
+  createFactory: (name: string, industry: Industry) => void;
+  setOverhead: (value: number) => void;
+  addMaterial: (input: Omit<Material, "id" | "factoryId">) => void;
+  updateMaterial: (id: string, patch: Partial<Material>) => void;
+  addProduct: (input: Omit<Product, "id" | "factoryId">) => void;
+  updateProduct: (id: string, patch: Partial<Product>) => void;
+  deleteProduct: (id: string) => void;
+  addBomItem: (productId: string, input: { materialId: string; qtyPerUnit: number; wastePct: number }) => void;
+  removeBomItem: (id: string) => void;
+  addRoutingStep: (productId: string, operationId: string, rate: number, stdMinutes: number) => void;
+  removeRoutingStep: (id: string) => void;
+  addOperation: (name: string, rate: number, minutes: number, outsourced: boolean) => void;
+  addStockMovement: (input: Omit<StockMovement, "id" | "factoryId">) => void;
+  issueOrderMaterials: (orderId: string) => void;
+  addStageEntry: (input: Omit<StageEntry, "id" | "factoryId">) => void;
   importBackup: (file: BackupFile) => void;
   exportBackup: () => BackupFile;
   resetDemo: () => void;
@@ -206,6 +251,7 @@ function buildComputed(db: Db) {
       margin: o.piecePrice ? ((o.piecePrice - o.pieceCost) / o.piecePrice) * 100 : 0,
     })),
     owe,
+    stock: materialStock(db),
     monthPnl: pnl(db, monthStart, today),
     attendanceToday: db.workerEarnings.filter((e) => e.date === today && e.kind === "attendance").map((e) => e.workerId),
   };
@@ -262,10 +308,156 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         const member = seeded.members.find((m) => m.role === r) ?? seeded.members[0];
         login(member);
       },
-      createFactory: (name) => {
-        const created = emptyDb(name.trim() || "مصنعي");
+      createFactory: (name, industry) => {
+        const created = emptyDb(name.trim() || "مصنعي", industry);
         setDb(created);
         login(created.members[0]);
+      },
+      setOverhead: (value) => {
+        if (!can.finance) throw new Error("الحسابات للمالك والمحاسب بس.");
+        mutate(
+          { settings: { ...db.settings, overheadPerUnit: Math.max(0, value) } },
+          { action: "update", table: "settings", recordId: "overhead", before: db.settings, after: { overheadPerUnit: value } },
+        );
+      },
+      addMaterial: (input) => {
+        if (!input.name.trim()) throw new Error("اسم الخامة مطلوب.");
+        const row: Material = { ...input, id: nid(), factoryId: fid(db), name: input.name.trim() };
+        mutate({ materials: [row, ...db.materials] }, { action: "create", table: "materials", recordId: row.id, before: null, after: row });
+      },
+      updateMaterial: (id, patch) => {
+        const before = db.materials.find((m) => m.id === id);
+        mutate({ materials: db.materials.map((m) => (m.id === id ? { ...m, ...patch } : m)) }, { action: "update", table: "materials", recordId: id, before, after: patch });
+      },
+      addProduct: (input) => {
+        if (!input.name.trim()) throw new Error("اسم المنتج مطلوب.");
+        const row: Product = { ...input, id: nid(), factoryId: fid(db), name: input.name.trim() };
+        mutate({ products: [row, ...db.products] }, { action: "create", table: "products", recordId: row.id, before: null, after: row });
+      },
+      updateProduct: (id, patch) => {
+        const before = db.products.find((p) => p.id === id);
+        mutate({ products: db.products.map((p) => (p.id === id ? { ...p, ...patch } : p)) }, { action: "update", table: "products", recordId: id, before, after: patch });
+      },
+      deleteProduct: (id) => {
+        if (!can.delete) throw new Error("صاحب المصنع بس اللي يمسح.");
+        if (db.orders.some((o) => o.productId === id)) throw new Error("المنتج مرتبط بأوامر إنتاج — مينفعش يتمسح.");
+        const before = db.products.find((p) => p.id === id);
+        const bomIds = db.boms.filter((b) => b.productId === id).map((b) => b.id);
+        mutate(
+          {
+            products: db.products.filter((p) => p.id !== id),
+            boms: db.boms.filter((b) => b.productId !== id),
+            bomItems: db.bomItems.filter((i) => !bomIds.includes(i.bomId)),
+            routingSteps: db.routingSteps.filter((r) => r.productId !== id),
+          },
+          { action: "delete", table: "products", recordId: id, before, after: null },
+        );
+      },
+      addBomItem: (productId, input) => {
+        if (!input.materialId) throw new Error("اختار الخامة الأول.");
+        if (!(input.qtyPerUnit > 0)) throw new Error("الكمية لازم أكبر من صفر.");
+        let bom = activeBom(db, productId);
+        const boms = [...db.boms];
+        if (!bom) {
+          bom = { id: nid(), factoryId: fid(db), productId, version: 1, status: "active", notes: "" } satisfies Bom;
+          boms.unshift(bom);
+        }
+        const row: BomItem = { id: nid(), factoryId: fid(db), bomId: bom.id, ...input };
+        mutate({ boms, bomItems: [...db.bomItems, row] }, { action: "create", table: "bom_items", recordId: row.id, before: null, after: row });
+      },
+      removeBomItem: (id) => {
+        const before = db.bomItems.find((i) => i.id === id);
+        mutate({ bomItems: db.bomItems.filter((i) => i.id !== id) }, { action: "delete", table: "bom_items", recordId: id, before, after: null });
+      },
+      addRoutingStep: (productId, operationId, rate, stdMinutes) => {
+        if (!operationId) throw new Error("اختار العملية الأول.");
+        if (db.routingSteps.some((r) => r.productId === productId && r.operationId === operationId)) {
+          throw new Error("العملية دي موجودة في المسار.");
+        }
+        const seq = db.routingSteps.filter((r) => r.productId === productId).reduce((m, r) => Math.max(m, r.seq), 0) + 1;
+        const row: RoutingStep = { id: nid(), factoryId: fid(db), productId, operationId, seq, rate, stdMinutes };
+        mutate({ routingSteps: [...db.routingSteps, row] }, { action: "create", table: "routing_steps", recordId: row.id, before: null, after: row });
+      },
+      removeRoutingStep: (id) => {
+        const before = db.routingSteps.find((r) => r.id === id);
+        mutate({ routingSteps: db.routingSteps.filter((r) => r.id !== id) }, { action: "delete", table: "routing_steps", recordId: id, before, after: null });
+      },
+      addOperation: (name, rate, minutes, outsourced) => {
+        if (!name.trim()) throw new Error("اسم العملية مطلوب.");
+        const row: Operation = { id: nid(), factoryId: fid(db), name: name.trim(), defaultRate: rate, defaultMinutes: minutes, isOutsourced: outsourced };
+        mutate({ operations: [...db.operations, row] }, { action: "create", table: "operations", recordId: row.id, before: null, after: row });
+      },
+      addStockMovement: (input) => {
+        if (!input.qty) throw new Error("الكمية لازم تكون أكبر من صفر.");
+        const out = input.kind === "issue" || input.kind === "waste" || input.kind === "delivery";
+        const qty = out ? -Math.abs(input.qty) : input.kind === "adjust" ? input.qty : Math.abs(input.qty);
+        if (out && Math.abs(qty) > stockQty(db, input.itemType, input.itemId) + 0.0001) {
+          throw new Error("الكمية أكبر من الرصيد المتاح في المخزن.");
+        }
+        const row: StockMovement = { ...input, qty, id: nid(), factoryId: fid(db) };
+        mutate({ stockMovements: [row, ...db.stockMovements] }, { action: "create", table: "stock_movements", recordId: row.id, before: null, after: row });
+      },
+      issueOrderMaterials: (orderId) => {
+        const order = db.orders.find((o) => o.id === orderId);
+        if (!order) throw new Error("أمر الإنتاج مش موجود.");
+        const bomId = order.bomId ?? (order.productId ? activeBom(db, order.productId)?.id ?? null : null);
+        if (!bomLines(db, bomId).length) throw new Error("لازم تربط الأمر بمنتج له قائمة خامات.");
+        const reqs = orderRequirements(db, order).filter((r) => r.remaining > 0.0001);
+        if (!reqs.length) throw new Error("كل الخامات اتصرفت للأمر ده.");
+        const short = reqs.filter((r) => r.shortage > 0.0001);
+        if (short.length) throw new Error(`مفيش رصيد كافي من: ${short.map((s) => s.name).join("، ")}`);
+        const date = cairoToday();
+        const rows: StockMovement[] = reqs.map((r) => ({
+          id: nid(),
+          factoryId: fid(db),
+          date,
+          itemType: "material",
+          itemId: r.materialId,
+          warehouseId: db.warehouses.find((w) => w.kind === "material")?.id ?? null,
+          kind: "issue",
+          qty: -r.remaining,
+          unitCost: r.unitCost,
+          refType: "order",
+          refId: order.id,
+          notes: `صرف لأمر ${order.code}`,
+        }));
+        mutate(
+          {
+            stockMovements: [...rows, ...db.stockMovements],
+            orders: db.orders.map((o) => (o.id === orderId ? { ...o, materialsIssuedAt: date, bomId: bomId } : o)),
+          },
+          { action: "create", table: "stock_movements", recordId: rows[0].id, before: null, after: { order: order.code, lines: rows.length } },
+        );
+      },
+      addStageEntry: (input) => {
+        const order = db.orders.find((o) => o.id === input.orderId);
+        if (!order) throw new Error("أمر الإنتاج مش موجود.");
+        if (input.qtyGood + input.qtyRework + input.qtyScrap <= 0) throw new Error("سجّل كمية واحدة على الأقل.");
+        const row: StageEntry = { ...input, id: nid(), factoryId: fid(db) };
+        const worker = input.workerId ? db.workers.find((w) => w.id === input.workerId) : null;
+        const earnings: WorkerEarning[] = [];
+        if (worker && worker.payType === "piece" && input.qtyGood > 0) {
+          const rate = input.rate || worker.rate;
+          earnings.push({
+            id: nid(),
+            factoryId: fid(db),
+            workerId: worker.id,
+            date: input.date,
+            kind: "piece",
+            amount: rate * input.qtyGood,
+            notes: `${input.qtyGood} قطعة — أمر ${order.code}`,
+          });
+        }
+        const stageEntries = [row, ...db.stageEntries];
+        const progress = computedProgress({ ...db, stageEntries }, order);
+        mutate(
+          {
+            stageEntries,
+            workerEarnings: earnings.length ? [...earnings, ...db.workerEarnings] : db.workerEarnings,
+            orders: progress === null ? db.orders : db.orders.map((o) => (o.id === order.id ? { ...o, progress } : o)),
+          },
+          { action: "create", table: "production_stage_entries", recordId: row.id, before: null, after: row },
+        );
       },
       importBackup: (file) => {
         if (file.kind !== "factory-backup" || file.version !== 1 || !file.data?.factory) {
@@ -486,9 +678,21 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
 function emptyShell(): Db {
   return {
     factory: null,
+    settings: { industry: "custom", overheadPerUnit: 0 },
     members: [],
     invites: [],
     accounts: [],
+    units: [],
+    categories: [],
+    warehouses: [],
+    materials: [],
+    products: [],
+    boms: [],
+    bomItems: [],
+    operations: [],
+    routingSteps: [],
+    stockMovements: [],
+    stageEntries: [],
     costItems: [],
     costEntries: [],
     costPayments: [],

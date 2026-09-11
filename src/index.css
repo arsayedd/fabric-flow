@@ -20,6 +20,7 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-accent-soft: var(--accent-soft);
   --color-gold: var(--gold);
   --color-border: var(--border);
   --color-input: var(--input);
@@ -57,6 +58,7 @@
   --muted-foreground: #5a6672;
   --accent: var(--gold);
   --accent-foreground: #2a1e0a;
+  --accent-soft: #f6ecda;
   --border: #e0d7c8;
   --input: #ded4c3;
   --ring: var(--navy);

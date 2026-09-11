@@ -140,7 +140,11 @@ export type Order = {
   /** رقم أمر الإنتاج المطبوع، زي SN-1042 */
   code: string;
   clientId: string | null;
+  /** اسم المنتج المعروض — يتعبّى من المنتج المرتبط لو موجود */
   model: string;
+  productId: string | null;
+  bomId: string | null;
+  materialsIssuedAt: string | null;
   line: string;
   quantity: number;
   progress: number;
@@ -149,6 +153,158 @@ export type Order = {
   dueDate: string;
   status: OrderStatus;
   notes: string;
+};
+
+/* ── نواة التصنيع: منتجات، خامات، BOM، عمليات، مخزون ───────────── */
+
+export const INDUSTRIES = ["apparel", "bags", "shoes", "furniture", "accessories", "food", "custom"] as const;
+export type Industry = (typeof INDUSTRIES)[number];
+
+export const INDUSTRY_LABEL: Record<Industry, string> = {
+  apparel: "ملابس",
+  bags: "شنط وجلود",
+  shoes: "أحذية",
+  furniture: "مفروشات وأخشاب",
+  accessories: "إكسسوارات",
+  food: "أغذية وتعبئة",
+  custom: "نشاط آخر",
+};
+
+export type Settings = {
+  industry: Industry;
+  /** طريقة توزيع الأوفرهيد على القطعة */
+  overheadPerUnit: number;
+};
+
+export type Unit = { id: string; factoryId: string; name: string };
+
+export type Category = {
+  id: string;
+  factoryId: string;
+  name: string;
+  kind: "product" | "material";
+};
+
+export type Warehouse = {
+  id: string;
+  factoryId: string;
+  name: string;
+  kind: "material" | "finished";
+};
+
+export type Material = {
+  id: string;
+  factoryId: string;
+  sku: string;
+  name: string;
+  categoryId: string | null;
+  unitId: string | null;
+  avgCost: number;
+  reorderPoint: number;
+  leadTimeDays: number;
+  defaultVendor: string;
+};
+
+export type Product = {
+  id: string;
+  factoryId: string;
+  sku: string;
+  name: string;
+  categoryId: string | null;
+  unitId: string | null;
+  sellPrice: number;
+  minStock: number;
+};
+
+export type Bom = {
+  id: string;
+  factoryId: string;
+  productId: string;
+  version: number;
+  status: "draft" | "active" | "archived";
+  notes: string;
+};
+
+export type BomItem = {
+  id: string;
+  factoryId: string;
+  bomId: string;
+  materialId: string;
+  qtyPerUnit: number;
+  /** نسبة الهالك % */
+  wastePct: number;
+};
+
+export type Operation = {
+  id: string;
+  factoryId: string;
+  name: string;
+  defaultRate: number;
+  defaultMinutes: number;
+  isOutsourced: boolean;
+};
+
+export type RoutingStep = {
+  id: string;
+  factoryId: string;
+  productId: string;
+  operationId: string;
+  seq: number;
+  rate: number;
+  stdMinutes: number;
+};
+
+export const STOCK_KINDS = [
+  "opening",
+  "purchase",
+  "issue",
+  "return",
+  "adjust",
+  "waste",
+  "receipt_fg",
+  "delivery",
+] as const;
+export type StockKind = (typeof STOCK_KINDS)[number];
+
+export const STOCK_KIND_LABEL: Record<StockKind, string> = {
+  opening: "رصيد افتتاحي",
+  purchase: "شراء",
+  issue: "صرف لأمر إنتاج",
+  return: "مرتجع للمخزن",
+  adjust: "تسوية جرد",
+  waste: "هالك",
+  receipt_fg: "استلام إنتاج تام",
+  delivery: "تسليم للعميل",
+};
+
+/** دفتر المخزون: الرصيد محسوب من الحركات ولا يُخزَّن أبدًا */
+export type StockMovement = {
+  id: string;
+  factoryId: string;
+  date: string;
+  itemType: "material" | "product";
+  itemId: string;
+  warehouseId: string | null;
+  kind: StockKind;
+  /** موجب دخول، سالب خروج */
+  qty: number;
+  unitCost: number;
+  refType: string;
+  refId: string | null;
+  notes: string;
+};
+
+export type StageEntry = {
+  id: string;
+  factoryId: string;
+  orderId: string;
+  operationId: string;
+  date: string;
+  workerId: string | null;
+  qtyGood: number;
+  qtyRework: number;
+  qtyScrap: number;
+  rate: number;
 };
 
 export type ManualTx = {
@@ -175,9 +331,21 @@ export type AuditEntry = {
 
 export type Db = {
   factory: Factory | null;
+  settings: Settings;
   members: Member[];
   invites: Invite[];
   accounts: Account[];
+  units: Unit[];
+  categories: Category[];
+  warehouses: Warehouse[];
+  materials: Material[];
+  products: Product[];
+  boms: Bom[];
+  bomItems: BomItem[];
+  operations: Operation[];
+  routingSteps: RoutingStep[];
+  stockMovements: StockMovement[];
+  stageEntries: StageEntry[];
   costItems: CostItem[];
   costEntries: CostEntry[];
   costPayments: CostPayment[];
