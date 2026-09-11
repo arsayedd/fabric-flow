@@ -13,6 +13,7 @@ import {
   workerBalance,
 } from "./compute";
 import type { ScoreWeights } from "./intelligence";
+import type { CapacitySettings } from "./planning";
 import { partyAlerts, portfolio } from "./parties";
 import {
   activeBom,
@@ -223,6 +224,7 @@ type FactoryApi = {
   createFactory: (name: string, industry: Industry) => void;
   setOverhead: (value: number) => void;
   setScoreWeights: (weights: ScoreWeights) => void;
+  setCapacity: (capacity: CapacitySettings) => void;
   addMaterial: (input: Omit<Material, "id" | "factoryId">) => void;
   updateMaterial: (id: string, patch: Partial<Material>) => void;
   addProduct: (input: Omit<Product, "id" | "factoryId">) => void;
@@ -429,6 +431,22 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         mutate(
           { settings: { ...db.settings, scoreWeights: weights } },
           { action: "update", table: "settings", recordId: "score_weights", before: db.settings?.scoreWeights ?? null, after: weights },
+        );
+      },
+      /** قرار الطاقة: بيغيّر جدول المصنع كله، فمحتاج صلاحية تعديل وبيتسجل */
+      setCapacity: (capacity) => {
+        if (!can.edit) throw new Error("إعداد الطاقة للمالك والمحاسب بس.");
+        if (!(capacity.hoursPerDay > 0)) throw new Error("ساعات العمل لازم تكون أكبر من صفر.");
+        if (!(capacity.daysPerWeek >= 1 && capacity.daysPerWeek <= 7)) throw new Error("أيام العمل من ١ لـ٧.");
+        if (!(capacity.utilizationPct > 0 && capacity.utilizationPct <= 100)) {
+          throw new Error("نسبة الاستغلال من ١ لـ١٠٠٪.");
+        }
+        if (capacity.crewSize !== null && !(capacity.crewSize > 0)) {
+          throw new Error("عدد العمالة لازم يكون أكبر من صفر، أو سيبه على عدد العمال المسجّلين.");
+        }
+        mutate(
+          { settings: { ...db.settings, capacity } },
+          { action: "update", table: "settings", recordId: "capacity", before: db.settings?.capacity ?? null, after: capacity },
         );
       },
       addMaterial: (input) => {

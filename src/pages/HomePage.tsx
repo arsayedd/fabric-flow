@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { cairoToday, formatDate } from "@/lib/utils";
 import { useFactory } from "@/store/context";
 import { IntelligenceTeaser } from "./IntelligencePage";
+import { PlanningTeaser } from "./PlanningPage";
 
 export function HomePage() {
   const { can, computed } = useFactory();
@@ -79,6 +80,8 @@ export function HomePage() {
           </div>
         </Card>
       )}
+
+      <PlanningTeaser />
 
       <IntelligenceTeaser />
 
@@ -190,6 +193,8 @@ function SupervisorHome() {
           </Button>
         </Card>
       ) : null}
+
+      <PlanningTeaser />
 
       <section>
         <SectionHead title="أوامر على الخطوط" to="/orders" />

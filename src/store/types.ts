@@ -314,6 +314,13 @@ export type Settings = {
   overheadPerUnit: number;
   /** أوزان سكور العميل — صاحب المصنع يقدر يعدّلها */
   scoreWeights?: Record<"purchase" | "payment" | "growth" | "frequency" | "profit" | "quality" | "relationship", number>;
+  /** قرار الطاقة: أساس الجدولة كلها */
+  capacity?: {
+    hoursPerDay: number;
+    daysPerWeek: number;
+    utilizationPct: number;
+    crewSize: number | null;
+  };
 };
 
 export type Unit = { id: string; factoryId: string; name: string };
