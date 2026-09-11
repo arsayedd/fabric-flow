@@ -49,14 +49,12 @@ const reduceMotion = () =>
  * `prefers-reduced-motion` — الحركة مش مفروضة على حد.
  */
 export function CountUp({ value, format }: { value: number; format: "money" | "qty" | "pct" }) {
+  const animate = !reduceMotion();
   const [shown, setShown] = useState(value);
   const from = useRef(value);
 
   useEffect(() => {
-    if (reduceMotion()) {
-      setShown(value);
-      return;
-    }
+    if (!animate) return;
     const start = from.current;
     const t0 = performance.now();
     let frame = 0;
@@ -69,10 +67,10 @@ export function CountUp({ value, format }: { value: number; format: "money" | "q
     };
     frame = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frame);
-  }, [value]);
+  }, [value, animate]);
 
-  const text =
-    format === "money" ? money(shown) : format === "pct" ? `${qty(Math.round(shown), 0)}٪` : qty(Math.round(shown), 0);
+  const n = animate ? shown : value;
+  const text = format === "money" ? money(n) : format === "pct" ? `${qty(Math.round(n), 0)}٪` : qty(Math.round(n), 0);
   return <span className="tabular">{text}</span>;
 }
 

@@ -1995,14 +1995,14 @@ export const DASH_MODE_HINT: Record<DashMode, string> = {
 
 /** الترتيب بيتغيّر بالوضع: كل دور بيشوف اللي بيهمه فوق */
 export const MODE_SECTIONS: Record<DashMode, string[]> = {
-  exec: ["health", "decisions", "kpis", "finance", "margin", "waterfall", "breakeven", "cash", "aging", "customers", "models", "forecast", "targets", "activity"],
-  manager: ["health", "decisions", "kpis", "production", "pipeline", "live", "lines", "quality", "inventory", "suppliers", "calendar", "targets"],
-  floor: ["production", "pipeline", "live", "workforce", "quality", "inventory"],
+  exec: ["health", "decisions", "kpis", "quick", "finance", "margin", "waterfall", "cash", "aging", "customers", "models", "forecast", "targets", "timeline"],
+  manager: ["health", "decisions", "kpis", "quick", "production", "pipeline", "live", "quality", "inventory", "suppliers", "workforce", "targets", "timeline"],
+  floor: ["production", "live", "pipeline", "workforce", "quality", "inventory", "quick"],
 };
 
-export function modeForRole(role: string, may: (m: string, a: string) => boolean): DashMode {
+export function modeForRole(role: string, seesFinance: boolean): DashMode {
   if (role === "supervisor") return "floor";
-  if (role === "accountant") return may("finance", "view") ? "exec" : "manager";
+  if (role === "accountant") return seesFinance ? "exec" : "manager";
   return "exec";
 }
 

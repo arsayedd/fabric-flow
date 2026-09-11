@@ -187,7 +187,7 @@ export const NAV: NavSection[] = [
     label: "التقارير والتحليلات",
     icon: BarChart3,
     items: [
-      item("/dashboard", "لوحة الإدارة", "reports", "reports"),
+      item("/dashboard", "غرفة التحكم", "reports", "reports"),
       item("/intelligence", "ذكاء العملاء", "parties", "parties"),
       item("/reports", "بانِي التقارير", "reports", "reports", false),
     ],
@@ -220,7 +220,7 @@ export const ROUTE_LABEL: Record<string, string> = {
   "/": "نظرة اليوم",
   "/tasks": "مهامي",
   "/alerts": "ما يحتاج اهتمامك",
-  "/dashboard": "لوحة الإدارة",
+  "/dashboard": "غرفة التحكم",
   "/intelligence": "ذكاء العملاء",
   "/orders": "أوامر الإنتاج",
   "/planning": "التخطيط والطاقة",

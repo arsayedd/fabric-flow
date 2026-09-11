@@ -330,17 +330,22 @@ export function Donut({
   const r = (size - thickness) / 2;
   const c = size / 2;
   const circumference = 2 * Math.PI * r;
-  let offset = 0;
+  // بنحسب بداية كل قطعة قبل الرسم، عشان الرسم نفسه يفضل بلا أثر جانبي
+  const starts: number[] = [];
+  slices.reduce((acc, x) => {
+    starts.push(acc);
+    return acc + (x.value / total) * circumference;
+  }, 0);
 
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size} aria-hidden focusable="false">
         {/* بندور عكس عقارب الساعة عشان الترتيب يبقى RTL */}
         <g transform={`rotate(-90 ${c} ${c}) scale(-1 1) translate(${-size} 0)`}>
-          {slices.map((s) => {
+          {slices.map((s, i) => {
             const len = (s.value / total) * circumference;
             const dash = `${len} ${circumference - len}`;
-            const el = (
+            return (
               <circle
                 key={s.key}
                 cx={c}
@@ -350,15 +355,13 @@ export function Donut({
                 stroke={s.color}
                 strokeWidth={thickness}
                 strokeDasharray={dash}
-                strokeDashoffset={-offset}
+                strokeDashoffset={-starts[i]}
                 style={{ cursor: onPick ? "pointer" : "default" }}
                 onClick={() => onPick?.(s.key)}
               >
                 <title>{`${s.label}: ${qty(Math.round((s.value / total) * 100), 0)}٪`}</title>
               </circle>
             );
-            offset += len;
-            return el;
           })}
         </g>
       </svg>
@@ -530,6 +533,21 @@ export function Scatter({
 
 /* ── شلال: الإيراد رِحل فين ───────────────────────────────────── */
 
+/** بنراكم الخطوات برّه الرسم: كل خطوة بتبدأ من اللي فضل بعد اللي قبلها */
+function waterfallRows(
+  steps: { key: string; label: string; amount: number; kind: "start" | "minus" | "end" }[],
+  start: number,
+) {
+  let running = start;
+  return steps.map((s) => {
+    if (s.kind === "start") return { ...s, from: 0, to: start, width: 100 };
+    if (s.kind === "end") return { ...s, from: 0, to: s.amount, width: (Math.abs(s.amount) / start) * 100 };
+    const from = running;
+    running += s.amount; // amount سالب
+    return { ...s, from, to: running, width: (Math.abs(s.amount) / start) * 100 };
+  });
+}
+
 export function Waterfall({
   steps,
 }: {
@@ -538,14 +556,7 @@ export function Waterfall({
   const start = steps.find((s) => s.kind === "start")?.amount ?? 0;
   if (start <= 0) return null;
 
-  let running = start;
-  const rows = steps.map((s) => {
-    if (s.kind === "start") return { ...s, from: 0, to: start, width: 100 };
-    if (s.kind === "end") return { ...s, from: 0, to: s.amount, width: (Math.abs(s.amount) / start) * 100 };
-    const from = running;
-    running += s.amount; // amount سالب
-    return { ...s, from, to: running, width: (Math.abs(s.amount) / start) * 100 };
-  });
+  const rows = waterfallRows(steps, start);
 
   return (
     <ul className="list-none space-y-1.5">

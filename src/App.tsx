@@ -21,7 +21,7 @@ import { OrdersPage } from "@/pages/OrdersPage";
 import { OrderDetailPage } from "@/pages/OrderDetailPage";
 import { PlanningPage } from "@/pages/PlanningPage";
 import { CostingPage } from "@/pages/CostingPage";
-import { DashboardPage } from "@/pages/DashboardPage";
+import { CommandPage } from "@/pages/CommandPage";
 import { ProductsPage, ProductDetailPage } from "@/pages/ProductsPage";
 import { MaterialsPage, MaterialDetailPage } from "@/pages/MaterialsPage";
 import { AuditPage, SettingsPage, StaffPage } from "@/pages/StaffPage";
@@ -94,7 +94,7 @@ function appRoutes() {
         {guarded("/parties", "parties", <PartiesPage />)}
         {guarded("/parties/:id", "parties", <PartyProfilePage />)}
         {guarded("/intelligence", "parties", <IntelligencePage />)}
-        {guarded("/dashboard", "reports", <DashboardPage />)}
+        {guarded("/dashboard", "reports", <CommandPage />)}
         {guarded("/costing", "costing", <CostingPage />)}
         {guarded("/costs", "purchasing", <CostsPage />)}
         {guarded("/costs/:id", "purchasing", <CostItemPage />)}
