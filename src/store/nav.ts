@@ -188,8 +188,9 @@ export const NAV: NavSection[] = [
     label: "المستندات والطباعة",
     icon: Printer,
     items: [
-      item("/documents", "دفتر المستندات", "reports", null),
-      item("/exports", "مركز التصدير", "reports", null),
+      // مفتوحين للكل: الصلاحية جوه الصفحة على كل جدول ومستند لوحده
+      item("/documents", "دفتر المستندات", "production", null),
+      item("/exports", "مركز التصدير", "production", null),
     ],
   },
   {

@@ -104,8 +104,13 @@ function appRoutes() {
         {guarded("/costing", "costing", <CostingPage />)}
         {guarded("/costs", "purchasing", <CostsPage />)}
         {guarded("/costs/:id", "purchasing", <CostItemPage />)}
-        {guarded("/documents", "reports", <DocumentsPage />)}
-        {guarded("/exports", "reports", <ExportsPage />)}
+        {/*
+          مفتوحين للكل زي غرفة التحكم: الصلاحية جوه الصفحة على كل جدول
+          وكل نوع مستند لوحده. لو قفلناهم على موديول واحد، المشرف اللي
+          شغلته قايمة على ورق الإنتاج مكانش هيوصل لورقه.
+        */}
+        <Route path="/documents" element={<DocumentsPage />} />
+        <Route path="/exports" element={<ExportsPage />} />
         {guarded("/staff", "staff", <StaffPage />)}
         {guarded("/audit", "audit", <AuditPage />)}
         <Route path="/settings" element={<SettingsPage />} />

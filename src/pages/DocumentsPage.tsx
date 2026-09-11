@@ -90,18 +90,20 @@ export function DocumentsPage() {
 /* ── الدفتر ────────────────────────────────────────────────────── */
 
 function Ledger() {
-  const { db, cancelDoc } = useFactory();
+  const { db, can, cancelDoc } = useFactory();
   const [q, setQ] = useState("");
   const [type, setType] = useState<DocType | "all">("all");
   const [cancelling, setCancelling] = useState<IssuedDoc | null>(null);
   const [reopen, setReopen] = useState<IssuedDoc | null>(null);
 
   const term = normalize(q);
-  const rows = db.documents
+  // الصلاحية على مستوى نوع المستند: اللي مامعاهوش تصدير القسم مايشوفش ورقه
+  const mine = db.documents.filter((d) => can.do(DOC_DEFS[d.type].perm, "export"));
+  const rows = mine
     .filter((d) => (type === "all" || d.type === type) && (!term || normalize(d.number).includes(term)))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-  if (!db.documents.length) {
+  if (!mine.length) {
     return (
       <Card>
         <p className="font-medium">الدفتر لسه فاضي</p>
@@ -237,8 +239,9 @@ function CancelPanel({
 /* ── أنواع المستندات ───────────────────────────────────────────── */
 
 function Types() {
-  const { db } = useFactory();
-  const areas = [...new Set(DOC_TYPE_LIST.map((t) => t.area))];
+  const { db, can } = useFactory();
+  const types = DOC_TYPE_LIST.filter((t) => can.do(t.perm, "export"));
+  const areas = [...new Set(types.map((t) => t.area))];
   const used = useMemo(() => {
     const map = new Map<string, number>();
     for (const d of db.documents) map.set(d.type, (map.get(d.type) ?? 0) + 1);
@@ -258,7 +261,7 @@ function Types() {
         <section key={area} className="space-y-2">
           <h3 className="text-base">{DOC_AREA_LABEL[area]}</h3>
           <div className="grid gap-2 lg:grid-cols-2">
-            {DOC_TYPE_LIST.filter((t) => t.area === area).map((t) => {
+            {types.filter((t) => t.area === area).map((t) => {
               const rule = numberingFor(db.settings.docs, t.type);
               const year = Number(new Date().getFullYear());
               return (
@@ -469,7 +472,7 @@ function Numbering() {
         </p>
       </Card>
 
-      {DOC_TYPE_LIST.map((t) => {
+      {DOC_TYPE_LIST.filter((t) => can.do(t.perm, "export")).map((t) => {
         const rule = numberingFor(docs, t.type);
         const serial = nextSerial(db.documents, t.type, rule, year);
         const issued = db.documents.filter((d) => d.type === t.type).length;
