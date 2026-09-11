@@ -13,6 +13,7 @@ import {
   workerBalance,
 } from "./compute";
 import { demoDb, emptyDb } from "./seed";
+import { PRODUCTION_LINES } from "./types";
 import type {
   Account,
   AuditEntry,
@@ -28,6 +29,7 @@ import type {
   ManualTx,
   Member,
   Order,
+  OrderStatus,
   PayMethod,
   Role,
   Session,
@@ -44,10 +46,28 @@ function loadDb(): Db | null {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as Db;
+    return migrate(JSON.parse(raw) as Db);
   } catch {
     return null;
   }
+}
+
+/** دفاتر محفوظة قبل أوامر الإنتاج: تكمّل الترقيم والخط ونسبة الإنجاز */
+function migrate(db: Db): Db {
+  let seq = 1040;
+  return {
+    ...db,
+    orders: (db.orders ?? []).map((o) => {
+      const status: OrderStatus = (o.status as OrderStatus | "open") === "open" ? "running" : o.status;
+      return {
+        ...o,
+        status,
+        code: o.code ?? `SN-${++seq}`,
+        line: o.line ?? PRODUCTION_LINES[0],
+        progress: typeof o.progress === "number" ? o.progress : status === "done" ? 100 : 0,
+      };
+    }),
+  };
 }
 
 function saveDb(db: Db) {
