@@ -18,6 +18,13 @@ export function cairoToday(): string {
   }).format(new Date());
 }
 
+/** الساعة بتوقيت القاهرة — التحية بتتغيّر بيها */
+export function cairoHour(): number {
+  return Number(
+    new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Cairo", hour: "2-digit", hour12: false }).format(new Date()),
+  );
+}
+
 export function addDays(isoDate: string, days: number): string {
   const [y, m, d] = isoDate.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
