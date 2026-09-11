@@ -336,7 +336,18 @@ export function MaterialDetailPage() {
       <AffectedModels materialId={material.id} />
 
       <section>
-        <h3 className="mb-2 text-base">حركات المخزن</h3>
+        <div className="mb-2 flex items-baseline justify-between gap-2">
+          <h3 className="text-base">حركات المخزن</h3>
+          <ExportMenu
+            module="inventory"
+            dataset={() =>
+              datasetOf(db, "movements", {
+                ids: new Set(moves.map((m) => m.id)),
+                filters: [{ label: "الخامة", value: material.name }],
+              })
+            }
+          />
+        </div>
         <div className="overflow-hidden rounded-lg border border-border bg-card">
           {moves.length === 0 ? (
             <p className="px-4 py-6 text-center text-sm text-muted-foreground">مفيش حركات لسه.</p>
@@ -350,10 +361,16 @@ export function MaterialDetailPage() {
                     {m.notes ? ` · ${m.notes}` : ""}
                   </p>
                 </div>
-                <span className={`shrink-0 tabular font-medium ${m.qty > 0 ? "text-ok" : "text-danger"}`}>
-                  {m.qty > 0 ? "+" : ""}
-                  {qty(m.qty)} {unit}
-                </span>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className={`tabular font-medium ${m.qty > 0 ? "text-ok" : "text-danger"}`}>
+                    {m.qty > 0 ? "+" : ""}
+                    {qty(m.qty)} {unit}
+                  </span>
+                  {/* إذن الاستلام بيطلع من حركة الشراء أو الرصيد الافتتاحي بس */}
+                  {m.kind === "purchase" || m.kind === "opening" ? (
+                    <DocumentButton type="grn" refId={m.id} label="إذن استلام" variant="ghost" />
+                  ) : null}
+                </div>
               </div>
             ))
           )}

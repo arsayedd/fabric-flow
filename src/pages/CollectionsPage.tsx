@@ -14,6 +14,7 @@ import { clientBalance } from "@/store/compute";
 import { useFactory } from "@/store/context";
 import { ExportMenu } from "@/components/export/ExportMenu";
 import { datasetOf } from "@/store/datasets";
+import { DocumentButton } from "@/components/docs/DocumentPrint";
 import { partyById } from "@/store/parties";
 import { METHOD_LABEL, PAY_METHODS, type PayMethod } from "@/store/types";
 import { Banknote } from "lucide-react";
@@ -97,11 +98,14 @@ export function CollectionsPage() {
                     </div>
                     <Money value={c.amount} />
                   </div>
-                  {can.edit ? (
-                    <Button className="mt-3 w-full" onClick={() => { confirmCollection(c.id); toast.success("اتأكد التحصيل واتخصم من الأقدم."); }}>
-                      الفلوس وصلت — أكّد
-                    </Button>
-                  ) : null}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {can.edit ? (
+                      <Button className="flex-1" onClick={() => { confirmCollection(c.id); toast.success("اتأكد التحصيل واتخصم من الأقدم."); }}>
+                        الفلوس وصلت — أكّد
+                      </Button>
+                    ) : null}
+                    <DocumentButton type="receipt" refId={c.id} label="إيصال" size="default" />
+                  </div>
                 </div>
               );
             })}
@@ -125,12 +129,13 @@ export function CollectionsPage() {
                 </div>
                 <Money value={r.remaining} />
               </div>
-              <div className="mt-3 flex gap-2">
+              <div className="mt-3 flex flex-wrap gap-2">
                 {can.edit ? (
                   <Button size="sm" className="flex-1" onClick={() => setCollectFor(r.clientId)}>
                     سجل التحصيل
                   </Button>
                 ) : null}
+                <DocumentButton type="invoice" refId={r.deliveryId} label="فاتورة" />
                 <Button size="sm" variant="whatsapp" className="flex-1" asChild>
                   <a
                     href={whatsappReminder({
