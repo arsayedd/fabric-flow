@@ -12,7 +12,15 @@ import {
   workerAdvance,
   workerBalance,
 } from "./compute";
-import { activeBom, bomLines, computedProgress, materialStock, orderRequirements, stockQty } from "./manufacturing";
+import {
+  activeBom,
+  bomLines,
+  computedProgress,
+  materialStock,
+  orderRequirements,
+  orderStages,
+  stockQty,
+} from "./manufacturing";
 import { demoDb, emptyDb, templateData } from "./seed";
 import { PRODUCTION_LINES } from "./types";
 import type {
@@ -433,6 +441,20 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         const order = db.orders.find((o) => o.id === input.orderId);
         if (!order) throw new Error("أمر الإنتاج مش موجود.");
         if (input.qtyGood + input.qtyRework + input.qtyScrap <= 0) throw new Error("سجّل كمية واحدة على الأقل.");
+        // مينفعش تخيط أكتر مما قصّيت: كل مرحلة محكومة بكمية الأمر وبالمرحلة اللي قبلها
+        const stages = orderStages(db, order);
+        const here = stages.find((s) => s.operationId === input.operationId);
+        const done = (here?.good ?? 0) + (here?.scrap ?? 0);
+        if (done + input.qtyGood + input.qtyScrap > order.quantity) {
+          throw new Error(`كمية الأمر ${order.quantity} والمرحلة دي خلّصت ${done} خلاص.`);
+        }
+        const idx = stages.findIndex((s) => s.operationId === input.operationId);
+        if (idx > 0) {
+          const prev = stages[idx - 1];
+          if (done + input.qtyGood + input.qtyScrap > prev.good) {
+            throw new Error(`مرحلة ${prev.name} خلّصت ${prev.good} بس — مينفعش اللي بعدها تعدّيها.`);
+          }
+        }
         const row: StageEntry = { ...input, id: nid(), factoryId: fid(db) };
         const worker = input.workerId ? db.workers.find((w) => w.id === input.workerId) : null;
         const earnings: WorkerEarning[] = [];
