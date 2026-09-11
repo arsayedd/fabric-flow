@@ -64,6 +64,11 @@ export function printPaper(paper: Paper, orientation: Orientation = "portrait") 
   window.print();
 }
 
+/** الطابعة الحرارية: عمود واحد بلا جدول ولا حدود — شكل المستند بيتغيّر معاها */
+export function isThermal(paper: Paper): boolean {
+  return paper === "t80" || paper === "t58";
+}
+
 /** مقاس الورقة الافتراضي لكل نوع مستند */
 export function defaultPaperFor(kind: "document" | "receipt" | "table"): Paper {
   if (kind === "receipt") return "t80";

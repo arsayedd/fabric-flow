@@ -210,7 +210,8 @@ const esc = (s: string) =>
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
-    // Excel بيرفض ملف فيه محارف تحكم
+    // Excel بيرفض ملف فيه محارف تحكم، فالمقصود هنا إننا نطابقها ونشيلها
+    // oxlint-disable-next-line no-control-regex
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "");
 
 /** حرف العمود: ١ → A، ٢٧ → AA */
