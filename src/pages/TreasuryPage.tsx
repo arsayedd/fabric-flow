@@ -10,6 +10,7 @@ import { Input, selectClass } from "@/components/ui/input";
 import { cairoToday, formatDate } from "@/lib/utils";
 import { pnl } from "@/store/compute";
 import { useFactory } from "@/store/context";
+import { partyById } from "@/store/parties";
 
 export function TreasuryPage() {
   const { computed, db, can, addManualTx, addAccount } = useFactory();
@@ -25,7 +26,7 @@ export function TreasuryPage() {
       .map((c) => ({
         id: c.id,
         date: c.date,
-        label: `تحصيل · ${db.clients.find((x) => x.id === c.clientId)?.name ?? ""}`,
+        label: `تحصيل · ${partyById(db, c.clientId)?.name ?? ""}`,
         amount: c.amount,
         accountId: c.accountId,
       })),

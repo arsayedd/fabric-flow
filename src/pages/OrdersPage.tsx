@@ -11,6 +11,7 @@ import { Card, DataRow } from "@/components/ui/card";
 import { Input, selectClass } from "@/components/ui/input";
 import { cairoToday, formatDate } from "@/lib/utils";
 import { useFactory } from "@/store/context";
+import { customers, partyById } from "@/store/parties";
 import { productCost } from "@/store/manufacturing";
 import { TEMPLATES } from "@/store/templates";
 import { ORDER_STATUSES, ORDER_STATUS_LABEL, type OrderStatus } from "@/store/types";
@@ -64,7 +65,7 @@ export function OrdersPage() {
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {orders.map((o) => {
-            const client = db.clients.find((c) => c.id === o.clientId);
+            const client = partyById(db, o.clientId);
             const status = STATUS[o.status];
             return (
               <Card key={o.id}>
@@ -177,7 +178,7 @@ function OrderForm({
   const [productId, setProductId] = useState("");
   const [model, setModel] = useState("");
   const [line, setLine] = useState<string>(lines[0]);
-  const [clientId, setClientId] = useState(db.clients[0]?.id ?? "");
+  const [clientId, setClientId] = useState(customers(db)[0]?.id ?? "");
   const [quantity, setQuantity] = useState("");
   const [pieceCost, setPieceCost] = useState("");
   const [piecePrice, setPiecePrice] = useState("");
@@ -269,7 +270,7 @@ function OrderForm({
         <Field label="العميل">
           <select className={selectClass} value={clientId} onChange={(e) => setClientId(e.target.value)}>
             <option value="">مخزون المصنع</option>
-            {db.clients.map((c) => (
+            {customers(db).map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>

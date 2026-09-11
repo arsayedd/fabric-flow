@@ -12,6 +12,7 @@ import {
   workerAdvance,
   workerBalance,
 } from "./compute";
+import { partyAlerts, portfolio } from "./parties";
 import {
   activeBom,
   bomLines,
@@ -36,7 +37,11 @@ import type {
   StageEntry,
   StockMovement,
   BackupFile,
-  Client,
+  Communication,
+  Party,
+  PartyAddress,
+  PartyContact,
+  PartyTask,
   Collection,
   CostEntry,
   CostItem,
@@ -81,6 +86,7 @@ function migrate(db: Db): Db {
   const seeded = db.operations?.length ? null : templateData(factoryId, industry, () => nid());
   return {
     ...db,
+    ...migrateParties(db),
     settings: db.settings ?? { industry, overheadPerUnit: 0 },
     units: db.units ?? seeded?.units ?? [],
     categories: db.categories ?? seeded?.categories ?? [],
@@ -106,6 +112,78 @@ function migrate(db: Db): Db {
         progress: typeof o.progress === "number" ? o.progress : status === "done" ? 100 : 0,
       };
     }),
+  };
+}
+
+/**
+ * ترحيل العملاء القدام لجهات تعامل — **بنفس الـid**،
+ * فكل التوريدات والتحصيلات والأوامر تفضل مربوطة من غير أي تحويل.
+ * والموردين بيتولدوا من أسماء الموردين المكتوبة في بنود التكلفة.
+ */
+function migrateParties(db: Db): Partial<Db> {
+  if (db.parties) {
+    return {
+      contacts: db.contacts ?? [],
+      addresses: db.addresses ?? [],
+      communications: db.communications ?? [],
+      tasks: db.tasks ?? [],
+    };
+  }
+  const legacy = (db as unknown as { clients?: { id: string; factoryId: string; name: string; phone: string; notes: string }[] }).clients ?? [];
+  const parties: Party[] = legacy.map((c) => ({
+    ...blankParty(c.factoryId, c.name),
+    id: c.id,
+    phone: c.phone,
+    notes: c.notes,
+    roles: ["customer"],
+  }));
+
+  const costEntries = [...(db.costEntries ?? [])];
+  for (const entry of costEntries) {
+    const vendor = entry.vendor?.trim();
+    if (!vendor) continue;
+    let party = parties.find((p) => p.name === vendor);
+    if (!party) {
+      party = { ...blankParty(entry.factoryId, vendor), roles: ["supplier"] };
+      parties.push(party);
+    } else if (!party.roles.includes("supplier")) {
+      party.roles = [...party.roles, "supplier"];
+    }
+    entry.partyId = party.id;
+  }
+
+  return { parties, costEntries, contacts: [], addresses: [], communications: [], tasks: [] };
+}
+
+export function blankParty(factoryId: string, name: string): Party {
+  return {
+    id: nid(),
+    factoryId,
+    kind: "company",
+    name,
+    tradeName: "",
+    legalName: "",
+    code: "",
+    taxId: "",
+    commercialReg: "",
+    industry: "",
+    website: "",
+    email: "",
+    phone: "",
+    whatsapp: "",
+    address: "",
+    governorate: "",
+    city: "",
+    area: "",
+    notes: "",
+    internalNotes: "",
+    tags: [],
+    roles: ["customer"],
+    creditLimit: 0,
+    paymentTermDays: 0,
+    salesRepId: null,
+    mergedIntoId: null,
+    createdAt: new Date().toISOString(),
   };
 }
 
@@ -166,9 +244,17 @@ type FactoryApi = {
     staff: boolean;
     audit: boolean;
   };
-  addClient: (input: { name: string; phone: string; notes: string }) => void;
-  updateClient: (id: string, patch: Partial<Client>) => void;
-  deleteClient: (id: string) => void;
+  addParty: (input: Partial<Party> & { name: string }) => string;
+  updateParty: (id: string, patch: Partial<Party>) => void;
+  deleteParty: (id: string) => void;
+  mergeParties: (duplicateId: string, keepId: string) => void;
+  addContact: (input: Omit<PartyContact, "id" | "factoryId">) => void;
+  removeContact: (id: string) => void;
+  addAddress: (input: Omit<PartyAddress, "id" | "factoryId">) => void;
+  removeAddress: (id: string) => void;
+  addCommunication: (input: Omit<Communication, "id" | "factoryId" | "actorName">) => void;
+  addTask: (input: { partyId: string | null; title: string; dueDate: string; assigneeName: string }) => void;
+  toggleTask: (id: string) => void;
   addDelivery: (input: Omit<Delivery, "id" | "factoryId">) => void;
   deleteDelivery: (id: string) => void;
   addCollection: (input: AddCollectionInput) => void;
@@ -244,7 +330,12 @@ function buildComputed(db: Db) {
     rec,
     accounts,
     treasuryTotal: accounts.reduce((s, a) => s + a.balance, 0),
-    clients: db.clients.map((c) => ({ ...c, balance: clientBalance(db, c.id), statement: clientStatement(db, c.id) })),
+    parties: db.parties
+      .filter((p) => !p.mergedIntoId)
+      .map((p) => ({ ...p, balance: clientBalance(db, p.id), statement: clientStatement(db, p.id) })),
+    alerts: partyAlerts(db),
+    portfolio: portfolio(db),
+    openTasks: db.tasks.filter((t) => t.status === "open").sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
     workers: db.workers.map((w) => ({ ...w, balance: workerBalance(db, w.id), advance: workerAdvance(db, w.id) })),
     costItems: db.costItems.map((item) => {
       const entries = db.costEntries.filter((e) => e.costItemId === item.id);
@@ -502,28 +593,136 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         const member = seeded.members.find((m) => m.id === session?.memberId) ?? seeded.members[0];
         login(member);
       },
-      addClient: (input) => {
-        if (!input.name.trim()) throw new Error("اسم العميل مطلوب.");
-        const row: Client = { id: nid(), factoryId: fid(db), name: input.name.trim(), phone: input.phone.trim(), notes: input.notes.trim() };
-        mutate({ clients: [row, ...db.clients] }, { action: "create", table: "clients", recordId: row.id, before: null, after: row });
+      addParty: (input) => {
+        if (!input.name.trim()) throw new Error("اسم الجهة مطلوب.");
+        const row: Party = {
+          ...blankParty(fid(db), input.name.trim()),
+          ...input,
+          name: input.name.trim(),
+          phone: (input.phone ?? "").trim(),
+        };
+        if (!row.roles.length) throw new Error("اختار نوع العلاقة على الأقل.");
+        mutate({ parties: [row, ...db.parties] }, { action: "create", table: "parties", recordId: row.id, before: null, after: row });
+        return row.id;
       },
-      updateClient: (id, patch) => {
-        const before = db.clients.find((c) => c.id === id);
+      updateParty: (id, patch) => {
+        const before = db.parties.find((p) => p.id === id);
         mutate(
-          { clients: db.clients.map((c) => (c.id === id ? { ...c, ...patch } : c)) },
-          { action: "update", table: "clients", recordId: id, before, after: patch },
+          { parties: db.parties.map((p) => (p.id === id ? { ...p, ...patch } : p)) },
+          { action: "update", table: "parties", recordId: id, before, after: patch },
         );
       },
-      deleteClient: (id) => {
+      deleteParty: (id) => {
         if (!can.delete) throw new Error("صاحب المصنع بس اللي يمسح.");
-        const before = db.clients.find((c) => c.id === id);
+        const before = db.parties.find((p) => p.id === id);
         mutate(
           {
-            clients: db.clients.filter((c) => c.id !== id),
+            parties: db.parties.filter((p) => p.id !== id),
             deliveries: db.deliveries.filter((d) => d.clientId !== id),
             collections: db.collections.filter((c) => c.clientId !== id),
+            contacts: db.contacts.filter((c) => c.partyId !== id),
+            addresses: db.addresses.filter((a) => a.partyId !== id),
+            communications: db.communications.filter((m) => m.partyId !== id),
+            tasks: db.tasks.filter((t) => t.partyId !== id),
           },
-          { action: "delete", table: "clients", recordId: id, before, after: null },
+          { action: "delete", table: "parties", recordId: id, before, after: null },
+        );
+      },
+      /** الدمج بينقل كل الحركات للسجل الأساسي ويأرشف المكرر بدل ما يمسحه */
+      mergeParties: (duplicateId, keepId) => {
+        if (!can.edit) throw new Error("التعديل للمالك والمحاسب بس.");
+        if (duplicateId === keepId) throw new Error("مينفعش تدمج السجل في نفسه.");
+        const dup = db.parties.find((p) => p.id === duplicateId);
+        const keep = db.parties.find((p) => p.id === keepId);
+        if (!dup || !keep) throw new Error("واحد من السجلين مش موجود.");
+        mutate(
+          {
+            parties: db.parties.map((p) => {
+              if (p.id === duplicateId) return { ...p, mergedIntoId: keepId };
+              if (p.id !== keepId) return p;
+              return {
+                ...p,
+                roles: [...new Set([...p.roles, ...dup.roles])],
+                tags: [...new Set([...p.tags, ...dup.tags])],
+                phone: p.phone || dup.phone,
+                email: p.email || dup.email,
+                taxId: p.taxId || dup.taxId,
+                creditLimit: Math.max(p.creditLimit, dup.creditLimit),
+                notes: [p.notes, dup.notes].filter(Boolean).join(" — "),
+              };
+            }),
+            deliveries: db.deliveries.map((d) => (d.clientId === duplicateId ? { ...d, clientId: keepId } : d)),
+            collections: db.collections.map((c) => (c.clientId === duplicateId ? { ...c, clientId: keepId } : c)),
+            orders: db.orders.map((o) => (o.clientId === duplicateId ? { ...o, clientId: keepId } : o)),
+            costEntries: db.costEntries.map((e) => (e.partyId === duplicateId ? { ...e, partyId: keepId } : e)),
+            contacts: db.contacts.map((c) => (c.partyId === duplicateId ? { ...c, partyId: keepId } : c)),
+            addresses: db.addresses.map((a) => (a.partyId === duplicateId ? { ...a, partyId: keepId } : a)),
+            communications: db.communications.map((m) => (m.partyId === duplicateId ? { ...m, partyId: keepId } : m)),
+            tasks: db.tasks.map((t) => (t.partyId === duplicateId ? { ...t, partyId: keepId } : t)),
+          },
+          { action: "update", table: "parties", recordId: keepId, before: dup, after: { mergedInto: keep.name } },
+        );
+      },
+      addContact: (input) => {
+        if (!input.name.trim()) throw new Error("اسم جهة الاتصال مطلوب.");
+        const row: PartyContact = { ...input, id: nid(), factoryId: fid(db), name: input.name.trim() };
+        mutate({ contacts: [...db.contacts, row] }, { action: "create", table: "party_contacts", recordId: row.id, before: null, after: row });
+      },
+      removeContact: (id) => {
+        const before = db.contacts.find((c) => c.id === id);
+        mutate({ contacts: db.contacts.filter((c) => c.id !== id) }, { action: "delete", table: "party_contacts", recordId: id, before, after: null });
+      },
+      addAddress: (input) => {
+        if (!input.line.trim()) throw new Error("اكتب العنوان.");
+        const row: PartyAddress = { ...input, id: nid(), factoryId: fid(db) };
+        mutate({ addresses: [...db.addresses, row] }, { action: "create", table: "party_addresses", recordId: row.id, before: null, after: row });
+      },
+      removeAddress: (id) => {
+        const before = db.addresses.find((a) => a.id === id);
+        mutate({ addresses: db.addresses.filter((a) => a.id !== id) }, { action: "delete", table: "party_addresses", recordId: id, before, after: null });
+      },
+      addCommunication: (input) => {
+        const row: Communication = { ...input, id: nid(), factoryId: fid(db), actorName: session?.name ?? "النظام" };
+        const extra: PartyTask[] = [];
+        if (input.nextAction.trim() && input.nextDate) {
+          extra.push({
+            id: nid(),
+            factoryId: fid(db),
+            partyId: input.partyId,
+            title: input.nextAction.trim(),
+            dueDate: input.nextDate,
+            assigneeName: session?.name ?? "",
+            status: "open",
+            createdAt: new Date().toISOString(),
+          });
+        }
+        mutate(
+          {
+            communications: [row, ...db.communications],
+            tasks: extra.length ? [...extra, ...db.tasks] : db.tasks,
+          },
+          { action: "create", table: "party_communications", recordId: row.id, before: null, after: row },
+        );
+      },
+      addTask: (input) => {
+        if (!input.title.trim()) throw new Error("اكتب المهمة.");
+        const row: PartyTask = {
+          id: nid(),
+          factoryId: fid(db),
+          partyId: input.partyId,
+          title: input.title.trim(),
+          dueDate: input.dueDate,
+          assigneeName: input.assigneeName || session?.name || "",
+          status: "open",
+          createdAt: new Date().toISOString(),
+        };
+        mutate({ tasks: [row, ...db.tasks] }, { action: "create", table: "party_tasks", recordId: row.id, before: null, after: row });
+      },
+      toggleTask: (id) => {
+        const before = db.tasks.find((t) => t.id === id);
+        mutate(
+          { tasks: db.tasks.map((t) => (t.id === id ? { ...t, status: t.status === "open" ? "done" : "open" } : t)) },
+          { action: "update", table: "party_tasks", recordId: id, before, after: { toggled: true } },
         );
       },
       addDelivery: (input) => {
@@ -718,7 +917,11 @@ function emptyShell(): Db {
     costItems: [],
     costEntries: [],
     costPayments: [],
-    clients: [],
+    parties: [],
+    contacts: [],
+    addresses: [],
+    communications: [],
+    tasks: [],
     deliveries: [],
     collections: [],
     workers: [],

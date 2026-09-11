@@ -8,6 +8,7 @@ import { Card, DataRow } from "@/components/ui/card";
 import { Input, selectClass } from "@/components/ui/input";
 import { cairoToday, formatDate, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
+import { partyById } from "@/store/parties";
 import { bottleneck, orderCost, orderRequirements, orderStages, productById } from "@/store/manufacturing";
 
 export function OrderDetailPage() {
@@ -22,7 +23,7 @@ export function OrderDetailPage() {
   if (!order) return <p className="text-sm text-muted-foreground">أمر الإنتاج مش موجود.</p>;
 
   const product = productById(db, order.productId);
-  const client = db.clients.find((c) => c.id === order.clientId);
+  const client = partyById(db, order.clientId);
   const status = STATUS[order.status];
   const reqs = orderRequirements(db, order);
   const stages = orderStages(db, order);

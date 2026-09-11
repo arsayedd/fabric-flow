@@ -3,6 +3,12 @@ import { TEMPLATES } from "./templates";
 import {
   DEFAULT_COST_ITEMS,
   type Category,
+  type Communication,
+  type Party,
+  type PartyAddress,
+  type PartyContact,
+  type PartyRole,
+  type PartyTask,
   type Db,
   type Industry,
   type Material,
@@ -108,7 +114,11 @@ export function emptyDb(factoryName: string, industry: Industry = "custom"): Db 
     costItems: DEFAULT_COST_ITEMS.map((c) => ({ id: nid(), factoryId, ...c })),
     costEntries: [],
     costPayments: [],
-    clients: [],
+    parties: [],
+    contacts: [],
+    addresses: [],
+    communications: [],
+    tasks: [],
     deliveries: [],
     collections: [],
     workers: [],
@@ -246,12 +256,142 @@ export function demoDb(): Db {
     mv("product", "p3", whFg, "delivery", -160, 114, addDays(today, -2), "delivery", "d5", "تسليم تيشيرت"),
   ];
 
-  const clients = [
-    { id: "cl-1", factoryId: FID, name: "محلات البرنس", phone: "01012345678", notes: "عميل جملة — شارع الهرم" },
-    { id: "cl-2", factoryId: FID, name: "شركة الأناقة للتجارة", phone: "01298765432", notes: "فاتورة شهرية" },
-    { id: "cl-3", factoryId: FID, name: "تاجر العباسية", phone: "01155556666", notes: "كاش غالباً" },
-    { id: "cl-4", factoryId: FID, name: "بوتيك نورا", phone: "01544443333", notes: "طلبات صيفي" },
-    { id: "cl-5", factoryId: FID, name: "تصدير الخليج", phone: "01000001111", notes: "شحنات كبيرة — آجل 30 يوم" },
+  const party = (
+    id: string,
+    name: string,
+    roles: PartyRole[],
+    extra: Partial<Party> = {},
+  ): Party => ({
+    id,
+    factoryId: FID,
+    kind: "company",
+    name,
+    tradeName: "",
+    legalName: "",
+    code: "",
+    taxId: "",
+    commercialReg: "",
+    industry: "",
+    website: "",
+    email: "",
+    phone: "",
+    whatsapp: "",
+    address: "",
+    governorate: "",
+    city: "",
+    area: "",
+    notes: "",
+    internalNotes: "",
+    tags: [],
+    roles,
+    creditLimit: 0,
+    paymentTermDays: 0,
+    salesRepId: null,
+    mergedIntoId: null,
+    createdAt: addDays(today, -400) + "T08:00:00.000Z",
+    ...extra,
+  });
+
+  const parties: Party[] = [
+    party("cl-1", "محلات البرنس", ["customer", "merchant", "wholesale"], {
+      phone: "01012345678",
+      whatsapp: "01012345678",
+      notes: "عميل جملة — شارع الهرم",
+      internalNotes: "بيتفاوض على السعر دايمًا. صاحب القرار أستاذ أحمد.",
+      governorate: "الجيزة",
+      city: "الهرم",
+      tags: ["جملة", "VIP"],
+      creditLimit: 60000,
+      paymentTermDays: 15,
+      salesRepId: "rep-1",
+    }),
+    party("cl-2", "شركة الأناقة للتجارة", ["customer", "distributor"], {
+      phone: "01298765432",
+      email: "info@elanaka.example",
+      taxId: "512-874-991",
+      notes: "فاتورة شهرية",
+      governorate: "القاهرة",
+      city: "مدينة نصر",
+      tags: ["موزّع"],
+      creditLimit: 80000,
+      paymentTermDays: 30,
+      salesRepId: "rep-1",
+    }),
+    party("cl-3", "تاجر العباسية", ["customer", "retail"], {
+      kind: "person",
+      phone: "01155556666",
+      notes: "كاش غالبًا",
+      governorate: "القاهرة",
+      city: "العباسية",
+      tags: ["تجزئة", "بيدفع كاش"],
+    }),
+    party("cl-4", "بوتيك نورا", ["customer", "retail"], {
+      phone: "01544443333",
+      notes: "طلبات موسمية",
+      governorate: "الإسكندرية",
+      city: "سموحة",
+      tags: ["موسمي"],
+      creditLimit: 20000,
+    }),
+    party("cl-5", "تصدير الخليج", ["customer", "wholesale"], {
+      phone: "01000001111",
+      email: "orders@gulf.example",
+      taxId: "301-556-220",
+      notes: "شحنات كبيرة — آجل 30 يوم",
+      governorate: "القاهرة",
+      city: "التجمع",
+      tags: ["تصدير", "استراتيجي"],
+      creditLimit: 150000,
+      paymentTermDays: 30,
+    }),
+    party("sup-1", "مصبغة السلام", ["supplier"], {
+      phone: "01211112222",
+      notes: "أقمشة قطن وكتان",
+      governorate: "الغربية",
+      city: "المحلة",
+      tags: ["أقمشة"],
+    }),
+    party("sup-2", "مكتبة الإكسسوار", ["supplier"], { phone: "01233334444", governorate: "القاهرة", city: "الموسكي" }),
+    party("sup-3", "شركة الكهرباء", ["service"], {}),
+    party("sup-4", "المالك", ["service"], { kind: "person", notes: "إيجار المصنع" }),
+    party("ws-1", "ورشة عم شريف للخياطة", ["workshop", "supplier"], {
+      kind: "person",
+      phone: "01277778888",
+      notes: "خياطة خارجية بالقطعة",
+      tags: ["تشغيل خارجي"],
+    }),
+    party("rep-1", "أحمد سيد — مندوب", ["sales_rep", "collection_rep"], {
+      kind: "person",
+      phone: "01099998888",
+      notes: "مسؤول القاهرة والجيزة",
+    }),
+    party("shp-1", "شركة سريع للشحن", ["shipping"], { phone: "01066660000" }),
+  ];
+
+  const contacts: PartyContact[] = [
+    { id: nid(), factoryId: FID, partyId: "cl-2", name: "أحمد فؤاد", title: "صاحب الشركة", phone: "01298765432", email: "ahmed@elanaka.example", isPrimary: true },
+    { id: nid(), factoryId: FID, partyId: "cl-2", name: "محمد سمير", title: "مدير المشتريات", phone: "01112223344", email: "", isPrimary: false },
+    { id: nid(), factoryId: FID, partyId: "cl-2", name: "سارة منير", title: "المحاسبة", phone: "01223334455", email: "", isPrimary: false },
+    { id: nid(), factoryId: FID, partyId: "cl-5", name: "عمر الشامي", title: "مدير التصدير", phone: "01000001111", email: "", isPrimary: true },
+    { id: nid(), factoryId: FID, partyId: "sup-1", name: "خالد المصبغة", title: "المبيعات", phone: "01211112222", email: "", isPrimary: true },
+  ];
+
+  const addresses: PartyAddress[] = [
+    { id: nid(), factoryId: FID, partyId: "cl-2", kind: "head_office", line: "12 شارع عباس العقاد", governorate: "القاهرة", city: "مدينة نصر" },
+    { id: nid(), factoryId: FID, partyId: "cl-2", kind: "warehouse", line: "المنطقة الصناعية — قطعة 40", governorate: "القاهرة", city: "العبور" },
+    { id: nid(), factoryId: FID, partyId: "cl-5", kind: "shipping", line: "ميناء الإسكندرية — بوابة 3", governorate: "الإسكندرية", city: "الإسكندرية" },
+  ];
+
+  const communications: Communication[] = [
+    { id: nid(), factoryId: FID, partyId: "cl-1", date: addDays(today, -1), channel: "call", subject: "متابعة تحصيل", body: "وعد يحوّل 20 ألف الأسبوع الجاي.", internal: false, actorName: "صاحب المصنع", nextAction: "تأكيد التحويل", nextDate: addDays(today, 5) },
+    { id: nid(), factoryId: FID, partyId: "cl-5", date: addDays(today, -6), channel: "meeting", subject: "زيارة لمناقشة شحنة جديدة", body: "طلب عينات من خامة الكتان.", internal: false, actorName: "أحمد سيد — مندوب", nextAction: "", nextDate: null },
+    { id: nid(), factoryId: FID, partyId: "cl-3", date: addDays(today, -12), channel: "note", subject: "ملاحظة داخلية", body: "بيفضل الاستلام يوم الخميس.", internal: true, actorName: "منى المحاسب", nextAction: "", nextDate: null },
+  ];
+
+  const tasks: PartyTask[] = [
+    { id: nid(), factoryId: FID, partyId: "cl-1", title: "تأكيد تحويل 20 ألف", dueDate: addDays(today, 5), assigneeName: "منى المحاسب", status: "open", createdAt: new Date().toISOString() },
+    { id: nid(), factoryId: FID, partyId: "cl-4", title: "كلّم بوتيك نورا — بقاله فترة مطلبش", dueDate: addDays(today, -1), assigneeName: "أحمد سيد — مندوب", status: "open", createdAt: new Date().toISOString() },
+    { id: nid(), factoryId: FID, partyId: "cl-2", title: "تسليم عرض أسعار الموسم الجديد", dueDate: addDays(today, 3), assigneeName: "صاحب المصنع", status: "open", createdAt: new Date().toISOString() },
   ];
 
   const deliveries = [
@@ -301,11 +441,11 @@ export function demoDb(): Db {
   ];
 
   const costEntries = [
-    { id: "ce1", factoryId: FID, costItemId: "ci-1", date: addDays(today, -14), vendor: "مصبغة السلام", quantity: 850, amount: 38250, notes: "أقمشة قمصان" },
-    { id: "ce2", factoryId: FID, costItemId: "ci-14", date: addDays(today, -9), vendor: "المالك", quantity: 1, amount: 18000, notes: "إيجار سبتمبر" },
-    { id: "ce3", factoryId: FID, costItemId: "ci-4", date: addDays(today, -5), vendor: "مكتبة الإكسسوار", quantity: 2000, amount: 4200, notes: "" },
-    { id: "ce4", factoryId: FID, costItemId: "ci-15", date: addDays(today, -3), vendor: "شركة الكهرباء", quantity: 1, amount: 3100, notes: "" },
-    { id: "ce5", factoryId: FID, costItemId: "ci-10", date: addDays(today, -7), vendor: "ورشة عم شريف", quantity: 300, amount: 9000, notes: "خياطة برة" },
+    { id: "ce1", factoryId: FID, costItemId: "ci-1", date: addDays(today, -14), vendor: "مصبغة السلام", partyId: "sup-1", quantity: 850, amount: 38250, notes: "أقمشة قمصان" },
+    { id: "ce2", factoryId: FID, costItemId: "ci-14", date: addDays(today, -9), vendor: "المالك", partyId: "sup-4", quantity: 1, amount: 18000, notes: "إيجار سبتمبر" },
+    { id: "ce3", factoryId: FID, costItemId: "ci-4", date: addDays(today, -5), vendor: "مكتبة الإكسسوار", partyId: "sup-2", quantity: 2000, amount: 4200, notes: "" },
+    { id: "ce4", factoryId: FID, costItemId: "ci-15", date: addDays(today, -3), vendor: "شركة الكهرباء", partyId: "sup-3", quantity: 1, amount: 3100, notes: "" },
+    { id: "ce5", factoryId: FID, costItemId: "ci-10", date: addDays(today, -7), vendor: "ورشة عم شريف للخياطة", partyId: "ws-1", quantity: 300, amount: 9000, notes: "خياطة برة" },
   ];
 
   const costPayments = [
@@ -369,7 +509,11 @@ export function demoDb(): Db {
     costItems: items,
     costEntries,
     costPayments,
-    clients,
+    parties,
+    contacts,
+    addresses,
+    communications,
+    tasks,
     deliveries,
     collections,
     workers,

@@ -53,6 +53,8 @@ export type CostEntry = {
   quantity: number | null;
   amount: number;
   notes: string;
+  /** المورّد كجهة تعامل — قديمًا كان اسم نصي في vendor */
+  partyId: string | null;
 };
 
 export type CostPayment = {
@@ -65,17 +67,153 @@ export type CostPayment = {
   method: PayMethod;
 };
 
-export type Client = {
+/* ── جهات التعامل: كيان واحد بأدوار متعددة (ADR-001) ──────────── */
+
+export const PARTY_ROLES = [
+  "customer",
+  "merchant",
+  "wholesale",
+  "retail",
+  "supplier",
+  "distributor",
+  "agent",
+  "workshop",
+  "sales_rep",
+  "collection_rep",
+  "partner",
+  "service",
+  "shipping",
+  "maintenance",
+  "contractor",
+  "other",
+] as const;
+export type PartyRole = (typeof PARTY_ROLES)[number];
+
+export const PARTY_ROLE_LABEL: Record<PartyRole, string> = {
+  customer: "عميل",
+  merchant: "تاجر",
+  wholesale: "تاجر جملة",
+  retail: "تاجر تجزئة",
+  supplier: "مورّد",
+  distributor: "موزّع",
+  agent: "وكيل",
+  workshop: "ورشة خارجية",
+  sales_rep: "مندوب مبيعات",
+  collection_rep: "مندوب تحصيل",
+  partner: "شريك",
+  service: "مقدم خدمة",
+  shipping: "شركة شحن",
+  maintenance: "شركة صيانة",
+  contractor: "مقاول",
+  other: "جهة أخرى",
+};
+
+export type Party = {
   id: string;
   factoryId: string;
+  kind: "person" | "company";
   name: string;
+  tradeName: string;
+  legalName: string;
+  code: string;
+  taxId: string;
+  commercialReg: string;
+  industry: string;
+  website: string;
+  email: string;
   phone: string;
+  whatsapp: string;
+  address: string;
+  governorate: string;
+  city: string;
+  area: string;
   notes: string;
+  /** ملاحظات داخلية — متظهرش في أي بورتال للعميل */
+  internalNotes: string;
+  tags: string[];
+  roles: PartyRole[];
+  creditLimit: number;
+  paymentTermDays: number;
+  salesRepId: string | null;
+  /** الدمج بيأرشف السجل المكرر ويشاور على الأساسي بدل ما يمسحه */
+  mergedIntoId: string | null;
+  createdAt: string;
+};
+
+export type PartyContact = {
+  id: string;
+  factoryId: string;
+  partyId: string;
+  name: string;
+  title: string;
+  phone: string;
+  email: string;
+  isPrimary: boolean;
+};
+
+export const ADDRESS_KINDS = ["head_office", "warehouse", "billing", "shipping", "branch", "factory"] as const;
+export type AddressKind = (typeof ADDRESS_KINDS)[number];
+
+export const ADDRESS_KIND_LABEL: Record<AddressKind, string> = {
+  head_office: "المقر الرئيسي",
+  warehouse: "مخزن",
+  billing: "عنوان الفوترة",
+  shipping: "عنوان الشحن",
+  branch: "فرع",
+  factory: "مصنع",
+};
+
+export type PartyAddress = {
+  id: string;
+  factoryId: string;
+  partyId: string;
+  kind: AddressKind;
+  line: string;
+  governorate: string;
+  city: string;
+};
+
+export const COMM_CHANNELS = ["call", "whatsapp", "email", "sms", "meeting", "note"] as const;
+export type CommChannel = (typeof COMM_CHANNELS)[number];
+
+export const COMM_CHANNEL_LABEL: Record<CommChannel, string> = {
+  call: "مكالمة",
+  whatsapp: "واتساب",
+  email: "إيميل",
+  sms: "رسالة",
+  meeting: "زيارة",
+  note: "ملاحظة",
+};
+
+export type Communication = {
+  id: string;
+  factoryId: string;
+  partyId: string;
+  date: string;
+  channel: CommChannel;
+  subject: string;
+  body: string;
+  internal: boolean;
+  actorName: string;
+  nextAction: string;
+  nextDate: string | null;
+};
+
+export type PartyTask = {
+  id: string;
+  factoryId: string;
+  partyId: string | null;
+  title: string;
+  dueDate: string;
+  assigneeName: string;
+  status: "open" | "done";
+  createdAt: string;
 };
 
 export type Delivery = {
   id: string;
   factoryId: string;
+  /** جهة التعامل صاحبة التوريد — نفس الـid القديم للعميل */
   clientId: string;
   date: string;
   dueDate: string;
@@ -349,7 +487,11 @@ export type Db = {
   costItems: CostItem[];
   costEntries: CostEntry[];
   costPayments: CostPayment[];
-  clients: Client[];
+  parties: Party[];
+  contacts: PartyContact[];
+  addresses: PartyAddress[];
+  communications: Communication[];
+  tasks: PartyTask[];
   deliveries: Delivery[];
   collections: Collection[];
   workers: Worker[];

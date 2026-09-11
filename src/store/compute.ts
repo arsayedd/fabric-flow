@@ -96,7 +96,7 @@ export function receivables(db: Db) {
   const week = addDays(today, 7);
   const remain = fifoRemain(db.deliveries, db.collections).filter((d) => d.remaining > 0.5);
   const rows: ReceivableRow[] = remain.map((d) => {
-    const client = db.clients.find((c) => c.id === d.clientId);
+    const client = db.parties.find((c) => c.id === d.clientId);
     return {
       clientId: d.clientId,
       clientName: client?.name ?? "عميل محذوف",

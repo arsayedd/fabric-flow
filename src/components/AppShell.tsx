@@ -24,7 +24,7 @@ const financeNav = [
   { to: "/", label: "الرئيسية", icon: Home, end: true },
   { to: "/orders", label: "الإنتاج", icon: Factory },
   { to: "/collections", label: "التحصيل", icon: Banknote },
-  { to: "/clients", label: "العملاء", icon: Users },
+  { to: "/parties", label: "الجهات", icon: Users },
   { to: "/more", label: "المزيد", icon: MoreHorizontal },
 ];
 

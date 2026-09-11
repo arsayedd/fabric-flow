@@ -113,7 +113,7 @@ export function HomePage() {
           {[...rec.overdue, ...rec.today, ...rec.week].slice(0, 5).map((r) => (
             <Link
               key={r.deliveryId}
-              to={`/clients/${r.clientId}`}
+              to={`/parties/${r.clientId}`}
               className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 last:border-0"
             >
               <div>

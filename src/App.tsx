@@ -1,8 +1,9 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { AppShell, MorePage } from "@/components/AppShell";
 import { Gate } from "@/pages/Gate";
 import { HomePage } from "@/pages/HomePage";
-import { ClientsPage, ClientProfilePage } from "@/pages/ClientsPage";
+import { PartiesPage } from "@/pages/PartiesPage";
+import { PartyProfilePage } from "@/pages/PartyProfilePage";
 import { CollectionsPage } from "@/pages/CollectionsPage";
 import { CostsPage, CostItemPage } from "@/pages/CostsPage";
 import { WorkersPage, WorkerProfilePage } from "@/pages/WorkersPage";
@@ -41,21 +42,23 @@ export default function App() {
           }
         />
         <Route
-          path="/clients"
+          path="/parties"
           element={
             <Finance>
-              <ClientsPage />
+              <PartiesPage />
             </Finance>
           }
         />
         <Route
-          path="/clients/:id"
+          path="/parties/:id"
           element={
             <Finance>
-              <ClientProfilePage />
+              <PartyProfilePage />
             </Finance>
           }
         />
+        <Route path="/clients" element={<Navigate to="/parties" replace />} />
+        <Route path="/clients/:id" element={<LegacyClient />} />
         <Route
           path="/costs"
           element={
@@ -101,6 +104,12 @@ export default function App() {
       </Route>
     </Routes>
   );
+}
+
+/** الروابط القديمة للعملاء بتفضل شغالة بعد ما بقوا جهات تعامل */
+function LegacyClient() {
+  const { id } = useParams();
+  return <Navigate to={`/parties/${id}`} replace />;
 }
 
 function Finance({ children }: { children: ReactNode }) {

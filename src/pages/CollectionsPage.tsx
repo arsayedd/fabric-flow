@@ -10,7 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Input, selectClass } from "@/components/ui/input";
 import { cairoToday, fileToDataUrl, formatDate } from "@/lib/utils";
 import { methodNeedsReceipt, whatsappReminder } from "@/store/compute";
+import { clientBalance } from "@/store/compute";
 import { useFactory } from "@/store/context";
+import { partyById } from "@/store/parties";
 import { METHOD_LABEL, PAY_METHODS, type PayMethod } from "@/store/types";
 import { Banknote } from "lucide-react";
 
@@ -65,7 +67,7 @@ export function CollectionsPage() {
         ) : (
           <div className="space-y-2">
             {computed.rec.pending.map((c) => {
-              const client = db.clients.find((x) => x.id === c.clientId);
+              const client = partyById(db, c.clientId);
               return (
                 <div key={c.id} className="rounded-lg border border-border bg-card p-4">
                   <div className="flex items-start justify-between gap-3">
@@ -95,7 +97,7 @@ export function CollectionsPage() {
             <div key={r.deliveryId} className="rounded-lg border border-border bg-card p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <Link to={`/clients/${r.clientId}`} className="font-medium">
+                  <Link to={`/parties/${r.clientId}`} className="font-medium">
                     {r.clientName}
                   </Link>
                   <p className="mt-0.5 text-sm text-muted-foreground">
@@ -139,9 +141,9 @@ export function CollectionsPage() {
 }
 
 export function CollectPanel({ clientId, onClose }: { clientId: string | null; onClose: () => void }) {
-  const { db, addCollection, computed } = useFactory();
-  const client = db.clients.find((c) => c.id === clientId);
-  const balance = clientId ? computed.clients.find((c) => c.id === clientId)?.balance ?? 0 : 0;
+  const { db, addCollection } = useFactory();
+  const client = partyById(db, clientId);
+  const balance = clientId ? clientBalance(db, clientId) : 0;
   const [date, setDate] = useState(cairoToday());
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<PayMethod>("cash");

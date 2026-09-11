@@ -11,6 +11,7 @@ import { Input, selectClass } from "@/components/ui/input";
 import { cairoToday, formatDate } from "@/lib/utils";
 import { costEntryPaid } from "@/store/compute";
 import { useFactory } from "@/store/context";
+import { partiesWithRole } from "@/store/parties";
 import { METHOD_LABEL, PAY_METHODS, type PayMethod } from "@/store/types";
 
 export function CostsPage() {
@@ -176,9 +177,12 @@ function EntryPanel({
 }: {
   open: boolean;
   onClose: () => void;
-  onSave: (row: { date: string; vendor: string; quantity: number | null; amount: number; notes: string }) => void;
+  onSave: (row: { date: string; vendor: string; partyId: string | null; quantity: number | null; amount: number; notes: string }) => void;
 }) {
+  const { db, addParty } = useFactory();
+  const suppliers = partiesWithRole(db, "supplier");
   const [date, setDate] = useState(cairoToday());
+  const [partyId, setPartyId] = useState("");
   const [vendor, setVendor] = useState("");
   const [quantity, setQuantity] = useState("");
   const [amount, setAmount] = useState("");
@@ -189,7 +193,16 @@ function EntryPanel({
       title="مصروف"
       onClose={onClose}
       footer={
-        <Button className="w-full" onClick={() => onSave({ date, vendor, quantity: quantity ? Number(quantity) : null, amount: Number(amount), notes })}>
+        <Button
+          className="w-full"
+          onClick={() => {
+            // مورّد جديد بيتسجل كجهة تعامل عشان يبقى له بروفايل وسكور، مش مجرد اسم نصي
+            let id = partyId;
+            if (!id && vendor.trim()) id = addParty({ name: vendor.trim(), roles: ["supplier"] });
+            const name = id ? (db.parties.find((p) => p.id === id)?.name ?? vendor) : vendor;
+            onSave({ date, vendor: name, partyId: id || null, quantity: quantity ? Number(quantity) : null, amount: Number(amount), notes });
+          }}
+        >
           حفظ
         </Button>
       }
@@ -197,8 +210,25 @@ function EntryPanel({
       <Field label="التاريخ">
         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </Field>
-      <Field label="المورد">
-        <Input value={vendor} onChange={(e) => setVendor(e.target.value)} />
+      <Field label="المورّد">
+        <select
+          className={selectClass}
+          value={partyId}
+          onChange={(e) => {
+            setPartyId(e.target.value);
+            if (e.target.value) setVendor("");
+          }}
+        >
+          <option value="">مورّد جديد — أكتب اسمه تحت</option>
+          {suppliers.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+        {!partyId ? (
+          <Input className="mt-2" value={vendor} onChange={(e) => setVendor(e.target.value)} placeholder="اسم المورّد" />
+        ) : null}
       </Field>
       <Field label="الكمية">
         <Input inputMode="numeric" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
