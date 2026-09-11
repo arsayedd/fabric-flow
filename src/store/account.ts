@@ -306,7 +306,7 @@ export function checkPassword(value: string): PasswordCheck {
   const length = value.length >= 8;
   const met = [upper, lower, digit, symbol, length].filter(Boolean).length;
   const ok = met === 5;
-  const score: 0 | 1 | 2 | 3 = value.length === 0 ? 0 : ok && value.length >= 12 ? 3 : ok ? 2 : met >= 3 ? 1 : 0;
+  const score: 0 | 1 | 2 | 3 = value.length === 0 ? 0 : ok ? 3 : met >= 3 ? 2 : 1;
   return { upper, lower, digit, symbol, length, ok, score, label: score >= 3 ? "قوية" : score === 2 ? "متوسطة" : "ضعيفة" };
 }
 
@@ -411,7 +411,14 @@ export function slugify(name: string): string {
     .slice(0, 2)
     .map((w) =>
       [...w]
-        .map((ch) => (AR_MAP[ch] !== undefined ? AR_MAP[ch] : /[a-z0-9]/i.test(ch) ? ch.toLowerCase() : "-"))
+        .map((ch, i, all) => {
+          // الواو والياء في وسط الكلمة حروف مدّ مش حروف ساكنة: «النور» = alnoor مش alnwr
+          const mid = i > 0 && i < all.length - 1;
+          if (ch === "و") return mid ? "oo" : "w";
+          if (ch === "ي") return mid ? "i" : "y";
+          if (AR_MAP[ch] !== undefined) return AR_MAP[ch];
+          return /[a-z0-9]/i.test(ch) ? ch.toLowerCase() : "-";
+        })
         .join(""),
     )
     .join("-");

@@ -271,12 +271,35 @@ function boot(): Boot {
   const data = readDb(key) ?? emptyShell();
   // جلسة محفوظة لمصنع تاني مش بتنفع للمصنع ده
   const keep = !session?.factoryId || !ws || session.factoryId === ws.factoryId;
+  let live = keep ? session : null;
+
+  /*
+   * الـhostname حدّد المصنع: يبقى نفتحه على طول لو الحساب له وصول.
+   * ده اللي بيخلي `alnoor.sanaa.app` يوصّل لمصنع النور مباشرة بدل اختيار المصنع،
+   * والصلاحية بتتقرّر من عضويّة الحساب في المصنع — مش من الـURL.
+   */
+  if (!live && ws && data.factory) {
+    const accounts = loadAccounts();
+    const user = accounts.find((a) => a.id === current.userId) ?? null;
+    const allowed = !ws.ownerId || (!!user && (ws.ownerId === user.id || ws.access.some((a) => a.userId === user.id)));
+    if (allowed) {
+      const role = user ? roleIn(ws, user.id) : "owner";
+      const member =
+        (user ? data.members.find((m) => m.email === user.email) : null) ??
+        data.members.find((m) => m.role === role) ??
+        data.members[0];
+      if (member) {
+        live = { memberId: member.id, email: member.email, name: member.name, role: member.role, factoryId: member.factoryId };
+      }
+    }
+  }
+
   return {
     workspaces,
     current: ws ? { ...current, factoryId: ws.factoryId } : current,
     book: { key, data },
     missing: null,
-    session: keep ? session : null,
+    session: live,
   };
 }
 

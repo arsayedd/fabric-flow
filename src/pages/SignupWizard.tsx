@@ -192,13 +192,11 @@ export function SignupWizard({ mode = "signup" }: { mode?: "signup" | "factory" 
         {step === 4 ? (
           <ModulesStep
             picked={modules}
-            onToggle={(k) =>
-              setPicked((p) => {
-                const next = p.includes(k) ? p.filter((x) => x !== k) : [...p, k];
-                setModules(next);
-                return next;
-              })
-            }
+            onToggle={(k) => {
+              const next = modules.includes(k) ? modules.filter((x) => x !== k) : [...modules, k];
+              setPicked(next);
+              setModules(next);
+            }}
             onNext={() => setStep(5)}
           />
         ) : null}

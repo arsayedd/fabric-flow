@@ -41,12 +41,13 @@ export default function App() {
       <Route path="/signup" element={<SignupWizard />} />
       <Route path="/signup/factory" element={<SignupWizard mode="factory" />} />
       <Route path="/factories/new" element={<SignupWizard mode="factory" />} />
-      {inApp ? <AppRoutes /> : <PublicRoutes hasAccount={!!account.user} />}
+      {inApp ? appRoutes() : publicRoutes(!!account.user)}
     </Routes>
   );
 }
 
-function PublicRoutes({ hasAccount }: { hasAccount: boolean }) {
+/** فراغمنت مش كومبوننت: الـRoutes مابتقبل غير Route أو Fragment */
+function publicRoutes(hasAccount: boolean) {
   // حساب داخل من غير مصنع مفتوح: بيختار المصنع
   if (hasAccount)
     return (
@@ -66,7 +67,7 @@ function PublicRoutes({ hasAccount }: { hasAccount: boolean }) {
   );
 }
 
-function AppRoutes() {
+function appRoutes() {
   return (
     <>
       <Route path="/factories" element={<FactoryPickerPage />} />
