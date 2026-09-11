@@ -7,7 +7,7 @@ import { Money } from "@/components/Money";
 import { Field, Panel } from "@/components/Panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, selectClass } from "@/components/ui/input";
 import { cairoToday, fileToDataUrl, formatDate } from "@/lib/utils";
 import { methodNeedsReceipt, whatsappReminder } from "@/store/compute";
 import { useFactory } from "@/store/context";
@@ -42,7 +42,7 @@ export function CollectionsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-2xl font-extrabold">التحصيل</h2>
+        <h2 className="text-2xl">التحصيل</h2>
         <p className="text-sm text-muted-foreground">التحصيل بيتخصم من أقدم توريد الأول، فالمواعيد تفضل دقيقة.</p>
       </div>
 
@@ -51,7 +51,7 @@ export function CollectionsPage() {
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold ${tab === t.id ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"}`}
+            className={`shrink-0 rounded-full px-3 py-1.5 text-sm ${tab === t.id ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"}`}
           >
             {t.label}
             <span className="mr-1 opacity-70">{counts[t.id]}</span>
@@ -67,11 +67,11 @@ export function CollectionsPage() {
             {computed.rec.pending.map((c) => {
               const client = db.clients.find((x) => x.id === c.clientId);
               return (
-                <div key={c.id} className="rounded-2xl border bg-card p-4">
+                <div key={c.id} className="rounded-lg border border-border bg-card p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-bold">{client?.name}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="font-medium">{client?.name}</p>
+                      <p className="text-sm text-muted-foreground">
                         {METHOD_LABEL[c.method]} · {formatDate(c.date)}
                       </p>
                     </div>
@@ -92,14 +92,14 @@ export function CollectionsPage() {
       ) : (
         <div className="space-y-2">
           {rows.map((r) => (
-            <div key={r.deliveryId} className="rounded-2xl border bg-card p-4">
+            <div key={r.deliveryId} className="rounded-lg border border-border bg-card p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <Link to={`/clients/${r.clientId}`} className="font-bold">
+                  <Link to={`/clients/${r.clientId}`} className="font-medium">
                     {r.clientName}
                   </Link>
-                  <p className="text-xs text-muted-foreground">
-                    {tab === "overdue" ? <Badge tone="late">متأخر {formatDate(r.dueDate)}</Badge> : formatDate(r.dueDate)}
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    {tab === "overdue" ? <Badge tone="danger">متأخر {formatDate(r.dueDate)}</Badge> : formatDate(r.dueDate)}
                     {r.model ? ` · ${r.model}` : ""}
                   </p>
                 </div>
@@ -189,9 +189,14 @@ export function CollectPanel({ clientId, onClose }: { clientId: string | null; o
       title={client ? `تحصيل من ${client.name}` : "تحصيل"}
       onClose={onClose}
       footer={
-        <Button className="w-full" size="lg" onClick={submit}>
-          حفظ التحصيل
-        </Button>
+        <div className="flex gap-2">
+          <Button className="flex-1" onClick={submit}>
+            حفظ التحصيل
+          </Button>
+          <Button variant="outline" onClick={onClose}>
+            إلغاء
+          </Button>
+        </div>
       }
     >
       <p className="mb-3 text-sm text-muted-foreground">
@@ -213,7 +218,7 @@ export function CollectPanel({ clientId, onClose }: { clientId: string | null; o
                 setMethod(m);
                 setAccountId("");
               }}
-              className={`rounded-full px-3 py-1.5 text-sm font-semibold ${method === m ? "bg-primary text-primary-foreground" : "bg-secondary"}`}
+              className={`rounded-full px-3 py-1.5 text-sm ${method === m ? "bg-primary text-primary-foreground" : "bg-secondary"}`}
             >
               {METHOD_LABEL[m]}
             </button>
@@ -222,7 +227,7 @@ export function CollectPanel({ clientId, onClose }: { clientId: string | null; o
       </Field>
       <Field label="الحساب">
         <select
-          className="h-11 w-full rounded-xl border bg-card px-3"
+          className={selectClass}
           value={accountId || suggestedAccount}
           onChange={(e) => setAccountId(e.target.value)}
         >
@@ -253,7 +258,11 @@ export function CollectPanel({ clientId, onClose }: { clientId: string | null; o
               }
             }}
           />
-          {receipt ? <p className="mt-1 text-xs text-ok">الصورة اتحفظت.</p> : <p className="mt-1 text-xs text-late">من غير صورة التحويل مش هيتسجل.</p>}
+          {receipt ? (
+            <p className="mt-1 text-sm text-ok">الصورة اتحفظت.</p>
+          ) : (
+            <p className="mt-1 text-sm text-danger">من غير صورة التحويل مش هيتسجل.</p>
+          )}
         </Field>
       ) : null}
       <Field label="ملاحظة">

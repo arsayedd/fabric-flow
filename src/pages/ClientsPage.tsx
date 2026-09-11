@@ -24,7 +24,7 @@ export function ClientsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-extrabold">العملاء</h2>
+          <h2 className="text-2xl">العملاء</h2>
           <p className="text-sm text-muted-foreground">بروفايل، كشف حساب، وآجل لكل عميل.</p>
         </div>
         {can.edit ? <Button onClick={() => setOpen(true)}>عميل جديد</Button> : null}
@@ -38,16 +38,20 @@ export function ClientsPage() {
           action={can.edit && !q ? { label: "أضف عميل", onClick: () => setOpen(true) } : undefined}
         />
       ) : (
-        <div className="space-y-2">
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
           {list.map((c) => (
-            <Link key={c.id} to={`/clients/${c.id}`} className="flex items-center justify-between rounded-2xl border bg-card px-4 py-3">
+            <Link
+              key={c.id}
+              to={`/clients/${c.id}`}
+              className="flex items-center justify-between border-b border-border px-4 py-3 last:border-0"
+            >
               <div>
-                <p className="font-bold">{c.name}</p>
-                <p className="text-xs text-muted-foreground">{c.phone || "من غير رقم"}</p>
+                <p className="font-medium">{c.name}</p>
+                <p className="text-sm text-muted-foreground">{c.phone || "من غير رقم"}</p>
               </div>
               <div className="text-left">
                 <Money value={c.balance} />
-                <p className="text-[11px] text-muted-foreground">عليه</p>
+                <p className="text-xs text-muted-foreground">عليه</p>
               </div>
             </Link>
           ))}
@@ -124,49 +128,49 @@ export function ClientProfilePage() {
       </button>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-extrabold">{client.name}</h2>
+          <h2 className="text-2xl">{client.name}</h2>
           <p className="text-sm text-muted-foreground">{client.phone || "من غير رقم"}</p>
         </div>
         <div className="text-left">
-          <p className="text-xs text-muted-foreground">الرصيد عليه</p>
+          <p className="text-sm text-muted-foreground">الرصيد عليه</p>
           <Money value={client.balance} className="text-xl" />
         </div>
       </div>
-      {overdue.length ? <Badge tone="late">متأخر {overdue.length} توريد</Badge> : <Badge tone="ok">مفيش متأخر</Badge>}
+      {overdue.length ? <Badge tone="danger">متأخر {overdue.length} توريد</Badge> : <Badge tone="ok">مفيش متأخر</Badge>}
 
       {can.edit ? (
         <div className="grid grid-cols-2 gap-2">
           <Button onClick={() => setDelOpen(true)}>توريد</Button>
-          <Button variant="brass" onClick={() => setColOpen(true)}>
+          <Button variant="gold" onClick={() => setColOpen(true)}>
             تحصيل
           </Button>
         </div>
       ) : null}
 
       <section>
-        <h3 className="mb-2 font-bold">كشف الحساب</h3>
+        <h3 className="mb-2 text-base">كشف الحساب</h3>
         {client.statement.length === 0 ? (
           <p className="text-sm text-muted-foreground">لسه مفيش حركة.</p>
         ) : (
-          <div className="overflow-x-auto rounded-2xl border bg-card">
+          <div className="overflow-x-auto rounded-lg border border-border bg-card">
             <table className="w-full min-w-[520px] text-sm">
               <thead className="bg-muted text-muted-foreground">
                 <tr>
-                  <th className="p-2 text-right font-semibold">التاريخ</th>
-                  <th className="p-2 text-right font-semibold">البيان</th>
-                  <th className="p-2 text-left font-semibold">مدين</th>
-                  <th className="p-2 text-left font-semibold">دائن</th>
-                  <th className="p-2 text-left font-semibold">الرصيد</th>
+                  <th className="p-2.5 text-right font-medium">التاريخ</th>
+                  <th className="p-2.5 text-right font-medium">البيان</th>
+                  <th className="p-2.5 text-left font-medium">مدين</th>
+                  <th className="p-2.5 text-left font-medium">دائن</th>
+                  <th className="p-2.5 text-left font-medium">الرصيد</th>
                 </tr>
               </thead>
               <tbody>
                 {client.statement.map((l) => (
-                  <tr key={l.id} className="border-t">
+                  <tr key={l.id} className="border-t border-border">
                     <td className="p-2 whitespace-nowrap">{formatDate(l.date)}</td>
                     <td className="p-2">
                       {l.label}
                       {l.kind === "collection" ? (
-                        <span className="mr-1 text-[11px] text-muted-foreground">
+                        <span className="mr-1 text-xs text-muted-foreground">
                           {METHOD_LABEL[db.collections.find((c) => c.id === l.id)?.method ?? "cash"]}
                         </span>
                       ) : null}
@@ -218,7 +222,7 @@ export function ClientProfilePage() {
               .map((d) => (
                 <li key={d.id} className="flex justify-between">
                   <span>توريد {formatDate(d.date)}</span>
-                  <button className="text-late" onClick={() => deleteDelivery(d.id)}>
+                  <button className="text-danger" onClick={() => deleteDelivery(d.id)}>
                     مسح
                   </button>
                 </li>
@@ -228,7 +232,7 @@ export function ClientProfilePage() {
               .map((c) => (
                 <li key={c.id} className="flex justify-between">
                   <span>تحصيل {formatDate(c.date)}</span>
-                  <button className="text-late" onClick={() => deleteCollection(c.id)}>
+                  <button className="text-danger" onClick={() => deleteCollection(c.id)}>
                     مسح
                   </button>
                 </li>

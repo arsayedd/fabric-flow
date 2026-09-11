@@ -111,7 +111,7 @@ type FactoryApi = {
   markAttendance: (workerIds: string[], date: string) => void;
   addPieceWork: (workerId: string, date: string, pieces: number, notes: string) => void;
   addWorkerPayment: (input: Omit<WorkerPayment, "id" | "factoryId">) => void;
-  addOrder: (input: Omit<Order, "id" | "factoryId">) => void;
+  addOrder: (input: Omit<Order, "id" | "factoryId" | "code">) => void;
   updateOrder: (id: string, patch: Partial<Order>) => void;
   deleteOrder: (id: string) => void;
   addManualTx: (input: Omit<ManualTx, "id" | "factoryId">) => void;
@@ -127,6 +127,15 @@ const Ctx = createContext<FactoryApi | null>(null);
 
 function fid(db: Db): string {
   return db.factory?.id ?? "";
+}
+
+/** ترقيم أوامر الإنتاج: SN-1001 وطالع، ومفيش رقم يتكرر */
+function nextOrderCode(orders: Order[]): string {
+  const last = orders.reduce((max, o) => {
+    const n = Number(o.code?.replace(/\D/g, ""));
+    return Number.isFinite(n) ? Math.max(max, n) : max;
+  }, 1000);
+  return `SN-${last + 1}`;
 }
 
 function audit(
@@ -400,7 +409,7 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         mutate({ workerPayments: [row, ...db.workerPayments] }, { action: "create", table: "worker_payments", recordId: row.id, before: null, after: row });
       },
       addOrder: (input) => {
-        const row: Order = { ...input, id: nid(), factoryId: fid(db) };
+        const row: Order = { ...input, id: nid(), factoryId: fid(db), code: nextOrderCode(db.orders) };
         mutate({ orders: [row, ...db.orders] }, { action: "create", table: "orders", recordId: row.id, before: null, after: row });
       },
       updateOrder: (id, patch) => {

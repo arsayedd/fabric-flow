@@ -1,4 +1,4 @@
--- مصنع الملابس — schema مستقلة تتنقل لمشروع Supabase لوحده
+-- صنعة — schema مستقلة تتنقل لمشروع Supabase لوحده
 -- لو هتستخدم مشروع الجيم: نفّذ الملف بعد ما تضيف factory في Exposed schemas
 
 create schema if not exists factory;
@@ -150,15 +150,19 @@ create table factory.worker_payments (
 create table factory.orders (
   factory_id uuid not null references factory.factories(id) on delete cascade,
   id uuid not null default gen_random_uuid(),
+  code text not null,
   client_id uuid,
   model text not null,
+  line text not null default '',
   quantity numeric not null default 0,
+  progress numeric not null default 0 check (progress between 0 and 100),
   piece_cost numeric not null default 0,
   piece_price numeric not null default 0,
   due_date date not null,
-  status text not null default 'open' check (status in ('open', 'done', 'late')),
+  status text not null default 'running' check (status in ('running', 'done', 'late', 'stopped')),
   notes text not null default '',
-  primary key (factory_id, id)
+  primary key (factory_id, id),
+  unique (factory_id, code)
 );
 
 create table factory.manual_tx (

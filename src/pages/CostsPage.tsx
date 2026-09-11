@@ -7,7 +7,7 @@ import { Money } from "@/components/Money";
 import { Field, Panel } from "@/components/Panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, selectClass } from "@/components/ui/input";
 import { cairoToday, formatDate } from "@/lib/utils";
 import { costEntryPaid } from "@/store/compute";
 import { useFactory } from "@/store/context";
@@ -23,7 +23,7 @@ export function CostsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-extrabold">التكاليف</h2>
+          <h2 className="text-2xl">التكاليف</h2>
           <p className="text-sm text-muted-foreground">كل بند بحركاته والمورد وإيه اتدفع وإيه لأ.</p>
         </div>
         {can.edit ? <Button variant="outline" onClick={() => setOpen(true)}>بند جديد</Button> : null}
@@ -31,16 +31,26 @@ export function CostsPage() {
       {computed.costItems.length === 0 ? (
         <EmptyState icon={Warehouse} title="مفيش بنود" body="ضيف بند تكلفة عشان تسجل المصروف عليه." />
       ) : (
-        <div className="space-y-2">
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
           {computed.costItems.map((item) => (
-            <Link key={item.id} to={`/costs/${item.id}`} className="flex items-center justify-between rounded-2xl border bg-card px-4 py-3">
+            <Link
+              key={item.id}
+              to={`/costs/${item.id}`}
+              className="flex items-center justify-between border-b border-border px-4 py-3 last:border-0"
+            >
               <div>
-                <p className="font-bold">{item.name}</p>
-                <p className="text-xs text-muted-foreground">{item.unit} · {item.entries.length} حركة</p>
+                <p className="font-medium">{item.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {item.unit} · {item.entries.length} حركة
+                </p>
               </div>
               <div className="text-left">
                 <Money value={item.amount} />
-                {item.due > 0 ? <p className="text-[11px] text-late">باقي {Math.round(item.due)}</p> : <p className="text-[11px] text-ok">اتدفع</p>}
+                {item.due > 0 ? (
+                  <p className="text-xs text-warn">باقي {Math.round(item.due)}</p>
+                ) : (
+                  <p className="text-xs text-ok">اتدفع</p>
+                )}
               </div>
             </Link>
           ))}
@@ -92,7 +102,7 @@ export function CostItemPage() {
       </Link>
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-2xl font-extrabold">{item.name}</h2>
+          <h2 className="text-2xl">{item.name}</h2>
           <p className="text-sm text-muted-foreground">الوحدة: {item.unit}</p>
         </div>
         {can.edit ? <Button onClick={() => setOpen(true)}>مصروف</Button> : null}
@@ -109,11 +119,11 @@ export function CostItemPage() {
           const paid = costEntryPaid(db, e.id);
           const due = e.amount - paid;
           return (
-            <div key={e.id} className="rounded-2xl border bg-card p-4">
+            <div key={e.id} className="rounded-lg border border-border bg-card p-4">
               <div className="flex justify-between">
                 <div>
-                  <p className="font-bold">{e.vendor || "من غير مورد"}</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="font-medium">{e.vendor || "من غير مورد"}</p>
+                  <p className="text-sm text-muted-foreground">
                     {formatDate(e.date)} {e.quantity ? `· ${e.quantity} ${item.unit}` : ""}
                   </p>
                 </div>
@@ -128,7 +138,7 @@ export function CostItemPage() {
                 ) : null}
               </div>
               {can.delete ? (
-                <button className="mt-2 text-xs text-late" onClick={() => deleteCostEntry(e.id)}>
+                <button className="mt-2 text-sm text-danger" onClick={() => deleteCostEntry(e.id)}>
                   مسح الحركة
                 </button>
               ) : null}
@@ -152,8 +162,8 @@ export function CostItemPage() {
 
 function Mini({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-2xl border bg-card p-3">
-      <p className="text-[11px] text-muted-foreground">{label}</p>
+    <div className="rounded-lg border border-border bg-card p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
       <Money value={value} className="text-sm" />
     </div>
   );
@@ -247,7 +257,7 @@ function PayPanel({
         <Input inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} />
       </Field>
       <Field label="الحساب">
-        <select className="h-11 w-full rounded-xl border bg-card px-3" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+        <select className={selectClass} value={accountId} onChange={(e) => setAccountId(e.target.value)}>
           {db.accounts.map((a) => (
             <option key={a.id} value={a.id}>
               {a.name}
@@ -256,7 +266,7 @@ function PayPanel({
         </select>
       </Field>
       <Field label="الطريقة">
-        <select className="h-11 w-full rounded-xl border bg-card px-3" value={method} onChange={(e) => setMethod(e.target.value as PayMethod)}>
+        <select className={selectClass} value={method} onChange={(e) => setMethod(e.target.value as PayMethod)}>
           {PAY_METHODS.map((m) => (
             <option key={m} value={m}>
               {METHOD_LABEL[m]}

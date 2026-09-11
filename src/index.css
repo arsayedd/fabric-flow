@@ -1,16 +1,17 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
-
 @theme inline {
-  --font-sans: "Cairo", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans Arabic", ui-sans-serif, system-ui, sans-serif;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 1rem;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
@@ -19,43 +20,53 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
+  --color-gold: var(--gold);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-brass: var(--brass);
   --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
   --color-warn: var(--warn);
-  --color-late: var(--late);
-  --radius-sm: 0.4rem;
-  --radius-md: 0.7rem;
-  --radius-lg: 1rem;
-  --radius-xl: 1.4rem;
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-destructive: var(--danger);
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.125rem;
+  --radius-2xl: 1.375rem;
 }
 
 :root {
-  --background: #f3eee4;
-  --foreground: #17221f;
-  --card: #fffaf2;
-  --card-foreground: #17221f;
-  --popover: #fffaf2;
-  --popover-foreground: #17221f;
-  --primary: #1c3d36;
-  --primary-foreground: #f6f1e6;
-  --secondary: #e7decc;
-  --secondary-foreground: #1c3d36;
-  --muted: #ebe3d4;
-  --muted-foreground: #5d685f;
-  --accent: #d4b36a;
-  --accent-foreground: #2a2416;
-  --destructive: #b42318;
-  --border: #ddd2bc;
-  --input: #ddd2bc;
-  --ring: #1c3d36;
-  --brass: #b68a3a;
-  --ok: #1f6b4a;
-  --warn: #9a6700;
-  --late: #b42318;
+  /* هوية صنعة */
+  --navy: #0f1720;
+  --gold: #d59a3c;
+  --cream: #f4efe6;
+
+  --background: var(--cream);
+  --foreground: var(--navy);
+  --card: #fffdf9;
+  --card-foreground: var(--navy);
+  --primary: var(--navy);
+  --primary-foreground: #f4efe6;
+  --secondary: #e8e0d3;
+  --secondary-foreground: var(--navy);
+  --muted: #ebe4d9;
+  --muted-foreground: #5a6672;
+  --accent: var(--gold);
+  --accent-foreground: #2a1e0a;
+  --border: #e0d7c8;
+  --input: #ded4c3;
+  --ring: var(--navy);
+
+  --ok: #2a6b33;
+  --ok-soft: #e3eee1;
+  --warn: #8a5a12;
+  --warn-soft: #f7e9ce;
+  --danger: #a3242f;
+  --danger-soft: #f7e0e1;
 }
 
 * {
@@ -73,7 +84,19 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
-  text-rendering: optimizeLegibility;
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* الهوية: أوزان العناوين 500 فقط */
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 500;
+  line-height: 1.35;
 }
 
 button,
@@ -84,9 +107,14 @@ textarea {
 }
 
 ::selection {
-  background: #d4b36a55;
+  background: color-mix(in srgb, var(--gold) 35%, transparent);
 }
 
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+.latin {
+  font-feature-settings: "tnum";
+  letter-spacing: 0.18em;
 }

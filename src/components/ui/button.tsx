@@ -4,23 +4,23 @@ import type { ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 active:translate-y-px",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 active:translate-y-px",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-[#16332d]",
-        brass: "bg-accent text-accent-foreground hover:bg-[#c9a65c]",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-[#ddd3bf]",
-        outline: "border border-border bg-card hover:bg-muted",
-        ghost: "hover:bg-muted",
-        danger: "bg-destructive text-white hover:bg-[#9b1c1c]",
+        default: "bg-primary text-primary-foreground hover:bg-[#1a2733]",
+        gold: "bg-accent text-accent-foreground hover:bg-[#c78c31]",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-[#ded5c6]",
+        outline: "border border-border bg-card text-foreground hover:bg-muted",
+        ghost: "text-foreground hover:bg-muted",
+        danger: "bg-danger text-white hover:bg-[#8d1e28]",
         whatsapp: "bg-[#128C7E] text-white hover:bg-[#0e7468]",
       },
       size: {
         default: "h-11 px-4",
-        sm: "h-9 px-3 text-xs",
+        sm: "h-9 px-3",
         lg: "h-12 px-5 text-base",
-        icon: "h-11 w-11",
+        icon: "h-10 w-10",
       },
     },
     defaultVariants: {

@@ -1,74 +1,128 @@
 import { useState } from "react";
-import { Shirt } from "lucide-react";
+import { Factory } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
 import { Money } from "@/components/Money";
 import { Field, Panel } from "@/components/Panel";
-import { Badge } from "@/components/ui/badge";
+import { Badge, STATUS } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Card, DataRow } from "@/components/ui/card";
+import { Input, selectClass } from "@/components/ui/input";
 import { cairoToday, formatDate } from "@/lib/utils";
 import { useFactory } from "@/store/context";
+import {
+  ORDER_STATUSES,
+  ORDER_STATUS_LABEL,
+  PRODUCTION_LINES,
+  type OrderStatus,
+} from "@/store/types";
+
+const FILTERS: { id: "all" | OrderStatus; label: string }[] = [
+  { id: "all", label: "الكل" },
+  { id: "running", label: "قيد التنفيذ" },
+  { id: "late", label: "متأخر" },
+  { id: "stopped", label: "متوقف" },
+  { id: "done", label: "مكتمل" },
+];
 
 export function OrdersPage() {
   const { computed, db, can, addOrder, updateOrder, deleteOrder } = useFactory();
   const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState<"all" | OrderStatus>("all");
+
+  const orders = computed.orders.filter((o) => filter === "all" || o.status === filter);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-extrabold">الأوردرات</h2>
-          <p className="text-sm text-muted-foreground">تكلفة القطعة والربح في كل موديل.</p>
+          <h2 className="text-2xl">أوامر الإنتاج</h2>
+          <p className="text-sm text-muted-foreground">كل أمر بخط إنتاجه ونسبة إنجازه وتكلفة القطعة.</p>
         </div>
-        {can.edit ? <Button onClick={() => setOpen(true)}>أوردر</Button> : null}
+        {can.edit ? <Button onClick={() => setOpen(true)}>أمر إنتاج</Button> : null}
       </div>
-      {computed.orders.length === 0 ? (
-        <EmptyState icon={Shirt} title="مفيش أوردرات" body="سجّل الموديل والكمية وتكلفة القطعة وسعر البيع." />
+
+      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+        {FILTERS.map((f) => (
+          <button
+            key={f.id}
+            onClick={() => setFilter(f.id)}
+            className={`shrink-0 rounded-full px-3 py-1.5 text-sm ${
+              filter === f.id ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {orders.length === 0 ? (
+        <EmptyState
+          icon={Factory}
+          title={filter === "all" ? "مفيش أوامر إنتاج" : "مفيش أوامر في الحالة دي"}
+          body="سجّل الموديل وخط الإنتاج والكمية، والسيستم يرقّم الأمر ويحسب ربحه."
+          action={can.edit && filter === "all" ? { label: "أمر إنتاج جديد", onClick: () => setOpen(true) } : undefined}
+        />
       ) : (
-        <div className="space-y-2">
-          {computed.orders.map((o) => {
+        <div className="grid gap-3 md:grid-cols-2">
+          {orders.map((o) => {
             const client = db.clients.find((c) => c.id === o.clientId);
-            const late = o.status !== "done" && o.dueDate < cairoToday();
+            const status = STATUS[o.status];
             return (
-              <div key={o.id} className="rounded-2xl border bg-card p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-bold">{o.model}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {client?.name ?? "من غير عميل"} · {o.quantity} قطعة · تسليم {formatDate(o.dueDate)}
-                    </p>
-                  </div>
-                  {late ? <Badge tone="late">قرب ميعاده</Badge> : o.status === "done" ? <Badge tone="ok">خلص</Badge> : <Badge tone="brass">شغال</Badge>}
+              <Card key={o.id}>
+                <div className="flex items-center justify-between gap-3 border-b pb-3">
+                  <h3 className="text-base">
+                    أمر إنتاج <span className="latin tabular">#{o.code}</span>
+                  </h3>
+                  <Badge tone={status.tone}>{status.label}</Badge>
                 </div>
-                <dl className="mt-3 grid grid-cols-3 gap-2 text-center text-sm">
-                  <div>
-                    <dt className="text-[11px] text-muted-foreground">تكلفة</dt>
-                    <dd>
-                      <Money value={o.pieceCost} className="text-sm" />
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-[11px] text-muted-foreground">بيع</dt>
-                    <dd>
-                      <Money value={o.piecePrice} className="text-sm" />
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-[11px] text-muted-foreground">ربح الأوردر</dt>
-                    <dd>
-                      <Money value={o.profitTotal} signed className="text-sm" />
-                    </dd>
-                  </div>
+                <dl className="mt-1 divide-y divide-border/60">
+                  <DataRow label="المنتج">
+                    {o.model} — دفعة {o.quantity} قطعة
+                  </DataRow>
+                  <DataRow label="خط الإنتاج">{o.line}</DataRow>
+                  <DataRow label="نسبة الإنجاز">
+                    <span className="tabular">{o.progress}%</span>
+                  </DataRow>
+                  <DataRow label="ميعاد التسليم">{formatDate(o.dueDate)}</DataRow>
+                  <DataRow label="العميل">{client?.name ?? "مخزون المصنع"}</DataRow>
+                  <DataRow label="ربح الأمر">
+                    <Money value={o.profitTotal} signed />
+                  </DataRow>
                 </dl>
-                <p className="mt-2 text-xs text-muted-foreground">هامش {Math.round(o.margin)}٪ على القطعة</p>
+
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={`h-full rounded-full ${o.status === "stopped" ? "bg-danger" : o.status === "late" ? "bg-warn" : o.status === "done" ? "bg-ok" : "bg-accent"}`}
+                    style={{ width: `${Math.min(100, Math.max(0, o.progress))}%` }}
+                  />
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  تكلفة القطعة {Math.round(o.pieceCost)} · بيع {Math.round(o.piecePrice)} · هامش {Math.round(o.margin)}٪
+                </p>
+
                 {can.edit ? (
-                  <div className="mt-3 flex gap-2">
-                    {o.status !== "done" ? (
-                      <Button size="sm" variant="outline" onClick={() => updateOrder(o.id, { status: "done" })}>
-                        خلص
-                      </Button>
-                    ) : null}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <select
+                      className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                      value={o.status}
+                      onChange={(e) => updateOrder(o.id, { status: e.target.value as OrderStatus })}
+                    >
+                      {ORDER_STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          {ORDER_STATUS_LABEL[s]}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={o.progress}
+                      onChange={(e) => updateOrder(o.id, { progress: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                      className="h-9 w-20 rounded-md border border-input bg-background px-2 text-sm"
+                      aria-label="نسبة الإنجاز"
+                    />
                     {can.delete ? (
                       <Button size="sm" variant="danger" onClick={() => deleteOrder(o.id)}>
                         مسح
@@ -76,11 +130,12 @@ export function OrdersPage() {
                     ) : null}
                   </div>
                 ) : null}
-              </div>
+              </Card>
             );
           })}
         </div>
       )}
+
       <OrderForm open={open} onClose={() => setOpen(false)} onSave={addOrder} />
     </div>
   );
@@ -96,56 +151,78 @@ function OrderForm({
   onSave: (row: {
     clientId: string | null;
     model: string;
+    line: string;
     quantity: number;
+    progress: number;
     pieceCost: number;
     piecePrice: number;
     dueDate: string;
-    status: "open" | "done" | "late";
+    status: OrderStatus;
     notes: string;
   }) => void;
 }) {
   const { db, can } = useFactory();
   const [model, setModel] = useState("");
+  const [line, setLine] = useState<string>(PRODUCTION_LINES[0]);
   const [clientId, setClientId] = useState(db.clients[0]?.id ?? "");
   const [quantity, setQuantity] = useState("");
   const [pieceCost, setPieceCost] = useState("");
   const [piecePrice, setPiecePrice] = useState("");
   const [dueDate, setDueDate] = useState(cairoToday());
+
   return (
     <Panel
       open={open}
-      title="أوردر جديد"
+      title="أمر إنتاج جديد"
       onClose={onClose}
       footer={
-        <Button
-          className="w-full"
-          onClick={() => {
-            if (!model.trim()) return toast.error("الموديل مطلوب");
-            onSave({
-              clientId: can.finance ? clientId || null : null,
-              model,
-              quantity: Number(quantity) || 0,
-              pieceCost: Number(pieceCost) || 0,
-              piecePrice: Number(piecePrice) || 0,
-              dueDate,
-              status: "open",
-              notes: "",
-            });
-            toast.success("الأوردر اتسجل.");
-            onClose();
-          }}
-        >
-          حفظ
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            className="flex-1"
+            onClick={() => {
+              if (!model.trim()) return toast.error("المنتج مطلوب");
+              onSave({
+                clientId: can.finance ? clientId || null : null,
+                model: model.trim(),
+                line,
+                quantity: Number(quantity) || 0,
+                progress: 0,
+                pieceCost: Number(pieceCost) || 0,
+                piecePrice: Number(piecePrice) || 0,
+                dueDate,
+                status: "running",
+                notes: "",
+              });
+              toast.success("أمر الإنتاج اتسجل وانخد رقمه.");
+              setModel("");
+              setQuantity("");
+              onClose();
+            }}
+          >
+            حفظ أمر الإنتاج
+          </Button>
+          <Button variant="outline" onClick={onClose}>
+            إلغاء
+          </Button>
+        </div>
       }
     >
-      <Field label="الموديل">
-        <Input value={model} onChange={(e) => setModel(e.target.value)} />
+      <Field label="المنتج">
+        <Input value={model} onChange={(e) => setModel(e.target.value)} placeholder="قميص قطني" />
+      </Field>
+      <Field label="خط الإنتاج">
+        <select className={selectClass} value={line} onChange={(e) => setLine(e.target.value)}>
+          {PRODUCTION_LINES.map((l) => (
+            <option key={l} value={l}>
+              {l}
+            </option>
+          ))}
+        </select>
       </Field>
       {can.finance ? (
         <Field label="العميل">
-          <select className="h-11 w-full rounded-xl border bg-card px-3" value={clientId} onChange={(e) => setClientId(e.target.value)}>
-            <option value="">من غير عميل</option>
+          <select className={selectClass} value={clientId} onChange={(e) => setClientId(e.target.value)}>
+            <option value="">مخزون المصنع</option>
             {db.clients.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -154,7 +231,7 @@ function OrderForm({
           </select>
         </Field>
       ) : null}
-      <Field label="الكمية">
+      <Field label="الكمية (قطعة)">
         <Input inputMode="numeric" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
       </Field>
       <Field label="تكلفة القطعة">

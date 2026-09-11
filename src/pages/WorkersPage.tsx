@@ -7,7 +7,8 @@ import { Money } from "@/components/Money";
 import { Field, Panel } from "@/components/Panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { Input, selectClass } from "@/components/ui/input";
 import { cairoToday, formatDate } from "@/lib/utils";
 import { useFactory } from "@/store/context";
 import { PAY_TYPE_LABEL, WORKER_PAY_TYPES, type WorkerPayType } from "@/store/types";
@@ -25,23 +26,36 @@ export function WorkersPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-extrabold">العمال</h2>
+          <h2 className="text-2xl">العمال</h2>
           <p className="text-sm text-muted-foreground">يومية أو شهري أو بالقطعة. حضور جماعي بدوسة.</p>
         </div>
-        {can.edit ? <Button variant="outline" onClick={() => setOpen(true)}>عامل جديد</Button> : null}
+        {can.edit ? (
+          <Button variant="outline" onClick={() => setOpen(true)}>
+            عامل جديد
+          </Button>
+        ) : null}
       </div>
 
-      <div className="rounded-2xl border bg-card p-4">
-        <p className="font-bold">حضور {formatDate(today)}</p>
-        <p className="mt-1 text-sm text-muted-foreground">اتسجل {present.size} من {computed.workers.length}</p>
-        <div className="mt-3 space-y-2">
+      <Card>
+        <div className="flex items-center justify-between">
+          <h3 className="text-base">حضور {formatDate(today)}</h3>
+          <span className="text-sm text-muted-foreground">
+            {present.size} من {computed.workers.length}
+          </span>
+        </div>
+        <div className="mt-3 space-y-1.5">
           {computed.workers.map((w) => (
-            <label key={w.id} className="flex items-center justify-between rounded-xl bg-muted/60 px-3 py-2">
-              <span className="flex items-center gap-2">
-                <input type="checkbox" checked={selected.includes(w.id)} onChange={() => toggle(w.id)} />
-                <span className="font-semibold">{w.name}</span>
+            <label key={w.id} className="flex items-center justify-between rounded-md bg-muted/70 px-3 py-2">
+              <span className="flex items-center gap-2.5">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[#0f1720]"
+                  checked={selected.includes(w.id)}
+                  onChange={() => toggle(w.id)}
+                />
+                <span>{w.name}</span>
               </span>
               {present.has(w.id) ? <Badge tone="ok">حاضر</Badge> : <Badge>لسه</Badge>}
             </label>
@@ -56,23 +70,27 @@ export function WorkersPage() {
         >
           تسجيل الحضور المختار
         </Button>
-      </div>
+      </Card>
 
       {computed.workers.length === 0 ? (
         <EmptyState icon={UsersRound} title="مفيش عمال" body="ضيف العمال عشان تسجل الحضور والسلف والقبض." />
       ) : (
-        <div className="space-y-2">
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
           {computed.workers.map((w) => (
-            <Link key={w.id} to={`/workers/${w.id}`} className="flex items-center justify-between rounded-2xl border bg-card px-4 py-3">
+            <Link
+              key={w.id}
+              to={`/workers/${w.id}`}
+              className="flex items-center justify-between border-b border-border px-4 py-3 last:border-0"
+            >
               <div>
-                <p className="font-bold">{w.name}</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="font-medium">{w.name}</p>
+                <p className="text-sm text-muted-foreground">
                   {PAY_TYPE_LABEL[w.payType]} · {w.rate}
                 </p>
               </div>
               <div className="text-left">
                 <Money value={w.balance} />
-                {w.advance > 0 ? <p className="text-[11px] text-warn">سلفة {Math.round(w.advance)}</p> : null}
+                {w.advance > 0 ? <p className="text-xs text-warn">سلفة {Math.round(w.advance)}</p> : null}
               </div>
             </Link>
           ))}
@@ -102,24 +120,29 @@ function WorkerForm({
       title="عامل جديد"
       onClose={onClose}
       footer={
-        <Button
-          className="w-full"
-          onClick={() => {
-            if (!name.trim()) return toast.error("الاسم مطلوب");
-            onSave({ name, payType, rate: Number(rate) || 0, phone });
-            toast.success("العامل اتضاف.");
-            onClose();
-          }}
-        >
-          حفظ
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            className="flex-1"
+            onClick={() => {
+              if (!name.trim()) return toast.error("الاسم مطلوب");
+              onSave({ name, payType, rate: Number(rate) || 0, phone });
+              toast.success("العامل اتضاف.");
+              onClose();
+            }}
+          >
+            حفظ
+          </Button>
+          <Button variant="outline" onClick={onClose}>
+            إلغاء
+          </Button>
+        </div>
       }
     >
       <Field label="الاسم">
         <Input value={name} onChange={(e) => setName(e.target.value)} />
       </Field>
       <Field label="نظام القبض">
-        <select className="h-11 w-full rounded-xl border bg-card px-3" value={payType} onChange={(e) => setPayType(e.target.value as WorkerPayType)}>
+        <select className={selectClass} value={payType} onChange={(e) => setPayType(e.target.value as WorkerPayType)}>
           {WORKER_PAY_TYPES.map((t) => (
             <option key={t} value={t}>
               {PAY_TYPE_LABEL[t]}
@@ -155,15 +178,15 @@ export function WorkerProfilePage() {
       <button onClick={() => nav(-1)} className="text-sm text-muted-foreground">
         → العمال
       </button>
-      <div className="flex justify-between">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-extrabold">{w.name}</h2>
+          <h2 className="text-2xl">{w.name}</h2>
           <p className="text-sm text-muted-foreground">
             {PAY_TYPE_LABEL[w.payType]} · {w.rate}
           </p>
         </div>
         <div className="text-left">
-          <p className="text-xs text-muted-foreground">رصيده</p>
+          <p className="text-sm text-muted-foreground">رصيده</p>
           <Money value={w.balance} className="text-xl" />
         </div>
       </div>
@@ -197,10 +220,15 @@ export function WorkerProfilePage() {
       </div>
 
       <section>
-        <h3 className="mb-2 font-bold">الحركة</h3>
-        <ul className="space-y-2">
+        <h3 className="mb-2 text-base">الحركة</h3>
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
           {[
-            ...earnings.map((e) => ({ id: e.id, date: e.date, label: e.kind === "piece" ? e.notes || "شغل قطعة" : "حضور", amount: e.amount })),
+            ...earnings.map((e) => ({
+              id: e.id,
+              date: e.date,
+              label: e.kind === "piece" ? e.notes || "شغل قطعة" : "حضور",
+              amount: e.amount,
+            })),
             ...pays.map((p) => ({
               id: p.id,
               date: p.date,
@@ -210,18 +238,27 @@ export function WorkerProfilePage() {
           ]
             .sort((a, b) => b.date.localeCompare(a.date))
             .map((row) => (
-              <li key={row.id} className="flex items-center justify-between rounded-xl border bg-card px-3 py-2 text-sm">
+              <div
+                key={row.id}
+                className="flex items-center justify-between border-b border-border px-4 py-2.5 text-sm last:border-0"
+              >
                 <span>
                   {formatDate(row.date)} · {row.label}
                 </span>
                 <Money value={row.amount} signed />
-              </li>
+              </div>
             ))}
-        </ul>
+        </div>
       </section>
 
       {can.delete ? (
-        <Button variant="danger" onClick={() => { deleteWorker(w.id); nav("/workers"); }}>
+        <Button
+          variant="danger"
+          onClick={() => {
+            deleteWorker(w.id);
+            nav("/workers");
+          }}
+        >
           مسح العامل
         </Button>
       ) : null}
@@ -251,28 +288,33 @@ function PayWorkerPanel({
       title={title}
       onClose={onClose}
       footer={
-        <Button
-          className="w-full"
-          onClick={() => {
-            if (!kind) return;
-            try {
-              addWorkerPayment({
-                workerId,
-                date,
-                kind,
-                amount: Number(amount),
-                accountId: kind === "deduction" ? null : accountId,
-                notes: title,
-              });
-              toast.success("اتسجل في حساب العامل.");
-              onClose();
-            } catch (e) {
-              toast.error(e instanceof Error ? e.message : "فشل");
-            }
-          }}
-        >
-          حفظ
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            className="flex-1"
+            onClick={() => {
+              if (!kind) return;
+              try {
+                addWorkerPayment({
+                  workerId,
+                  date,
+                  kind,
+                  amount: Number(amount),
+                  accountId: kind === "deduction" ? null : accountId,
+                  notes: title,
+                });
+                toast.success("اتسجل في حساب العامل.");
+                onClose();
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : "فشل");
+              }
+            }}
+          >
+            حفظ
+          </Button>
+          <Button variant="outline" onClick={onClose}>
+            إلغاء
+          </Button>
+        </div>
       }
     >
       <Field label="التاريخ">
@@ -283,7 +325,7 @@ function PayWorkerPanel({
       </Field>
       {kind !== "deduction" ? (
         <Field label="من حساب">
-          <select className="h-11 w-full rounded-xl border bg-card px-3" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+          <select className={selectClass} value={accountId} onChange={(e) => setAccountId(e.target.value)}>
             {db.accounts.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}

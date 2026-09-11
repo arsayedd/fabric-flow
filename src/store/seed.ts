@@ -133,9 +133,12 @@ export function demoDb(): Db {
   ];
 
   const orders = [
-    { id: "o1", factoryId: FID, clientId: "cl-1", model: "قميص رجالي", quantity: 200, pieceCost: 145, piecePrice: 210, dueDate: today, status: "open" as const, notes: "" },
-    { id: "o2", factoryId: FID, clientId: "cl-4", model: "فستان صيفي", quantity: 40, pieceCost: 260, piecePrice: 380, dueDate: addDays(today, 2), status: "open" as const, notes: "" },
-    { id: "o3", factoryId: FID, clientId: "cl-5", model: "طقم تصدير", quantity: 250, pieceCost: 220, piecePrice: 380, dueDate: addDays(today, 20), status: "open" as const, notes: "" },
+    { id: "o1", factoryId: FID, code: "SN-1042", clientId: "cl-1", model: "قميص قطني", line: "الخط الثاني", quantity: 300, progress: 64, pieceCost: 145, piecePrice: 210, dueDate: today, status: "running" as const, notes: "" },
+    { id: "o2", factoryId: FID, code: "SN-1043", clientId: "cl-4", model: "فستان صيفي", line: "الخط الأول", quantity: 40, progress: 88, pieceCost: 260, piecePrice: 380, dueDate: addDays(today, 2), status: "running" as const, notes: "" },
+    { id: "o3", factoryId: FID, code: "SN-1044", clientId: "cl-5", model: "طقم تصدير", line: "الخط الثالث", quantity: 250, progress: 25, pieceCost: 220, piecePrice: 380, dueDate: addDays(today, 20), status: "running" as const, notes: "" },
+    { id: "o4", factoryId: FID, code: "SN-1039", clientId: "cl-2", model: "بدلة مكتبية", line: "خط التشطيب", quantity: 40, progress: 100, pieceCost: 1180, piecePrice: 1525, dueDate: addDays(today, -6), status: "done" as const, notes: "" },
+    { id: "o5", factoryId: FID, code: "SN-1041", clientId: "cl-3", model: "تيشيرت مطبوع", line: "الخط الأول", quantity: 160, progress: 40, pieceCost: 44, piecePrice: 60, dueDate: addDays(today, -2), status: "late" as const, notes: "المطبعة متأخرة" },
+    { id: "o6", factoryId: FID, code: "SN-1045", clientId: null, model: "جاكت شتوي", line: "الخط الثاني", quantity: 120, progress: 12, pieceCost: 320, piecePrice: 460, dueDate: addDays(today, 30), status: "stopped" as const, notes: "مستني وصول القماش" },
   ];
 
   const manualTx = [

@@ -129,16 +129,25 @@ export type WorkerPayment = {
   notes: string;
 };
 
+export const ORDER_STATUSES = ["running", "done", "late", "stopped"] as const;
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+export const PRODUCTION_LINES = ["الخط الأول", "الخط الثاني", "الخط الثالث", "خط التشطيب"] as const;
+
 export type Order = {
   id: string;
   factoryId: string;
+  /** رقم أمر الإنتاج المطبوع، زي SN-1042 */
+  code: string;
   clientId: string | null;
   model: string;
+  line: string;
   quantity: number;
+  progress: number;
   pieceCost: number;
   piecePrice: number;
   dueDate: string;
-  status: "open" | "done" | "late";
+  status: OrderStatus;
   notes: string;
 };
 
@@ -216,6 +225,13 @@ export const PAY_TYPE_LABEL: Record<WorkerPayType, string> = {
   daily: "يومية",
   monthly: "شهري",
   piece: "بالقطعة",
+};
+
+export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
+  running: "قيد التنفيذ",
+  done: "مكتمل",
+  late: "متأخر",
+  stopped: "متوقف",
 };
 
 export const DEFAULT_COST_ITEMS: { name: string; unit: string }[] = [
