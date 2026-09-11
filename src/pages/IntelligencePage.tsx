@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { formatDate } from "@/lib/utils";
+import { formatDate, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
 import {
   cohorts,
@@ -142,10 +142,10 @@ export function IntelligencePage() {
           <p className="mt-1 text-sm text-muted-foreground">
             <strong className="font-medium text-foreground">{pf.biggestBySales.party.name}</strong> هو الأكبر مبيعات (
             {Math.round(pf.biggestBySales.sales).toLocaleString("ar-EG")} ج) بسكور {pf.biggestBySales.total} وهامش{" "}
-            {pf.biggestBySales.marginPct === null ? "غير مسجّل" : `${Math.round(pf.biggestBySales.marginPct)}٪`}، بينما{" "}
+            {pf.biggestBySales.marginPct === null ? "غير مسجّل" : `${qty(pf.biggestBySales.marginPct, 0)}٪`}، بينما{" "}
             <strong className="font-medium text-foreground">{pf.bestByScore.party.name}</strong> أعلى سكور (
             {pf.bestByScore.total}) بمبيعات {Math.round(pf.bestByScore.sales).toLocaleString("ar-EG")} ج وهامش{" "}
-            {pf.bestByScore.marginPct === null ? "غير مسجّل" : `${Math.round(pf.bestByScore.marginPct)}٪`}.
+            {pf.bestByScore.marginPct === null ? "غير مسجّل" : `${qty(pf.bestByScore.marginPct, 0)}٪`}.
           </p>
         </Card>
       ) : null}
@@ -216,7 +216,7 @@ export function IntelligencePage() {
                   </td>
                   <td className="p-2.5 text-left tabular">{Math.round(r.collectionRate)}٪</td>
                   <td className="p-2.5 text-left tabular">
-                    {r.marginPct === null ? "—" : `${Math.round(r.marginPct)}٪`}
+                    {r.marginPct === null ? "—" : `${qty(r.marginPct, 0)}٪`}
                   </td>
                   <td className="p-2.5 text-left tabular">
                     {r.clvValue === null ? "—" : <Money value={r.clvValue} />}
@@ -268,7 +268,7 @@ export function IntelligencePage() {
                     <td className="p-2.5 text-left tabular">{c.customers}</td>
                     {[c.m3, c.m6, c.m12].map((v, i) => (
                       <td key={i} className="p-2.5 text-left tabular">
-                        {v === null ? <span className="text-xs text-muted-foreground">لسه بدري</span> : `${Math.round(v)}٪`}
+                        {v === null ? <span className="text-xs text-muted-foreground">لسه بدري</span> : `${qty(v, 0)}٪`}
                       </td>
                     ))}
                   </tr>
@@ -331,7 +331,7 @@ function WeightsPanel({ open, onClose }: { open: boolean; onClose: () => void })
         الحالي {total}٪ — مش لازم يكون 100، النظام بيوزّع نسبيًا.
       </p>
       {(Object.keys(form) as ScoreKey[]).map((k) => (
-        <Field key={k} label={`${SCORE_LABEL[k]} — ${Math.round((form[k] / Math.max(1, total)) * 100)}٪ من الدرجة`}>
+        <Field key={k} label={`${SCORE_LABEL[k]} — ${qty((form[k] / Math.max(1, total)) * 100, 0)}٪ من الدرجة`}>
           <div className="flex items-center gap-3">
             <input
               type="range"

@@ -2,7 +2,7 @@ import { ChevronDown } from "lucide-react";
 import { Money } from "@/components/Money";
 import { Badge, type Tone } from "@/components/ui/badge";
 import { Card, DataRow } from "@/components/ui/card";
-import { formatDate } from "@/lib/utils";
+import { formatDate, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
 import {
   churnRisk,
@@ -41,14 +41,14 @@ export function ScoreSummary({ partyId, onOpen }: { partyId: string; onOpen: () 
         <div>
           <h3 className="text-base">سكور العميل</h3>
           <p className="mt-1 text-3xl tabular">
-            {score.total}
+            {qty(score.total ?? 0, 0)}
             <span className="text-base text-muted-foreground"> / 100</span>
           </p>
         </div>
         <div className="flex flex-col items-end gap-1">
           <Badge tone={score.tier?.tone ?? "muted"}>{score.tier?.label}</Badge>
           <Badge tone={score.risk.level === "high" ? "danger" : score.risk.level === "medium" ? "warn" : "ok"}>
-            {score.risk.levelLabel} {score.risk.total}
+            {score.risk.levelLabel} {qty(score.risk.total, 0)}
           </Badge>
         </div>
       </div>
@@ -168,7 +168,7 @@ export function CustomerIntelligence({ partyId }: { partyId: string }) {
                 ].map((x) => (
                   <div key={x.k} className="flex-1 rounded-md border border-border p-2 text-center">
                     <p className="latin text-xs text-muted-foreground">{x.k}</p>
-                    <p className="text-xl tabular">{x.v}</p>
+                    <p className="text-xl tabular">{qty(x.v, 0)}</p>
                     <p className="text-xs text-muted-foreground">{x.t}</p>
                   </div>
                 ))}
@@ -247,7 +247,7 @@ function ScoreHeader({ score }: { score: CustomerScore }) {
         <div>
           <p className="text-sm text-muted-foreground">سكور العميل</p>
           <p className="text-4xl tabular">
-            {score.total}
+            {qty(score.total ?? 0, 0)}
             <span className="text-lg text-muted-foreground"> / 100</span>
           </p>
           <Badge tone={score.tier?.tone ?? "muted"} className="mt-1">
@@ -257,7 +257,7 @@ function ScoreHeader({ score }: { score: CustomerScore }) {
         <div className="min-w-[180px]">
           <p className="text-sm text-muted-foreground">مؤشر الخطر</p>
           <p className="text-2xl tabular">
-            {score.risk.total}
+            {qty(score.risk.total, 0)}
             <span className="text-base text-muted-foreground"> / 100</span>
           </p>
           <Badge tone={score.risk.level === "high" ? "danger" : score.risk.level === "medium" ? "warn" : "ok"}>
@@ -322,7 +322,7 @@ function BlockCard({ block, coverage }: { block: ScoreBlock; coverage: number })
               <li key={p.label}>
                 <div className="flex items-baseline justify-between gap-3 text-sm">
                   <span>{p.label}</span>
-                  <span className="tabular text-muted-foreground">{p.value}</span>
+                  <span className="tabular text-muted-foreground">{qty(p.value, 0)}</span>
                 </div>
                 <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
                   <div className="h-full rounded-full bg-primary" style={{ width: `${p.value}%` }} />

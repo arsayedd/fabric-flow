@@ -1,4 +1,4 @@
-import { addDays, cairoToday, daysBetween } from "@/lib/utils";
+import { addDays, cairoToday, daysBetween, qty } from "@/lib/utils";
 import { clientBalance, confirmedCollections, fifoRemain } from "./compute";
 import { customerScore, purchasePattern } from "./intelligence";
 import type { Db, Party, PartyRole } from "./types";
@@ -237,9 +237,9 @@ export function supplierScore(db: Db, partyId: string): PartyScore {
   const continuity = clamp(s.entries * 15);
 
   const parts: ScorePart[] = [
-    { label: "حجم التوريد", value: volume, why: `${Math.round(s.purchases)} جنيه مشتريات` },
-    { label: "انتظام السداد له", value: settled, why: `دفعتله ${Math.round(settled)}٪ من مستحقاته` },
-    { label: "استمرارية التعامل", value: continuity, why: `${s.entries} عملية شراء` },
+    { label: "حجم التوريد", value: volume, why: `${qty(s.purchases, 0)} جنيه مشتريات` },
+    { label: "انتظام السداد له", value: settled, why: `دفعتله ${qty(settled, 0)}٪ من مستحقاته` },
+    { label: "استمرارية التعامل", value: continuity, why: `${qty(s.entries, 0)} عملية شراء` },
   ];
   const total = clamp(volume * 0.35 + settled * 0.3 + continuity * 0.35);
   return {
@@ -321,7 +321,7 @@ export function partyAlerts(db: Db): PartyAlert[] {
         partyId: p.id,
         name: p.name,
         tone: "danger",
-        text: `رصيده ${Math.round(credit.exposure)} جنيه وحد الائتمان ${Math.round(credit.limit)} — عدّى بـ${Math.round(credit.exposure - credit.limit)}.`,
+        text: `رصيده ${qty(credit.exposure, 0)} جنيه وحد الائتمان ${qty(credit.limit, 0)} — عدّى بـ${qty(credit.exposure - credit.limit, 0)}.`,
         action: "راجع الائتمان",
         to: `/parties/${p.id}`,
       });
@@ -331,7 +331,7 @@ export function partyAlerts(db: Db): PartyAlert[] {
         partyId: p.id,
         name: p.name,
         tone: "warn",
-        text: `متأخر عليه ${Math.round(s.overdue)} جنيه في ${s.overdueCount} توريد.`,
+        text: `متأخر عليه ${qty(s.overdue, 0)} جنيه في ${qty(s.overdueCount, 0)} توريد.`,
         action: "حصّل الفلوس",
         to: `/parties/${p.id}`,
       });
@@ -341,7 +341,7 @@ export function partyAlerts(db: Db): PartyAlert[] {
         partyId: p.id,
         name: p.name,
         tone: "warn",
-        text: `مطلبش من ${s.daysSinceLast} يوم، ودورة طلباته المعتادة ${pattern.avgDays} يوم.`,
+        text: `مطلبش من ${qty(s.daysSinceLast ?? 0, 0)} يوم، ودورة طلباته المعتادة ${qty(pattern.avgDays ?? 0, 0)} يوم.`,
         action: "كلّمه",
         to: `/parties/${p.id}`,
       });
@@ -351,7 +351,7 @@ export function partyAlerts(db: Db): PartyAlert[] {
         partyId: p.id,
         name: p.name,
         tone: "ok",
-        text: `زوّد مشترياته ${Math.round(s.growthPct)}٪ آخر 90 يوم.`,
+        text: `زوّد مشترياته ${qty(s.growthPct, 0)}٪ آخر 90 يوم.`,
         action: "اعرض عليه أكتر",
         to: `/parties/${p.id}`,
       });

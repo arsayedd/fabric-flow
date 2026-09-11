@@ -29,7 +29,7 @@ export function HealthCard() {
             <Badge tone="muted">البيانات مش كفاية</Badge>
           ) : (
             <>
-              <span className="text-3xl tabular">{health.total}</span>
+              <span className="text-3xl tabular">{qty(health.total, 0)}</span>
               <span className="text-sm text-muted-foreground">/ ١٠٠</span>
               <Badge tone={health.tone}>{health.label}</Badge>
             </>
@@ -228,13 +228,13 @@ export function HealthTeaser() {
               <Badge tone="muted">البيانات مش كفاية</Badge>
             ) : (
               <>
-                <span className="text-xl tabular">{pulse.total}</span>
+                <span className="text-xl tabular">{qty(pulse.total, 0)}</span>
                 <Badge tone={pulse.tone}>{pulse.label}</Badge>
               </>
             )}
           </div>
           <p className="mt-1 truncate text-sm text-muted-foreground">
-            {pulse.weakest ? `أضعف مؤشر: ${pulse.weakest.label} (${Math.round(pulse.weakest.value as number)})` : ""}
+            {pulse.weakest ? `أضعف مؤشر: ${pulse.weakest.label} (${qty(Math.round(pulse.weakest.value as number), 0)})` : ""}
             {pulse.count ? ` · ${qty(pulse.count, 0)} حاجة محتاجة تدخّل` : " · مفيش حاجة مستعجلة"}
           </p>
         </div>

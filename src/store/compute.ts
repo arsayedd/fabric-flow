@@ -1,4 +1,4 @@
-import { addDays, cairoToday } from "@/lib/utils";
+import { addDays, cairoToday, qty } from "@/lib/utils";
 import type { Collection, Db, Delivery, PayMethod } from "./types";
 
 export type DeliveryRemain = Delivery & {
@@ -206,7 +206,7 @@ export function whatsappReminder(opts: {
   phone: string;
 }): string {
   const text = encodeURIComponent(
-    `السلام عليكم أستاذ ${opts.name}\nتذكير بمبلغ مستحق قدره ${Math.round(opts.amount)} جنيه.\nتاريخ الاستحقاق: ${opts.dueDate}\n${opts.factoryName}`,
+    `السلام عليكم أستاذ ${opts.name}\nتذكير بمبلغ مستحق قدره ${qty(opts.amount, 0)} جنيه.\nتاريخ الاستحقاق: ${opts.dueDate}\n${opts.factoryName}`,
   );
   const digits = opts.phone.replace(/\D/g, "");
   const phone = digits.startsWith("0") ? `2${digits}` : digits;

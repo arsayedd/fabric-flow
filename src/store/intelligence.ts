@@ -10,7 +10,7 @@
  *    بيتشال من الحساب وبيتكتب في `missing` — الأوزان تتوزّع على المؤشرات المتاحة بس.
  */
 
-import { addDays, cairoToday, daysBetween } from "@/lib/utils";
+import { addDays, cairoToday, daysBetween, qty } from "@/lib/utils";
 import { confirmedCollections } from "./compute";
 import type { Db, Delivery, Party } from "./types";
 
@@ -357,16 +357,16 @@ function purchaseBlock(db: Db, m: CustomerMetrics, w: number): ScoreBlock {
     weight: w,
     parts: [
       { label: "حجم المشتريات", value: volume, why: `${r0(m.sales)} جنيه مقابل ${r0(peak)} لأكبر عميل عندك` },
-      { label: "عدد الطلبات", value: depth, why: `${m.ordersCount} توريد` },
+      { label: "عدد الطلبات", value: depth, why: `${r0(m.ordersCount)} توريد` },
       { label: "متوسط الطلب", value: ticket, why: `${r0(m.avgOrder)} جنيه، وأكبر طلب ${r0(m.biggestOrder)}` },
     ],
     metrics: [
       { label: "إجمالي الطلبات", value: `${r0(m.sales)} ج` },
-      { label: "عدد الطلبات", value: String(m.ordersCount) },
+      { label: "عدد الطلبات", value: r0(m.ordersCount) },
       { label: "متوسط الطلب", value: `${r0(m.avgOrder)} ج` },
       { label: "أكبر طلب", value: `${r0(m.biggestOrder)} ج` },
       { label: "الكميات", value: m.units ? `${r0(m.units)} وحدة` : "—" },
-      { label: "الطلبات المتكررة", value: m.repeatRate === null ? "—" : `${Math.round(m.repeatRate)}٪` },
+      { label: "الطلبات المتكررة", value: m.repeatRate === null ? "—" : `${r0(m.repeatRate)}٪` },
       ...m.windows.map((x) => ({ label: x.label, value: `${r0(x.recent)} ج` })),
     ],
     missing: [],
@@ -392,22 +392,22 @@ function paymentBlock(m: CustomerMetrics, w: number): ScoreBlock {
       { label: "نسبة التحصيل", value: rate, why: `حصّلت ${r0(m.collected)} من ${r0(m.sales)} جنيه` },
       ...(speed === null
         ? []
-        : [{ label: "سرعة التحصيل", value: speed, why: `بيدفع في ${Math.round(m.avgCollectDays ?? 0)} يوم في المتوسط` }]),
+        : [{ label: "سرعة التحصيل", value: speed, why: `بيدفع في ${r0(m.avgCollectDays ?? 0)} يوم في المتوسط` }]),
       ...(punctual === null
         ? []
-        : [{ label: "الالتزام بالمواعيد", value: punctual, why: `${Math.round(m.onTimeRate ?? 0)}٪ من فواتيره اتسددت في ميعادها` }]),
+        : [{ label: "الالتزام بالمواعيد", value: punctual, why: `${r0(m.onTimeRate ?? 0)}٪ من فواتيره اتسددت في ميعادها` }]),
       ...(delay === null
         ? []
-        : [{ label: "قلة التأخير", value: delay, why: `متوسط التأخير ${Math.round(m.avgDelayDays ?? 0)} يوم` }]),
+        : [{ label: "قلة التأخير", value: delay, why: `متوسط التأخير ${r0(m.avgDelayDays ?? 0)} يوم` }]),
     ],
     metrics: [
       { label: "إجمالي المستحق", value: `${r0(m.sales)} ج` },
       { label: "إجمالي المحصل", value: `${r0(m.collected)} ج` },
-      { label: "نسبة التحصيل", value: `${Math.round(m.collectionRate)}٪` },
-      { label: "متوسط أيام التحصيل", value: m.avgCollectDays === null ? "—" : `${Math.round(m.avgCollectDays)} يوم` },
-      { label: "متوسط التأخير", value: m.avgDelayDays === null ? "—" : `${Math.round(m.avgDelayDays)} يوم` },
-      { label: "عدد مرات التأخير", value: String(m.lateCount) },
-      { label: "أكبر تأخير", value: m.maxDelayDays ? `${Math.round(m.maxDelayDays)} يوم` : "مفيش" },
+      { label: "نسبة التحصيل", value: `${r0(m.collectionRate)}٪` },
+      { label: "متوسط أيام التحصيل", value: m.avgCollectDays === null ? "—" : `${r0(m.avgCollectDays)} يوم` },
+      { label: "متوسط التأخير", value: m.avgDelayDays === null ? "—" : `${r0(m.avgDelayDays)} يوم` },
+      { label: "عدد مرات التأخير", value: r0(m.lateCount) },
+      { label: "أكبر تأخير", value: m.maxDelayDays ? `${r0(m.maxDelayDays)} يوم` : "مفيش" },
       { label: "الرصيد المفتوح", value: `${r0(m.outstanding)} ج` },
       { label: "المتأخر حاليًا", value: `${r0(m.overdue)} ج` },
       ...(m.pendingIn ? [{ label: "تحصيل مستني تأكيد", value: `${r0(m.pendingIn)} ج` }] : []),
@@ -430,14 +430,14 @@ function growthBlock(m: CustomerMetrics, w: number): ScoreBlock {
     parts: usable.map((x) => ({
       label: x.label,
       value: clamp(50 + (x.changePct ?? 0) * 0.8),
-      why: `${(x.changePct ?? 0) >= 0 ? "+" : ""}${Math.round(x.changePct ?? 0)}٪ مقارنة بالفترة اللي قبلها`,
+      why: `${(x.changePct ?? 0) >= 0 ? "+" : ""}${r0(x.changePct ?? 0)}٪ مقارنة بالفترة اللي قبلها`,
     })),
     metrics: m.windows.map((x) => ({
       label: x.label,
       value:
         x.changePct === null
           ? `${r0(x.recent)} ج — مفيش فترة سابقة`
-          : `${r0(x.recent)} ج مقابل ${r0(x.previous)} (${x.changePct >= 0 ? "+" : ""}${Math.round(x.changePct)}٪)`,
+          : `${r0(x.recent)} ج مقابل ${r0(x.previous)} (${x.changePct >= 0 ? "+" : ""}${r0(x.changePct)}٪)`,
     })),
     missing: [],
     note: "النمو بيقارن كل فترة بنفس طولها قبلها — مش بمتوسط عام.",
@@ -453,7 +453,7 @@ function frequencyBlock(m: CustomerMetrics, w: number): ScoreBlock {
       weight: w,
       parts: [],
       metrics: [
-        { label: "آخر طلب", value: m.daysSinceLast === null ? "مفيش" : `منذ ${m.daysSinceLast} يوم` },
+        { label: "آخر طلب", value: m.daysSinceLast === null ? "مفيش" : `منذ ${r0(m.daysSinceLast ?? 0)} يوم` },
         { label: "متوسط الفترة بين الطلبات", value: "محتاج 3 طلبات على الأقل" },
       ],
       missing: [],
@@ -473,14 +473,14 @@ function frequencyBlock(m: CustomerMetrics, w: number): ScoreBlock {
       {
         label: "قرب آخر طلب",
         value: recency,
-        why: `آخر طلب منذ ${m.daysSinceLast} يوم، ودورته المعتادة ${m.cycleDays} يوم`,
+        why: `آخر طلب منذ ${r0(m.daysSinceLast ?? 0)} يوم، ودورته المعتادة ${r0(m.cycleDays)} يوم`,
       },
       { label: "انتظام الدورة", value: rhythm, why: "بيقيس تقارب الفترات بين الطلبات مع بعضها" },
-      { label: "سرعة الدورة", value: cadence, why: `بيطلب كل ${m.cycleDays} يوم` },
+      { label: "سرعة الدورة", value: cadence, why: `بيطلب كل ${r0(m.cycleDays)} يوم` },
     ],
     metrics: [
-      { label: "آخر طلب", value: `منذ ${m.daysSinceLast} يوم` },
-      { label: "متوسط الفترة بين الطلبات", value: `${m.cycleDays} يوم` },
+      { label: "آخر طلب", value: `منذ ${r0(m.daysSinceLast ?? 0)} يوم` },
+      { label: "متوسط الفترة بين الطلبات", value: `${r0(m.cycleDays)} يوم` },
       { label: "الطلب المتوقع الجاي", value: m.expectedNext ?? "—" },
       { label: "الحالة", value: ratio <= 1.5 ? "نشط" : ratio <= 2.5 ? "بدأ يبطّأ" : "متوقف تقريبًا" },
     ],
@@ -509,11 +509,11 @@ function profitBlock(m: CustomerMetrics, w: number): ScoreBlock {
     label: SCORE_LABEL.profit,
     score,
     weight: w,
-    parts: [{ label: "هامش المساهمة", value: score, why: `متوسط هامش ${Math.round(m.marginPct)}٪ على أوامره` }],
+    parts: [{ label: "هامش المساهمة", value: score, why: `متوسط هامش ${r0(m.marginPct)}٪ على أوامره` }],
     metrics: [
       { label: "مساهمة العميل", value: m.contribution === null ? "—" : `${r0(m.contribution)} ج` },
-      { label: "نسبة الهامش", value: `${Math.round(m.marginPct)}٪` },
-      { label: "أوامر الإنتاج", value: String(m.productionOrders) },
+      { label: "نسبة الهامش", value: `${r0(m.marginPct)}٪` },
+      { label: "أوامر الإنتاج", value: r0(m.productionOrders) },
     ],
     missing,
     note: "أكبر عميل مش بالضرورة أفضل عميل — الرقم ده هو اللي يفرّق.",
@@ -544,15 +544,15 @@ function qualityBlock(m: CustomerMetrics, w: number): ScoreBlock {
     score: clamp(sum(available) / available.length),
     weight: w,
     parts: [
-      { label: "قلة الإلغاء والتوقيف", value: noCancel, why: `${m.cancelledOrders} من ${m.productionOrders} أمر اتوقف` },
+      { label: "قلة الإلغاء والتوقيف", value: noCancel, why: `${r0(m.cancelledOrders)} من ${r0(m.productionOrders)} أمر اتوقف` },
       ...(scrapPart === null
         ? []
-        : [{ label: "قلة الهالك", value: scrapPart, why: `نسبة الهالك في أوامره ${(m.scrapRate ?? 0).toFixed(1)}٪` }]),
+        : [{ label: "قلة الهالك", value: scrapPart, why: `نسبة الهالك في أوامره ${qty(m.scrapRate ?? 0, 1)}٪` }]),
     ],
     metrics: [
-      { label: "أوامر الإنتاج", value: String(m.productionOrders) },
-      { label: "أوامر متوقفة", value: String(m.cancelledOrders) },
-      { label: "نسبة الهالك", value: m.scrapRate === null ? "—" : `${(m.scrapRate).toFixed(1)}٪` },
+      { label: "أوامر الإنتاج", value: r0(m.productionOrders) },
+      { label: "أوامر متوقفة", value: r0(m.cancelledOrders) },
+      { label: "نسبة الهالك", value: m.scrapRate === null ? "—" : `${qty(m.scrapRate, 1)}٪` },
     ],
     missing,
     note: "",
@@ -582,15 +582,15 @@ function relationshipBlock(m: CustomerMetrics, w: number): ScoreBlock {
     score: clamp(tenure * 0.35 + depth * 0.3 + stability * 0.2 + variety * 0.15),
     weight: w,
     parts: [
-      { label: "مدة التعامل", value: tenure, why: `${(m.tenureDays / 365).toFixed(1)} سنة` },
-      { label: "عمق التعامل", value: depth, why: `${m.ordersCount} توريد` },
-      { label: "انتظام الطلب", value: stability, why: m.cycleDays ? `دورة ${m.cycleDays} يوم` : "دورة لسه مش واضحة" },
-      { label: "تنوّع المنتجات", value: variety, why: `${m.distinctProducts} منتج مختلف` },
+      { label: "مدة التعامل", value: tenure, why: `${qty(m.tenureDays / 365, 1)} سنة` },
+      { label: "عمق التعامل", value: depth, why: `${r0(m.ordersCount)} توريد` },
+      { label: "انتظام الطلب", value: stability, why: m.cycleDays ? `دورة ${r0(m.cycleDays)} يوم` : "دورة لسه مش واضحة" },
+      { label: "تنوّع المنتجات", value: variety, why: `${r0(m.distinctProducts)} منتج مختلف` },
     ],
     metrics: [
       { label: "أول تعامل", value: m.firstDate ?? "—" },
-      { label: "مدة التعامل", value: `${(m.tenureDays / 365).toFixed(1)} سنة` },
-      { label: "عدد المنتجات المطلوبة", value: String(m.distinctProducts) },
+      { label: "مدة التعامل", value: `${qty(m.tenureDays / 365, 1)} سنة` },
+      { label: "عدد المنتجات المطلوبة", value: r0(m.distinctProducts) },
     ],
     missing: ["الشكاوى", "الفروع والأقسام المتعاملة"],
     note: "",
@@ -686,14 +686,14 @@ export function riskScore(db: Db, partyId: string, metrics?: CustomerMetrics): R
     factors.push({
       label: "متأخرات",
       points: Math.min(30, Math.round(share * 1.5)),
-      why: `${r0(m.overdue)} جنيه متأخر في ${m.overdueCount} توريد`,
+      why: `${r0(m.overdue)} جنيه متأخر في ${r0(m.overdueCount)} توريد`,
     });
   }
   if (m.avgDelayDays && m.avgDelayDays > 5) {
     factors.push({
       label: "بطء السداد",
       points: Math.min(20, Math.round(m.avgDelayDays / 2)),
-      why: `بيتأخر ${Math.round(m.avgDelayDays)} يوم في المتوسط بعد الميعاد`,
+      why: `بيتأخر ${r0(m.avgDelayDays)} يوم في المتوسط بعد الميعاد`,
     });
   }
   if (party?.creditLimit && m.outstanding > party.creditLimit) {
@@ -708,21 +708,21 @@ export function riskScore(db: Db, partyId: string, metrics?: CustomerMetrics): R
     factors.push({
       label: "طلباته بتقل",
       points: Math.min(20, Math.round(Math.abs(w90.changePct) / 3)),
-      why: `${Math.round(w90.changePct)}٪ في آخر 90 يوم`,
+      why: `${r0(w90.changePct)}٪ في آخر 90 يوم`,
     });
   }
   if (m.cycleDays && m.daysSinceLast !== null && m.daysSinceLast > m.cycleDays * 2) {
     factors.push({
       label: "مطلبش من فترة",
       points: 15,
-      why: `آخر طلب منذ ${m.daysSinceLast} يوم ودورته ${m.cycleDays} يوم`,
+      why: `آخر طلب منذ ${r0(m.daysSinceLast ?? 0)} يوم ودورته ${r0(m.cycleDays)} يوم`,
     });
   }
   if (m.marginPct !== null && m.marginPct < 15) {
     factors.push({
       label: "هامش ضعيف",
       points: 10,
-      why: `هامشه ${Math.round(m.marginPct)}٪ بس`,
+      why: `هامشه ${r0(m.marginPct)}٪ بس`,
     });
   }
 
@@ -815,9 +815,9 @@ export function clv(db: Db, partyId: string): Clv {
     enough: true,
     assumptions: [
       `متوسط الطلب ${r0(m.avgOrder)} ج`,
-      `${perYear.toFixed(1)} طلب في السنة (دورة ${m.cycleDays} يوم)`,
-      `افتراض إنه يكمل معاك نفس مدة تعامله الحالية (${years.toFixed(1)} سنة)`,
-      `هامش ${Math.round(m.marginPct)}٪ من أوامر الإنتاج`,
+      `${qty(perYear, 1)} طلب في السنة (دورة ${r0(m.cycleDays)} يوم)`,
+      `افتراض إنه يكمل معاك نفس مدة تعامله الحالية (${qty(years, 1)} سنة)`,
+      `هامش ${r0(m.marginPct)}٪ من أوامر الإنتاج`,
       "ده تقدير مبني على سلوكه لحد النهارده، ومش وعد بإيراد جاي.",
     ],
   };
@@ -843,13 +843,13 @@ export function churnRisk(db: Db, partyId: string): Churn {
   if (ratio > 1) {
     const add = Math.min(55, Math.round((ratio - 1) * 45));
     score += add;
-    reasons.push(`آخر طلب منذ ${m.daysSinceLast} يوم ودورته المعتادة ${m.cycleDays} يوم`);
+    reasons.push(`آخر طلب منذ ${r0(m.daysSinceLast ?? 0)} يوم ودورته المعتادة ${r0(m.cycleDays)} يوم`);
   }
   const w90 = m.windows.find((x) => x.days === 90);
   if (w90 && w90.changePct !== null && w90.changePct < 0) {
     const add = Math.min(30, Math.round(Math.abs(w90.changePct) / 2));
     score += add;
-    reasons.push(`مشترياته في آخر 90 يوم ${Math.round(w90.changePct)}٪`);
+    reasons.push(`مشترياته في آخر 90 يوم ${r0(w90.changePct)}٪`);
   }
   if (m.overdue > 0) {
     score += 10;
@@ -879,7 +879,7 @@ export function insights(db: Db, partyId: string): string[] {
   }
   if (w365?.changePct !== null && w365 && Math.abs(w365.changePct) >= 10) {
     out.push(
-      `على مدار سنة: ${w365.changePct > 0 ? "+" : ""}${Math.round(w365.changePct)}٪ مقارنة بالسنة اللي قبلها.`,
+      `على مدار سنة: ${w365.changePct > 0 ? "+" : ""}${r0(w365.changePct)}٪ مقارنة بالسنة اللي قبلها.`,
     );
   }
 
@@ -892,14 +892,14 @@ export function insights(db: Db, partyId: string): string[] {
     if (early !== null && late !== null && Math.abs(early - late) >= 3) {
       out.push(
         late < early
-          ? `متوسط التحصيل منه اتحسن من ${Math.round(early)} يوم لـ${Math.round(late)} يوم.`
-          : `متوسط التحصيل منه بقى أبطأ: من ${Math.round(early)} يوم لـ${Math.round(late)} يوم.`,
+          ? `متوسط التحصيل منه اتحسن من ${r0(early)} يوم لـ${r0(late)} يوم.`
+          : `متوسط التحصيل منه بقى أبطأ: من ${r0(early)} يوم لـ${r0(late)} يوم.`,
       );
     }
   }
 
   if (m.cycleDays && m.distinctProducts <= 2 && m.ordersCount >= 4) {
-    out.push(`بيطلب نفس المنتج كل ${m.cycleDays} يوم تقريبًا.`);
+    out.push(`بيطلب نفس المنتج كل ${r0(m.cycleDays)} يوم تقريبًا.`);
   }
   if (m.expectedNext) {
     const days = daysBetween(cairoToday(), m.expectedNext);
@@ -913,12 +913,12 @@ export function insights(db: Db, partyId: string): string[] {
     const normal = m.avgOrder;
     if (normal > 0 && m.outstanding > normal * 1.2) {
       out.push(
-        `مديونيته الحالية ${r0(m.outstanding)} جنيه — أعلى من متوسط طلبه (${r0(normal)}) بـ${Math.round(pct(m.outstanding - normal, normal))}٪.`,
+        `مديونيته الحالية ${r0(m.outstanding)} جنيه — أعلى من متوسط طلبه (${r0(normal)}) بـ${r0(pct(m.outstanding - normal, normal))}٪.`,
       );
     }
   }
   if (m.marginPct !== null) {
-    out.push(`هامش الربح على أوامره ${Math.round(m.marginPct)}٪${m.contribution ? ` — مساهمة ${r0(m.contribution)} جنيه` : ""}.`);
+    out.push(`هامش الربح على أوامره ${r0(m.marginPct)}٪${m.contribution ? ` — مساهمة ${r0(m.contribution)} جنيه` : ""}.`);
   }
   if (!out.length) out.push("لسه مفيش حركة كفاية نطلّع منها ملاحظة لها معنى.");
   return out;
@@ -953,8 +953,8 @@ export function nextActions(db: Db, partyId: string): NextAction[] {
       tone: "danger",
       title: "حصّل المتأخر",
       why: [
-        `${r0(m.overdue)} جنيه متأخر في ${m.overdueCount} توريد`,
-        m.avgDelayDays ? `بيتأخر ${Math.round(m.avgDelayDays)} يوم في المتوسط` : "",
+        `${r0(m.overdue)} جنيه متأخر في ${r0(m.overdueCount)} توريد`,
+        m.avgDelayDays ? `بيتأخر ${r0(m.avgDelayDays)} يوم في المتوسط` : "",
       ].filter(Boolean),
     });
   }
@@ -972,8 +972,8 @@ export function nextActions(db: Db, partyId: string): NextAction[] {
         tone: "ok",
         title: `اقتراح: ارفع حد الائتمان لـ${r0(suggested)} جنيه`,
         why: [
-          `سكوره ${score.total} ودرجة سداده ${payment}`,
-          m.onTimeRate !== null ? `${Math.round(m.onTimeRate)}٪ من فواتيره اتسددت في ميعادها` : "",
+          `سكوره ${r0(score.total ?? 0)} ودرجة سداده ${payment}`,
+          m.onTimeRate !== null ? `${r0(m.onTimeRate)}٪ من فواتيره اتسددت في ميعادها` : "",
           `أكبر طلب له ${r0(m.biggestOrder)} وحد الائتمان الحالي ${r0(party.creditLimit)}`,
           "القرار المالي في الآخر قرارك — ده اقتراح مبني على سلوكه المسجّل.",
         ].filter(Boolean),
@@ -993,7 +993,7 @@ export function nextActions(db: Db, partyId: string): NextAction[] {
     out.push({
       tone: "warn",
       title: "راجع السعر معاه",
-      why: [`هامشه ${Math.round(m.marginPct)}٪ بس — أقل من اللي يستحق المجهود`],
+      why: [`هامشه ${r0(m.marginPct)}٪ بس — أقل من اللي يستحق المجهود`],
     });
   }
 
@@ -1001,7 +1001,7 @@ export function nextActions(db: Db, partyId: string): NextAction[] {
     out.push({
       tone: "ok",
       title: "اعرض عليه منتجات أكتر",
-      why: [`سكوره ${score.total}`, `بيطلب ${m.distinctProducts} منتج بس من اللي عندك`],
+      why: [`سكوره ${r0(score.total ?? 0)}`, `بيطلب ${r0(m.distinctProducts)} منتج بس من اللي عندك`],
     });
   }
 
@@ -1048,7 +1048,7 @@ export function journey(db: Db, partyId: string): JourneyStep[] {
   if (w90 && w90.changePct !== null) {
     steps.push({
       period: "آخر 90 يوم",
-      text: `${w90.changePct >= 0 ? "+" : ""}${Math.round(w90.changePct)}٪ — ${r0(w90.recent)} جنيه`,
+      text: `${w90.changePct >= 0 ? "+" : ""}${r0(w90.changePct)}٪ — ${r0(w90.recent)} جنيه`,
       tone: w90.changePct <= -15 ? "danger" : w90.changePct < 0 ? "warn" : "ok",
     });
   }

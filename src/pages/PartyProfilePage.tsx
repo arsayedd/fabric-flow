@@ -1233,7 +1233,7 @@ function DeliveryPanel({
           className="w-full"
           onClick={() => {
             try {
-              if (over && !confirm(`التوريد ده بيعدي الائتمان المتاح بـ${Math.round(value - credit.available)} جنيه. تكمل؟`)) {
+              if (over && !confirm(`التوريد ده بيعدي الائتمان المتاح بـ${qty(value - credit.available, 0)} جنيه. تكمل؟`)) {
                 return;
               }
               addDelivery({

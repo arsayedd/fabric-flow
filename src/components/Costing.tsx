@@ -346,7 +346,7 @@ export function ScoreCard({ score }: { score: ReturnType<typeof profitScore> }) 
             <Badge tone="muted">البيانات مش كفاية</Badge>
           ) : (
             <>
-              <span className="text-2xl tabular">{score.total}</span>
+              <span className="text-2xl tabular">{qty(score.total, 0)}</span>
               <Badge tone={tone}>{score.verdictLabel}</Badge>
             </>
           )}
@@ -382,7 +382,7 @@ export function ScoreCard({ score }: { score: ReturnType<typeof profitScore> }) 
                   {b.label} <span className="text-xs text-muted-foreground">وزن {qty(b.weight, 0)}٪</span>
                 </span>
                 <span className="shrink-0 text-sm tabular">
-                  {b.value === null ? <span className="text-xs text-muted-foreground">مش محسوب</span> : Math.round(b.value)}
+                  {b.value === null ? <span className="text-xs text-muted-foreground">مش محسوب</span> : qty(b.value, 0)}
                 </span>
               </div>
               {b.value !== null ? (
