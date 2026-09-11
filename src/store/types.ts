@@ -328,6 +328,8 @@ export type Settings = {
    * فمصنع مافتحش الشاشة دي عمره بيفضل شغّال بنفس سلوك الأدوار التلاتة.
    */
   permissions?: Partial<Record<Role, PermMatrix>>;
+  /** ترويسة المستندات وقواعد الترقيم — كلها اختيارية، والغايب بياخد افتراضي */
+  docs?: DocSettings;
   /** قرار الطاقة: أساس الجدولة كلها */
   capacity?: {
     hoursPerDay: number;
@@ -477,6 +479,106 @@ export type ManualTx = {
   notes: string;
 };
 
+/* ── المستندات والطباعة ────────────────────────────────────────── */
+
+export type DocSettings = {
+  /** الترويسة: اللي بيطلع فوق كل مستند مطبوع */
+  legalName?: string;
+  taxId?: string;
+  commercialReg?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  /** شعار المصنع كـdata URL — نفس مسار صورة التحويل */
+  logo?: string | null;
+  /** الشروط والفوتر بيتطبعوا في آخر المستند */
+  terms?: string;
+  footer?: string;
+  /** تسميات التوقيعات: مين بيوقّع يمين ومين شمال */
+  signLeft?: string;
+  signRight?: string;
+  showQr?: boolean;
+  /** مقاس الورقة الافتراضي لكل نوع */
+  paper?: Partial<Record<DocType, string>>;
+  /** قواعد الترقيم لكل نوع */
+  numbering?: Partial<Record<DocType, DocNumbering>>;
+  /** مستند بمبلغ أكبر من كده لازم موافقة قبل الإصدار — null معناه بلا موافقات */
+  approvalOver?: number | null;
+};
+
+export type DocNumbering = {
+  prefix: string;
+  /** عدد خانات الرقم المسلسل */
+  padding: number;
+  /** المسلسل يبدأ من أول كل سنة ولا يكمّل */
+  resetYearly: boolean;
+  /** أول رقم — المصنع ممكن يكون عنده أرقام قديمة فيكمّل من عندها */
+  start: number;
+};
+
+export const DOC_TYPES = [
+  "order",
+  "production",
+  "issue",
+  "grn",
+  "qc",
+  "delivery",
+  "invoice",
+  "receipt",
+  "statement",
+  "purchase",
+  "payvoucher",
+  "payslip",
+  "stock",
+] as const;
+export type DocType = (typeof DOC_TYPES)[number];
+
+export const DOC_STATUSES = ["draft", "pending", "approved", "issued", "cancelled"] as const;
+export type DocStatus = (typeof DOC_STATUSES)[number];
+
+/**
+ * المستند المصدَر.
+ *
+ * السطر ده هو **الحاجة الوحيدة اللي بتتخزّن** عن المستند: نوعه ورقمه
+ * وتاريخه ومين أصدره وعلى أي سجل. باقي محتوى المستند (الأسطر
+ * والمجاميع) بيتبنى وقت الطباعة من نفس الدفاتر، فمفيش نسخة تانية من
+ * الأرقام تقدر تخالف الأصل.
+ *
+ * والإلغاء **مابيمسحش**: بيسيب السطر ويحوّل حالته لـ`cancelled` بسبب
+ * مكتوب — لأن رقم مستند اختفى معناه دفتر فيه فجوة.
+ */
+export type IssuedDoc = {
+  id: string;
+  factoryId: string;
+  type: DocType;
+  /** الرقم المطبوع بالكامل، زي INV-2026-000124 */
+  number: string;
+  /** المسلسل لوحده — منه بيتحسب اللي بعده */
+  serial: number;
+  year: number;
+  /** السجل اللي المستند اتبنى منه */
+  refId: string;
+  /** سجل تاني لو المستند محتاج اتنين (زي كشف حساب بفترة) */
+  refExtra?: string | null;
+  date: string;
+  /** المبلغ وقت الإصدار — للموافقات والتحقق، مش للعرض */
+  amount: number | null;
+  status: DocStatus;
+  /** رقم المراجعة: إعادة الإصدار بترفعه بدل ما تغيّر الرقم */
+  revision: number;
+  createdBy: string;
+  createdAt: string;
+  approvedBy?: string | null;
+  approvedAt?: string | null;
+  cancelledBy?: string | null;
+  cancelledAt?: string | null;
+  cancelReason?: string | null;
+  /** بصمة قصيرة بتتطبع مع الـQR — بتكشف الورق المعدّل بالإيد */
+  stamp: string;
+  notes?: string;
+};
+
 export type AuditEntry = {
   id: string;
   factoryId: string;
@@ -522,6 +624,7 @@ export type Db = {
   workerPayments: WorkerPayment[];
   orders: Order[];
   manualTx: ManualTx[];
+  documents: IssuedDoc[];
   auditLog: AuditEntry[];
 };
 

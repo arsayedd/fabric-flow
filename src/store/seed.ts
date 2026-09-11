@@ -277,6 +277,7 @@ export function emptyDb(factoryName: string, industry: Industry = "custom"): Db 
     workerPayments: [],
     orders: [],
     manualTx: [],
+    documents: [],
     auditLog: [
       {
         id: nid(),
@@ -708,6 +709,7 @@ export function demoDb(): Db {
     workerPayments,
     orders,
     manualTx,
+    documents: [],
     auditLog: [
       {
         id: nid(),

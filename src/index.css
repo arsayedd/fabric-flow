@@ -120,3 +120,88 @@ textarea {
   font-feature-settings: "tnum";
   letter-spacing: 0.18em;
 }
+
+/* ── محرك الطباعة ─────────────────────────────────────────────────
+   الطباعة مش `window.print()` على الشاشة. الورقة بتتبنى في عنصر
+   مخصوص (`.sheet`) بمقاسها الحقيقي بالمليمتر، والشاشة كلها بتتشال
+   وقت الطباعة. ومقاس الورقة بيتحقن في `@page` وقت الطلب من
+   `src/lib/print.ts` — لأن CSS مابيقدرش يغيّر مقاس الورقة وقت التشغيل. */
+
+.sheet {
+  background: #fff;
+  color: #111;
+  font-size: 12px;
+  line-height: 1.55;
+  box-sizing: border-box;
+}
+
+.sheet-a4 {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 12mm 12mm;
+}
+
+.sheet-a5 {
+  width: 148mm;
+  min-height: 210mm;
+  padding: 8mm;
+}
+
+.sheet-t80 {
+  width: 80mm;
+  padding: 4mm 3mm;
+  font-size: 11px;
+}
+
+.sheet-t58 {
+  width: 58mm;
+  padding: 3mm 2mm;
+  font-size: 10px;
+}
+
+/* معاينة الطباعة: نفس الورقة مصغّرة عشان تدخل في الشاشة */
+.sheet-preview {
+  transform-origin: top center;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.18);
+}
+
+@media print {
+  body > *:not(.print-root) {
+    display: none !important;
+  }
+
+  .print-root,
+  .print-root * {
+    visibility: visible;
+  }
+
+  .print-root {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    background: #fff;
+  }
+
+  .print-hide {
+    display: none !important;
+  }
+
+  .sheet {
+    width: auto !important;
+    min-height: 0 !important;
+    box-shadow: none !important;
+    transform: none !important;
+  }
+
+  .sheet-break {
+    break-after: page;
+  }
+
+  .sheet thead {
+    display: table-header-group;
+  }
+
+  .sheet tr {
+    break-inside: avoid;
+  }
+}

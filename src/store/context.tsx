@@ -137,6 +137,7 @@ function migrate(db: Db): Db {
     routingSteps: db.routingSteps ?? [],
     stockMovements: db.stockMovements ?? [],
     stageEntries: db.stageEntries ?? [],
+    documents: db.documents ?? [],
     orders: (db.orders ?? []).map((o) => {
       const status: OrderStatus = (o.status as OrderStatus | "open") === "open" ? "running" : o.status;
       return {
@@ -1463,6 +1464,7 @@ function emptyShell(): Db {
     workerPayments: [],
     orders: [],
     manualTx: [],
+    documents: [],
     auditLog: [],
   };
 }
