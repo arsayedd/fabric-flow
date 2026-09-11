@@ -54,6 +54,7 @@ import {
   orderStages,
   stockQty,
 } from "./manufacturing";
+import { buildDoc, canTransition, DOC_DEFS, findDoc, type IssueInput } from "./documents";
 import { demoDb, emptyDb, templateData } from "./seed";
 import { PRODUCTION_LINES } from "./types";
 import type {
@@ -80,7 +81,9 @@ import type {
   CostPayment,
   Db,
   Delivery,
+  DocSettings,
   Invite,
+  IssuedDoc,
   ManualTx,
   Member,
   Order,
@@ -445,6 +448,16 @@ type FactoryApi = {
   updateOrder: (id: string, patch: Partial<Order>) => void;
   deleteOrder: (id: string) => void;
   addManualTx: (input: Omit<ManualTx, "id" | "factoryId">) => void;
+  /**
+   * بيرجّع المستند: لو السجل ده ليه مستند شغّال بيرجّعه بنفس رقمه بدل ما
+   * يعمل رقم جديد — طبع تاني مش مستند تاني.
+   */
+  issueDoc: (input: IssueInput) => IssuedDoc;
+  approveDoc: (id: string) => void;
+  cancelDoc: (id: string, reason: string) => void;
+  /** إعادة الإصدار بترفع رقم المراجعة والرقم يفضل هو */
+  reviseDoc: (id: string) => void;
+  setDocSettings: (patch: Partial<DocSettings>) => void;
   addAccount: (name: string, kind: Account["kind"]) => void;
   invite: (email: string, role: Role) => void;
   acceptInvite: (id: string, name: string) => void;
@@ -1390,6 +1403,62 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         need("finance", "create");
         const row: ManualTx = { ...input, id: nid(), factoryId: fid(db) };
         mutate({ manualTx: [row, ...db.manualTx] }, { action: "create", table: "manual_tx", recordId: row.id, before: null, after: row });
+      },
+      issueDoc: (input) => {
+        const def = DOC_DEFS[input.type];
+        need(def.perm, "export");
+        const existing = findDoc(db.documents, input.type, input.refId);
+        if (existing) return existing;
+        const row = buildDoc(input, {
+          factoryId: fid(db),
+          docs: db.documents,
+          settings: db.settings.docs,
+          actorId: session?.memberId ?? "",
+          now: new Date().toISOString(),
+        });
+        mutate({ documents: [row, ...db.documents] }, { action: "create", table: "documents", recordId: row.id, before: null, after: row });
+        return row;
+      },
+      approveDoc: (id) => {
+        const before = db.documents.find((d) => d.id === id);
+        if (!before) throw new Error("المستند مش موجود.");
+        need(DOC_DEFS[before.type].perm, "edit");
+        if (!canTransition(before.status, "approved")) throw new Error("المستند مش في حالة تسمح بالموافقة.");
+        const after = {
+          status: "approved" as const,
+          approvedBy: session?.memberId ?? "",
+          approvedAt: new Date().toISOString(),
+        };
+        mutate({ documents: db.documents.map((d) => (d.id === id ? { ...d, ...after } : d)) }, { action: "update", table: "documents", recordId: id, before, after });
+      },
+      cancelDoc: (id, reason) => {
+        const before = db.documents.find((d) => d.id === id);
+        if (!before) throw new Error("المستند مش موجود.");
+        need(DOC_DEFS[before.type].perm, "edit");
+        if (!reason.trim()) throw new Error("الإلغاء لازم له سبب مكتوب.");
+        if (!canTransition(before.status, "cancelled")) throw new Error("المستند ملغي أصلًا.");
+        // مافيش مسح: الرقم بيفضل في الدفتر بحالة ملغي عشان مايبقاش فيه فجوة
+        const after = {
+          status: "cancelled" as const,
+          cancelledBy: session?.memberId ?? "",
+          cancelledAt: new Date().toISOString(),
+          cancelReason: reason.trim(),
+        };
+        mutate({ documents: db.documents.map((d) => (d.id === id ? { ...d, ...after } : d)) }, { action: "update", table: "documents", recordId: id, before, after });
+      },
+      reviseDoc: (id) => {
+        const before = db.documents.find((d) => d.id === id);
+        if (!before) throw new Error("المستند مش موجود.");
+        need(DOC_DEFS[before.type].perm, "edit");
+        if (before.status === "cancelled") throw new Error("المستند الملغي مايتراجعش. اعمل مستند جديد.");
+        const after = { revision: before.revision + 1 };
+        mutate({ documents: db.documents.map((d) => (d.id === id ? { ...d, ...after } : d)) }, { action: "update", table: "documents", recordId: id, before, after });
+      },
+      setDocSettings: (patch) => {
+        need("settings", "edit");
+        const before = db.settings.docs ?? {};
+        const docs = { ...before, ...patch };
+        mutate({ settings: { ...db.settings, docs } }, { action: "update", table: "settings", recordId: fid(db), before, after: docs });
       },
       addAccount: (name, kind) => {
         need("finance", "create");
