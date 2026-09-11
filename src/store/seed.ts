@@ -1,4 +1,4 @@
-import { addDays, cairoToday, nid } from "@/lib/utils";
+import { addDays, cairoToday, daysBetween, nid } from "@/lib/utils";
 import { TEMPLATES } from "./templates";
 import {
   DEFAULT_COST_ITEMS,
@@ -82,6 +82,147 @@ export function templateData(factoryId: string, industry: Industry, id: (prefix:
       isOutsourced: out,
     })),
   };
+}
+
+/* ── تاريخ التعامل في وضع العرض ───────────────────────────────
+ * الذكاء مبيطلعش من فراغ: عشان سكور العميل والنمو ودورة الطلب يبانوا،
+ * وضع العرض بيولّد **تاريخ حقيقي الشكل** لكل عميل بشخصية مختلفة:
+ * واحد بيدفع في الميعاد وبينمو، وواحد كبير بس بيتأخر، وواحد وقف.
+ * الأرقام ثابتة (مولّد بذرة واحدة) فالعرض بيطلع نفسه كل مرة.
+ * ده وضع عرض بس — بيانات المصنع الحقيقية بتتسجّل بالحركات.
+ */
+
+type CustomerPlan = {
+  clientId: string;
+  monthsBack: number;
+  /** دورة الطلب المعتادة بالأيام */
+  cycle: number;
+  base: number;
+  /** نمو سنوي في قيمة الطلب */
+  growth: number;
+  /** مدة الآجل */
+  term: number;
+  /** بيدفع بعد كام يوم من التوريد */
+  payLag: number;
+  unitPrice: number;
+  models: string[];
+  method: "cash" | "bank" | "instapay" | "wallet";
+  /** بقاله كام يوم مطلبش — للعميل اللي وقف */
+  stoppedSince?: number;
+};
+
+const PLANS: CustomerPlan[] = [
+  { clientId: "cl-1", monthsBack: 18, cycle: 14, base: 24000, growth: 0.34, term: 15, payLag: 12, unitPrice: 210, models: ["قميص رجالي", "بنطلون قماش", "قميص قطني"], method: "cash" },
+  { clientId: "cl-2", monthsBack: 20, cycle: 21, base: 46000, growth: 0.12, term: 30, payLag: 48, unitPrice: 1400, models: ["بدلة مكتبية", "قميص قطن"], method: "bank" },
+  { clientId: "cl-3", monthsBack: 12, cycle: 10, base: 7200, growth: 0.06, term: 14, payLag: 4, unitPrice: 60, models: ["تيشيرت مطبوع"], method: "cash" },
+  { clientId: "cl-4", monthsBack: 15, cycle: 24, base: 17000, growth: -0.22, term: 20, payLag: 19, unitPrice: 380, models: ["فستان صيفي", "بلوزة"], method: "instapay", stoppedSince: 125 },
+  { clientId: "cl-5", monthsBack: 22, cycle: 30, base: 118000, growth: 0.26, term: 30, payLag: 36, unitPrice: 360, models: ["طقم تصدير"], method: "bank" },
+];
+
+/** مولّد ثابت: نفس البذرة = نفس البيانات في كل تشغيل */
+function seededRandom(seed: number): () => number {
+  let s = seed % 2147483647;
+  if (s <= 0) s += 2147483646;
+  return () => {
+    s = (s * 16807) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+}
+
+function history(today: string, cash: string, bank: string, insta: string, wallet: string) {
+  const accountOf = { cash, bank, instapay: insta, wallet } as const;
+  const deliveries: Db["deliveries"] = [];
+  const collections: Db["collections"] = [];
+
+  PLANS.forEach((plan, planIndex) => {
+    const rnd = seededRandom(7919 * (planIndex + 3));
+    const start = addDays(today, -plan.monthsBack * 30);
+    const stopAt = addDays(today, -(plan.stoppedSince ?? 46));
+    const rows: Db["deliveries"] = [];
+    let date = start;
+    let i = 0;
+
+    while (date <= stopAt) {
+      const years = daysBetween(start, date) / 365;
+      const amount = Math.round((plan.base * (1 + plan.growth * years) * (0.82 + rnd() * 0.36)) / 500) * 500;
+      rows.push({
+        id: `h-${plan.clientId}-${i}`,
+        factoryId: FID,
+        clientId: plan.clientId,
+        date,
+        dueDate: addDays(date, plan.term),
+        amount,
+        model: plan.models[i % plan.models.length],
+        quantity: Math.max(1, Math.round(amount / plan.unitPrice)),
+        notes: "",
+      });
+      date = addDays(date, Math.max(4, Math.round(plan.cycle * (0.75 + rnd() * 0.55))));
+      i++;
+    }
+
+    rows.forEach((d, k) => {
+      const lag = Math.max(2, Math.round(plan.payLag * (0.7 + rnd() * 0.7)));
+      const payDate = addDays(d.date, lag);
+      if (payDate > today) return;
+      collections.push({
+        id: `hc-${plan.clientId}-${k}`,
+        factoryId: FID,
+        clientId: plan.clientId,
+        date: payDate,
+        amount: d.amount,
+        method: plan.method,
+        accountId: accountOf[plan.method],
+        receiptImage: plan.method === "cash" ? null : "demo",
+        status: "confirmed",
+        chequeDate: null,
+        notes: "",
+      });
+    });
+
+    deliveries.push(...rows);
+  });
+
+  // التكاليف والمسحوبات الشهرية: عشان الخزنة والأرباح تفضل منطقية مع حجم المبيعات
+  const months = new Map<string, number>();
+  for (const d of deliveries) months.set(d.date.slice(0, 7), (months.get(d.date.slice(0, 7)) ?? 0) + d.amount);
+  const costEntries: Db["costEntries"] = [];
+  const costPayments: Db["costPayments"] = [];
+  const manualTx: Db["manualTx"] = [];
+  const thisMonth = today.slice(0, 7);
+
+  [...months.entries()]
+    .filter(([month]) => month < thisMonth)
+    .forEach(([month, revenue], idx) => {
+      const day = `${month}-05`;
+      const add = (suffix: string, costItemId: string, partyId: string, vendor: string, amount: number, quantity: number) => {
+        const id = `hce-${month}-${suffix}`;
+        costEntries.push({ id, factoryId: FID, costItemId, date: day, vendor, partyId, quantity, amount: Math.round(amount), notes: "ملخص الشهر" });
+        costPayments.push({
+          id: `hcp-${month}-${suffix}`,
+          factoryId: FID,
+          costEntryId: id,
+          date: addDays(day, 3),
+          amount: Math.round(amount),
+          accountId: idx % 2 === 0 ? bank : cash,
+          method: idx % 2 === 0 ? "bank" : "cash",
+        });
+      };
+      add("fabric", "ci-1", "sup-1", "مصبغة السلام", revenue * 0.4, Math.round(revenue / 45));
+      add("acc", "ci-5", "sup-2", "مكتبة الإكسسوار", revenue * 0.05, Math.round(revenue / 30));
+      add("outsource", "ci-10", "ws-1", "ورشة عم شريف للخياطة", revenue * 0.07, Math.round(revenue / 120));
+      add("rent", "ci-14", "sup-4", "المالك", 18000, 1);
+      add("power", "ci-15", "sup-3", "شركة الكهرباء", 2900, 1);
+      manualTx.push({
+        id: `hmt-${month}`,
+        factoryId: FID,
+        date: `${month}-28`,
+        accountId: cash,
+        amount: -Math.round(revenue * 0.19),
+        notes: "أجور الشهر ومسحوبات المالك",
+      });
+    });
+
+  return { deliveries, collections, costEntries, costPayments, manualTx };
 }
 
 export function emptyDb(factoryName: string, industry: Industry = "custom"): Db {
@@ -394,18 +535,22 @@ export function demoDb(): Db {
     { id: nid(), factoryId: FID, partyId: "cl-2", title: "تسليم عرض أسعار الموسم الجديد", dueDate: addDays(today, 3), assigneeName: "صاحب المصنع", status: "open", createdAt: new Date().toISOString() },
   ];
 
+  const hist = history(today, cash, bank, insta, wallet);
+
   const deliveries = [
+    ...hist.deliveries,
     { id: "d1", factoryId: FID, clientId: "cl-1", date: addDays(today, -25), dueDate: addDays(today, -10), amount: 42000, model: "قميص رجالي", quantity: 200, notes: "" },
     { id: "d2", factoryId: FID, clientId: "cl-1", date: addDays(today, -8), dueDate: today, amount: 18500, model: "بنطلون قماش", quantity: 80, notes: "" },
     { id: "d3", factoryId: FID, clientId: "cl-2", date: addDays(today, -20), dueDate: addDays(today, -5), amount: 61000, model: "بدلة مكتبية", quantity: 40, notes: "" },
     { id: "d4", factoryId: FID, clientId: "cl-2", date: addDays(today, -4), dueDate: addDays(today, 3), amount: 24000, model: "قميص قطن", quantity: 120, notes: "" },
     { id: "d5", factoryId: FID, clientId: "cl-3", date: addDays(today, -2), dueDate: addDays(today, 12), amount: 9600, model: "تيشيرت", quantity: 160, notes: "" },
-    { id: "d6", factoryId: FID, clientId: "cl-4", date: addDays(today, -15), dueDate: addDays(today, 2), amount: 15200, model: "فستان صيفي", quantity: 40, notes: "" },
+    { id: "d6", factoryId: FID, clientId: "cl-4", date: addDays(today, -96), dueDate: addDays(today, -76), amount: 15200, model: "فستان صيفي", quantity: 40, notes: "آخر طلب قبل ما يتوقف" },
     { id: "d7", factoryId: FID, clientId: "cl-5", date: addDays(today, -40), dueDate: addDays(today, -12), amount: 180000, model: "طقم تصدير", quantity: 500, notes: "دفعة أولى اتجمعت" },
     { id: "d8", factoryId: FID, clientId: "cl-5", date: addDays(today, -6), dueDate: addDays(today, 20), amount: 95000, model: "طقم تصدير", quantity: 250, notes: "" },
   ];
 
   const collections = [
+    ...hist.collections,
     { id: "c1", factoryId: FID, clientId: "cl-1", date: addDays(today, -18), amount: 20000, method: "cash" as const, accountId: cash, receiptImage: null, status: "confirmed" as const, chequeDate: null, notes: "دفعة أولى" },
     { id: "c2", factoryId: FID, clientId: "cl-2", date: addDays(today, -12), amount: 30000, method: "bank" as const, accountId: bank, receiptImage: "demo", status: "confirmed" as const, chequeDate: null, notes: "" },
     { id: "c3", factoryId: FID, clientId: "cl-5", date: addDays(today, -30), amount: 100000, method: "bank" as const, accountId: bank, receiptImage: "demo", status: "confirmed" as const, chequeDate: null, notes: "دفعة تصدير" },
@@ -441,6 +586,7 @@ export function demoDb(): Db {
   ];
 
   const costEntries = [
+    ...hist.costEntries,
     { id: "ce1", factoryId: FID, costItemId: "ci-1", date: addDays(today, -14), vendor: "مصبغة السلام", partyId: "sup-1", quantity: 850, amount: 38250, notes: "أقمشة قمصان" },
     { id: "ce2", factoryId: FID, costItemId: "ci-14", date: addDays(today, -9), vendor: "المالك", partyId: "sup-4", quantity: 1, amount: 18000, notes: "إيجار سبتمبر" },
     { id: "ce3", factoryId: FID, costItemId: "ci-4", date: addDays(today, -5), vendor: "مكتبة الإكسسوار", partyId: "sup-2", quantity: 2000, amount: 4200, notes: "" },
@@ -449,6 +595,7 @@ export function demoDb(): Db {
   ];
 
   const costPayments = [
+    ...hist.costPayments,
     { id: nid(), factoryId: FID, costEntryId: "ce1", date: addDays(today, -14), amount: 20000, accountId: bank, method: "bank" as const },
     { id: nid(), factoryId: FID, costEntryId: "ce2", date: addDays(today, -9), amount: 18000, accountId: cash, method: "cash" as const },
     { id: nid(), factoryId: FID, costEntryId: "ce4", date: addDays(today, -3), amount: 3100, accountId: wallet, method: "wallet" as const },
@@ -457,7 +604,7 @@ export function demoDb(): Db {
 
   const orders = [
     { id: "o1", factoryId: FID, code: "SN-1042", clientId: "cl-1", model: "قميص قطني", productId: "p1", bomId: "b1", materialsIssuedAt: addDays(today, -10), line: "الخط الثاني", quantity: 300, progress: 64, pieceCost: 212, piecePrice: 265, dueDate: today, status: "running" as const, notes: "" },
-    { id: "o2", factoryId: FID, code: "SN-1043", clientId: "cl-4", model: "فستان صيفي", productId: "p2", bomId: "b2", materialsIssuedAt: null, line: "الخط الأول", quantity: 40, progress: 88, pieceCost: 403, piecePrice: 520, dueDate: addDays(today, 2), status: "running" as const, notes: "" },
+    { id: "o2", factoryId: FID, code: "SN-1043", clientId: "cl-3", model: "فستان صيفي", productId: "p2", bomId: "b2", materialsIssuedAt: null, line: "الخط الأول", quantity: 40, progress: 88, pieceCost: 403, piecePrice: 520, dueDate: addDays(today, 2), status: "running" as const, notes: "" },
     { id: "o3", factoryId: FID, code: "SN-1044", clientId: "cl-5", model: "طقم تصدير", productId: null, bomId: null, materialsIssuedAt: null, line: "الخط الثالث", quantity: 250, progress: 25, pieceCost: 220, piecePrice: 380, dueDate: addDays(today, 20), status: "running" as const, notes: "" },
     { id: "o4", factoryId: FID, code: "SN-1039", clientId: "cl-2", model: "بدلة مكتبية", productId: null, bomId: null, materialsIssuedAt: null, line: "خط التشطيب", quantity: 40, progress: 100, pieceCost: 1180, piecePrice: 1525, dueDate: addDays(today, -6), status: "done" as const, notes: "" },
     { id: "o5", factoryId: FID, code: "SN-1041", clientId: "cl-3", model: "تيشيرت مطبوع", productId: "p3", bomId: "b3", materialsIssuedAt: null, line: "الخط الأول", quantity: 160, progress: 40, pieceCost: 114, piecePrice: 165, dueDate: addDays(today, -2), status: "late" as const, notes: "المطبعة متأخرة" },
@@ -477,6 +624,7 @@ export function demoDb(): Db {
   ];
 
   const manualTx = [
+    ...hist.manualTx,
     { id: nid(), factoryId: FID, date: addDays(today, -20), accountId: cash, amount: 15000, notes: "رصيد افتتاحي للدرج" },
     { id: nid(), factoryId: FID, date: addDays(today, -20), accountId: bank, amount: 80000, notes: "رصيد افتتاحي للبنك" },
     { id: nid(), factoryId: FID, date: addDays(today, -11), accountId: cash, amount: -1200, notes: "نثريات ورشة" },

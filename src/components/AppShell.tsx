@@ -1,6 +1,7 @@
 import {
   Banknote,
   Boxes,
+  Brain,
   Factory,
   Home,
   Package,
@@ -37,6 +38,7 @@ const supervisorNav = [
 ];
 
 const moreLinks = [
+  { to: "/intelligence", label: "ذكاء العملاء", icon: Brain },
   { to: "/products", label: "المنتجات", icon: Package },
   { to: "/materials", label: "المخزن", icon: Boxes },
   { to: "/costs", label: "التكاليف", icon: Warehouse },

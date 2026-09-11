@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { AppShell, MorePage } from "@/components/AppShell";
 import { Gate } from "@/pages/Gate";
 import { HomePage } from "@/pages/HomePage";
+import { IntelligencePage } from "@/pages/IntelligencePage";
 import { PartiesPage } from "@/pages/PartiesPage";
 import { PartyProfilePage } from "@/pages/PartyProfilePage";
 import { CollectionsPage } from "@/pages/CollectionsPage";
@@ -54,6 +55,14 @@ export default function App() {
           element={
             <Finance>
               <PartyProfilePage />
+            </Finance>
+          }
+        />
+        <Route
+          path="/intelligence"
+          element={
+            <Finance>
+              <IntelligencePage />
             </Finance>
           }
         />

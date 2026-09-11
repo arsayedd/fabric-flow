@@ -12,6 +12,7 @@ import {
   workerAdvance,
   workerBalance,
 } from "./compute";
+import type { ScoreWeights } from "./intelligence";
 import { partyAlerts, portfolio } from "./parties";
 import {
   activeBom,
@@ -221,6 +222,7 @@ type FactoryApi = {
   startDemo: (role: Role) => void;
   createFactory: (name: string, industry: Industry) => void;
   setOverhead: (value: number) => void;
+  setScoreWeights: (weights: ScoreWeights) => void;
   addMaterial: (input: Omit<Material, "id" | "factoryId">) => void;
   updateMaterial: (id: string, patch: Partial<Material>) => void;
   addProduct: (input: Omit<Product, "id" | "factoryId">) => void;
@@ -417,6 +419,16 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         mutate(
           { settings: { ...db.settings, overheadPerUnit: Math.max(0, value) } },
           { action: "update", table: "settings", recordId: "overhead", before: db.settings, after: { overheadPerUnit: value } },
+        );
+      },
+      /** أوزان السكور: صاحب المصنع بس، وبتتسجل في سجل التعديلات */
+      setScoreWeights: (weights) => {
+        if (!can.staff) throw new Error("أوزان السكور لصاحب المصنع بس.");
+        const total = Object.values(weights).reduce((s, v) => s + v, 0);
+        if (total <= 0) throw new Error("مجموع الأوزان لازم يكون أكبر من صفر.");
+        mutate(
+          { settings: { ...db.settings, scoreWeights: weights } },
+          { action: "update", table: "settings", recordId: "score_weights", before: db.settings?.scoreWeights ?? null, after: weights },
         );
       },
       addMaterial: (input) => {

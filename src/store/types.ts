@@ -312,6 +312,8 @@ export type Settings = {
   industry: Industry;
   /** طريقة توزيع الأوفرهيد على القطعة */
   overheadPerUnit: number;
+  /** أوزان سكور العميل — صاحب المصنع يقدر يعدّلها */
+  scoreWeights?: Record<"purchase" | "payment" | "growth" | "frequency" | "profit" | "quality" | "relationship", number>;
 };
 
 export type Unit = { id: string; factoryId: string; name: string };

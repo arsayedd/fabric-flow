@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cairoToday, formatDate } from "@/lib/utils";
 import { useFactory } from "@/store/context";
+import { IntelligenceTeaser } from "./IntelligencePage";
 
 export function HomePage() {
   const { can, computed } = useFactory();
@@ -78,6 +79,8 @@ export function HomePage() {
           </div>
         </Card>
       )}
+
+      <IntelligenceTeaser />
 
       <section>
         <SectionHead title="خطوط الإنتاج" to="/orders" />

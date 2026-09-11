@@ -14,7 +14,6 @@ import { cairoToday, formatDate, qty } from "@/lib/utils";
 import { whatsappReminder } from "@/store/compute";
 import { useFactory } from "@/store/context";
 import {
-  customerScore,
   customerSegments,
   customerStats,
   findDuplicates,
@@ -39,13 +38,15 @@ import {
   type CommChannel,
   type PartyRole,
 } from "@/store/types";
+import { CustomerIntelligence, ScoreSummary } from "@/components/Intelligence";
 import { CollectPanel } from "./CollectionsPage";
 
-const TABS = ["overview", "account", "timeline", "comms", "info"] as const;
+const TABS = ["overview", "intelligence", "account", "timeline", "comms", "info"] as const;
 type Tab = (typeof TABS)[number];
 
 const TAB_LABEL: Record<Tab, string> = {
   overview: "نظرة عامة",
+  intelligence: "الذكاء",
   account: "كشف الحساب",
   timeline: "الخط الزمني",
   comms: "التواصل والمهام",
@@ -154,6 +155,7 @@ export function PartyProfilePage() {
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:px-0">
         {TABS.map((t) => {
           if (t === "account" && !isCustomer && !isSupplier) return null;
+          if (t === "intelligence" && !isCustomer) return null;
           return (
             <button
               key={t}
@@ -170,7 +172,15 @@ export function PartyProfilePage() {
         })}
       </div>
 
-      {tab === "overview" ? <Overview partyId={party.id} isCustomer={isCustomer} isSupplier={isSupplier} /> : null}
+      {tab === "overview" ? (
+        <Overview
+          partyId={party.id}
+          isCustomer={isCustomer}
+          isSupplier={isSupplier}
+          onOpenIntelligence={() => setTab("intelligence")}
+        />
+      ) : null}
+      {tab === "intelligence" ? <CustomerIntelligence partyId={party.id} /> : null}
       {tab === "account" ? <AccountTab partyId={party.id} statement={party.statement} isCustomer={isCustomer} /> : null}
       {tab === "timeline" ? <Timeline partyId={party.id} /> : null}
       {tab === "comms" ? <CommsTab partyId={party.id} /> : null}
@@ -193,12 +203,22 @@ export function PartyProfilePage() {
 
 /* ── 360: المالي والتجاري والإنتاجي والعلاقة ─────────────────── */
 
-function Overview({ partyId, isCustomer, isSupplier }: { partyId: string; isCustomer: boolean; isSupplier: boolean }) {
+function Overview({
+  partyId,
+  isCustomer,
+  isSupplier,
+  onOpenIntelligence,
+}: {
+  partyId: string;
+  isCustomer: boolean;
+  isSupplier: boolean;
+  onOpenIntelligence: () => void;
+}) {
   const { db, computed } = useFactory();
   const stats = customerStats(db, partyId);
   const sup = supplierStats(db, partyId);
   const credit = partyCredit(db, partyId);
-  const score = isCustomer ? customerScore(db, partyId) : supplierScore(db, partyId);
+  const score = supplierScore(db, partyId);
   const pattern = purchasePattern(db, partyId);
   const affinity = productAffinity(db, partyId);
   const alerts = computed.alerts.filter((a) => a.partyId === partyId);
@@ -310,7 +330,7 @@ function Overview({ partyId, isCustomer, isSupplier }: { partyId: string; isCust
         </Card>
       ) : null}
 
-      <ScoreCard score={score} />
+      {isCustomer ? <ScoreSummary partyId={partyId} onOpen={onOpenIntelligence} /> : <ScoreCard score={score} />}
 
       {pattern.avgDays ? (
         <Card>

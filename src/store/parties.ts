@@ -1,6 +1,10 @@
 import { addDays, cairoToday, daysBetween } from "@/lib/utils";
 import { clientBalance, confirmedCollections, fifoRemain } from "./compute";
+import { customerScore, purchasePattern } from "./intelligence";
 import type { Db, Party, PartyRole } from "./types";
+
+export { purchasePattern };
+export type { PurchasePattern } from "./intelligence";
 
 /** العملاء فقط — للقوائم المنسدلة وشاشات البيع */
 export function customers(db: Db): Party[] {
@@ -214,74 +218,6 @@ function clamp(n: number): number {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
-export function customerScore(db: Db, partyId: string): PartyScore {
-  const s = customerStats(db, partyId);
-  if (s.orders < 2) {
-    return {
-      total: null,
-      parts: [],
-      reasons: ["البيانات لسه مش كفاية — محتاج توريدين على الأقل عشان السكور يبقى له معنى."],
-      risk: null,
-      health: "unknown",
-      enough: false,
-    };
-  }
-
-  const collectionRate = s.sales > 0 ? (s.collected / s.sales) * 100 : 0;
-  const overdueShare = s.sales > 0 ? (s.overdue / s.sales) * 100 : 0;
-  const payment = clamp(collectionRate - overdueShare * 1.5);
-
-  const allSales = db.parties.filter((p) => p.roles.includes("customer")).map((p) => customerStats(db, p.id).sales);
-  const maxSales = Math.max(...allSales, 1);
-  const volume = clamp((s.sales / maxSales) * 100);
-
-  const growth = s.growthPct === null ? 50 : clamp(50 + s.growthPct);
-
-  const orders = db.orders.filter((o) => o.clientId === partyId && o.piecePrice > 0);
-  const margin = orders.length
-    ? orders.reduce((acc, o) => acc + ((o.piecePrice - o.pieceCost) / o.piecePrice) * 100, 0) / orders.length
-    : null;
-  const profitability = margin === null ? 50 : clamp(margin * 2.5);
-
-  const cycle = purchasePattern(db, partyId);
-  const lateness = cycle.avgDays && s.daysSinceLast ? s.daysSinceLast / cycle.avgDays : 1;
-  const risk = clamp(overdueShare * 1.5 + Math.max(0, (lateness - 1) * 25) + (100 - payment) * 0.2);
-
-  const parts: ScorePart[] = [
-    { label: "الالتزام بالسداد", value: payment, why: `حصّلت ${Math.round(collectionRate)}٪ من توريداته` },
-    { label: "حجم التعامل", value: volume, why: `مبيعاته مقارنة بأكبر عميل عندك` },
-    {
-      label: "النمو",
-      value: growth,
-      why: s.growthPct === null ? "مفيش فترة سابقة للمقارنة" : `${s.growthPct > 0 ? "+" : ""}${Math.round(s.growthPct)}٪ آخر 90 يوم`,
-    },
-    {
-      label: "الربحية",
-      value: profitability,
-      why: margin === null ? "مفيش أوامر إنتاج بأسعار مسجّلة" : `متوسط هامش ${Math.round(margin)}٪ على أوامره`,
-    },
-  ];
-
-  const total = clamp(payment * 0.35 + volume * 0.2 + growth * 0.2 + profitability * 0.25);
-  const reasons: string[] = [];
-  if (collectionRate >= 90) reasons.push(`تحصيل ${Math.round(collectionRate)}٪`);
-  if (s.growthPct !== null && s.growthPct > 10) reasons.push(`نمو ${Math.round(s.growthPct)}٪`);
-  if (s.overdue > 0) reasons.push(`متأخر عليه ${Math.round(s.overdue)} جنيه`);
-  if (margin !== null && margin >= 25) reasons.push(`هامش عالي ${Math.round(margin)}٪`);
-  if (s.daysSinceLast !== null && cycle.avgDays && s.daysSinceLast > cycle.avgDays * 2) {
-    reasons.push(`مطلبش من ${s.daysSinceLast} يوم`);
-  }
-
-  return {
-    total,
-    parts,
-    reasons,
-    risk,
-    health: risk >= 55 || total < 45 ? "risk" : risk >= 30 || total < 65 ? "watch" : "good",
-    enough: true,
-  };
-}
-
 export function supplierScore(db: Db, partyId: string): PartyScore {
   const s = supplierStats(db, partyId);
   if (s.entries < 2) {
@@ -332,33 +268,6 @@ export function productAffinity(db: Db, partyId: string): AffinityRow[] {
     .sort((a, b) => b.amount - a.amount);
 }
 
-export type PurchasePattern = {
-  avgDays: number | null;
-  avgQty: number | null;
-  expectedNext: string | null;
-  overdueByDays: number | null;
-};
-
-export function purchasePattern(db: Db, partyId: string): PurchasePattern {
-  const dels = db.deliveries
-    .filter((d) => d.clientId === partyId)
-    .sort((a, b) => a.date.localeCompare(b.date));
-  if (dels.length < 3) return { avgDays: null, avgQty: null, expectedNext: null, overdueByDays: null };
-  let gaps = 0;
-  for (let i = 1; i < dels.length; i++) gaps += daysBetween(dels[i - 1].date, dels[i].date);
-  const avgDays = Math.round(gaps / (dels.length - 1));
-  const qtys = dels.map((d) => d.quantity ?? 0).filter((q) => q > 0);
-  const last = dels[dels.length - 1].date;
-  const expectedNext = avgDays > 0 ? addDays(last, avgDays) : null;
-  const since = daysBetween(last, cairoToday());
-  return {
-    avgDays,
-    avgQty: qtys.length ? Math.round(qtys.reduce((s, q) => s + q, 0) / qtys.length) : null,
-    expectedNext,
-    overdueByDays: avgDays > 0 && since > avgDays ? since - avgDays : null,
-  };
-}
-
 /* ── التصنيف التلقائي والتنبيهات ─────────────────────────────── */
 
 export type Segment = "strategic" | "growing" | "declining" | "fast_payer" | "slow_payer" | "dormant" | "at_risk" | "new";
@@ -385,7 +294,7 @@ export function customerSegments(db: Db, partyId: string): Segment[] {
   if (s.sales > 0 && s.collected / s.sales >= 0.95 && s.overdue === 0) out.push("fast_payer");
   if (s.overdue > 0) out.push("slow_payer");
   if (s.daysSinceLast !== null && s.daysSinceLast > 90) out.push("dormant");
-  if (score.risk !== null && score.risk >= 55) out.push("at_risk");
+  if (score.risk.total >= 55) out.push("at_risk");
   return out;
 }
 
