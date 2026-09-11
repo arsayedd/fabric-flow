@@ -20,7 +20,9 @@ import {
 } from "lucide-react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Mark } from "@/components/Brand";
+import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { cn } from "@/lib/utils";
+import { MODULE_ROUTES } from "@/store/account";
 import { useFactory } from "@/store/context";
 import { ROLE_LABEL } from "@/store/types";
 
@@ -55,28 +57,42 @@ const moreLinks = [
   { to: "/settings", label: "الإعدادات", icon: Settings },
 ];
 
+/**
+ * اللي المستخدم اختاره في التجهيز بيحدّد الروابط اللي بتظهر.
+ * الرئيسية والإعدادات والصلاحيات بتفضل دايمًا — ومفيش رابط بيتشال لو
+ * المصنع مالوش اختيارات محفوظة (المصانع القديمة بتشوف كل حاجة زي ما كانت).
+ */
+function useVisible() {
+  const { account } = useFactory();
+  const picked = account.workspace?.modules ?? [];
+  if (!picked.length) return () => true;
+  const allowed = new Set(["/", "/more", "/settings", "/staff", "/audit"]);
+  for (const key of picked) for (const route of MODULE_ROUTES[key]) allowed.add(route);
+  return (to: string) => allowed.has(to);
+}
+
 export function AppShell() {
-  const { session, db, can, logout } = useFactory();
+  const { session, can, logout } = useFactory();
   const loc = useLocation();
-  const nav = can.finance ? financeNav : supervisorNav;
+  const visible = useVisible();
+  const nav = (can.finance ? financeNav : supervisorNav).filter((l) => visible(l.to));
   const onMore = loc.pathname === "/more";
-  const sidebarLinks = can.finance
-    ? [...financeNav.filter((x) => x.to !== "/more"), ...moreLinks.filter((l) => !("owner" in l) || can.staff)]
-    : supervisorNav;
+  const sidebarLinks = (
+    can.finance ? [...financeNav.filter((x) => x.to !== "/more"), ...moreLinks.filter((l) => !("owner" in l) || can.staff)] : supervisorNav
+  ).filter((l) => visible(l.to));
 
   return (
     <div className="flex min-h-dvh flex-col md:flex-row">
       <aside className="hidden w-64 shrink-0 border-l border-[#1d2733] bg-primary text-primary-foreground md:flex md:flex-col">
-        <div className="flex items-center gap-3 px-5 py-5">
-          <Mark className="h-10 w-10" />
-          <div className="leading-tight">
-            <p className="font-medium">صنعة</p>
-            <p className="latin text-xs text-primary-foreground/50">SANAA</p>
-          </div>
+        <div className="px-3 pt-3">
+          <WorkspaceSwitcher />
         </div>
-        <div className="mx-5 mb-4 border-t border-[#1d2733] pt-4">
-          <p className="truncate text-sm text-primary-foreground/80">{db.factory?.name}</p>
+        <div className="mx-5 mb-4 mt-3 flex items-center justify-between border-t border-[#1d2733] pt-3">
           <p className="text-xs text-accent">{session ? ROLE_LABEL[session.role] : ""}</p>
+          <span className="flex items-center gap-1.5 text-primary-foreground/40">
+            <Mark className="h-4 w-4" />
+            <span className="latin text-[10px]">SANAA</span>
+          </span>
         </div>
         <nav className="flex-1 space-y-0.5 px-3">
           {sidebarLinks.map((item) => (
@@ -112,12 +128,11 @@ export function AppShell() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col pb-20 md:pb-0">
-        <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-border bg-background/95 px-4 py-2.5 backdrop-blur md:hidden">
-          <Mark className="h-9 w-9" />
-          <div className="min-w-0 leading-tight">
-            <p className="truncate text-sm font-medium">{db.factory?.name}</p>
-            <p className="text-xs text-muted-foreground">{session ? ROLE_LABEL[session.role] : ""}</p>
+        <header className="sticky top-0 z-20 flex items-center gap-2 border-b border-border bg-background/95 px-2 py-1.5 backdrop-blur md:hidden">
+          <div className="min-w-0 flex-1">
+            <WorkspaceSwitcher tone="light" />
           </div>
+          <span className="shrink-0 pl-2 text-xs text-muted-foreground">{session ? ROLE_LABEL[session.role] : ""}</span>
         </header>
         <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-5 md:px-8 md:py-7">
           <Outlet />

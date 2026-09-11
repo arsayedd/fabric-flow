@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { cairoToday, formatDate } from "@/lib/utils";
 import { useFactory } from "@/store/context";
 import { ExceptionsCard, HealthTeaser } from "@/components/Health";
+import { VerifyEmailCard, WelcomeCard } from "@/components/Onboard";
 import { IntelligenceTeaser } from "./IntelligencePage";
 import { PlanningTeaser } from "./PlanningPage";
 import { CostingTeaser } from "./CostingPage";
@@ -25,6 +26,10 @@ export function HomePage() {
         <p className="text-sm text-muted-foreground">{formatDate(cairoToday())}</p>
         <h2 className="text-2xl">ملخص النهارده</h2>
       </div>
+
+      <VerifyEmailCard />
+
+      <WelcomeCard />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="الخزينة" value={<Money value={treasuryTotal} />} to="/treasury" />

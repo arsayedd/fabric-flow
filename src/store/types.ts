@@ -28,6 +28,10 @@ export type Invite = {
   role: Role;
   createdAt: string;
   status: "pending" | "accepted";
+  /** الاسم والمسمّى الوظيفي زي ما صاحب المصنع كتبهم في الدعوة */
+  name?: string;
+  title?: string;
+  phone?: string;
 };
 
 export type Account = {
@@ -518,6 +522,8 @@ export type Session = {
   email: string;
   name: string;
   role: Role;
+  /** المصنع اللي الجلسة دي فيه — جلسة مصنع مش بتنفع لمصنع تاني */
+  factoryId?: string;
 };
 
 export type BackupFile = {

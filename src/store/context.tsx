@@ -14,6 +14,35 @@ import {
 } from "./compute";
 import type { ScoreWeights } from "./intelligence";
 import type { CapacitySettings } from "./planning";
+import {
+  LEGACY_DB_KEY,
+  accessibleWorkspaces,
+  blankWorkspace,
+  checkPassword,
+  dbKeyOf,
+  freeSlug,
+  hashPassword,
+  industryOf,
+  isEmail,
+  isUrl,
+  loadAccounts,
+  loadCurrent,
+  loadWorkspaces,
+  randomSalt,
+  resolveTenant,
+  roleIn,
+  saveAccounts,
+  saveCurrent,
+  saveWorkspaces,
+  sixDigitCode,
+  slugState,
+  verifyPassword,
+  type CurrentState,
+  type EmployeeBand,
+  type ModuleKey,
+  type UserAccount,
+  type Workspace,
+} from "./account";
 import { partyAlerts, portfolio } from "./parties";
 import {
   activeBom,
@@ -64,12 +93,18 @@ import type {
   WorkerPayment,
 } from "./types";
 
-const KEY = "factory-ledger.v1";
 const SESSION_KEY = "factory-ledger.session";
 
-function loadDb(): Db | null {
+/**
+ * دفتر المصنع الواحد: المفتاح + البيانات مع بعض.
+ * العزل بين المصانع بيحصل هنا — كل مصنع في مفتاح مستقل، ومفيش لحظة واحدة
+ * بيكون فيها مفتاح مصنع ومعاه بيانات مصنع تاني (عشان كده الاتنين في state واحدة).
+ */
+type Book = { key: string; data: Db };
+
+function readDb(key: string): Db | null {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
     return migrate(JSON.parse(raw) as Db);
   } catch {
@@ -189,10 +224,6 @@ export function blankParty(factoryId: string, name: string): Party {
   };
 }
 
-function saveDb(db: Db) {
-  localStorage.setItem(KEY, JSON.stringify(db));
-}
-
 function loadSession(): Session | null {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
@@ -200,6 +231,53 @@ function loadSession(): Session | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * المصنع اللي كان محفوظ على الجهاز قبل نظام الحسابات بيتسجّل كـworkspace
+ * زي أي مصنع تاني — بنفس مفتاحه القديم، فمفيش بيانات بتتنقل ولا بتتلمس.
+ * بيفضل من غير مالك (`ownerId: ""`) عشان حساب جديد على نفس الجهاز
+ * ماياخدش بيانات مش بتاعته.
+ */
+function adoptLegacy(workspaces: Workspace[]): Workspace[] {
+  if (workspaces.some((w) => w.dbKey === LEGACY_DB_KEY)) return workspaces;
+  const legacy = readDb(LEGACY_DB_KEY);
+  if (!legacy?.factory) return workspaces;
+  const row: Workspace = {
+    ...blankWorkspace(legacy.factory.id, LEGACY_DB_KEY, legacy.factory.name, freeSlug(legacy.factory.name, workspaces)),
+    industry: legacy.settings?.industry ?? "custom",
+    createdAt: legacy.factory.createdAt,
+  };
+  const next = [row, ...workspaces];
+  saveWorkspaces(next);
+  return next;
+}
+
+type Boot = { workspaces: Workspace[]; current: CurrentState; book: Book; missing: string | null; session: Session | null };
+
+function boot(): Boot {
+  const workspaces = adoptLegacy(loadWorkspaces());
+  const current = loadCurrent();
+  const session = loadSession();
+  const search = typeof location === "undefined" ? "" : location.search;
+  const wanted = new URLSearchParams(search).get("factory");
+  const hit = resolveTenant(location.hostname, search, workspaces, current);
+  // الـslug اتطلب ومش موجود: بنقولها صريح بدل ما نفتح مصنع تاني بالغلط
+  if (!hit && wanted) {
+    return { workspaces, current, book: { key: "", data: emptyShell() }, missing: wanted, session: null };
+  }
+  const ws = hit?.workspace ?? null;
+  const key = ws?.dbKey ?? LEGACY_DB_KEY;
+  const data = readDb(key) ?? emptyShell();
+  // جلسة محفوظة لمصنع تاني مش بتنفع للمصنع ده
+  const keep = !session?.factoryId || !ws || session.factoryId === ws.factoryId;
+  return {
+    workspaces,
+    current: ws ? { ...current, factoryId: ws.factoryId } : current,
+    book: { key, data },
+    missing: null,
+    session: keep ? session : null,
+  };
 }
 
 type Patch = Partial<Db> | ((prev: Db) => Partial<Db>);
@@ -215,9 +293,62 @@ type AddCollectionInput = {
   notes: string;
 };
 
+export type SignUpInput = {
+  fullName: string;
+  email: string;
+  countryCode: string;
+  phone: string;
+  password: string;
+  termsAccepted: boolean;
+};
+
+export type FactoryInput = {
+  name: string;
+  types: string[];
+  website: string;
+  country: string;
+  city: string;
+  address: string;
+  employees: EmployeeBand | null;
+  employeesExact: number | null;
+  monthlyCapacity: number | null;
+  productionLines: number | null;
+  branches: number | null;
+  logo: string | null;
+  subdomain: string;
+  modules: ModuleKey[];
+};
+
+export type TeamRow = { name: string; email: string; phone: string; title: string; role: Role };
+
+type AccountState = {
+  user: UserAccount | null;
+  /** كل المصانع على الجهاز — بنحتاجها للتأكد إن الـsubdomain مش مستخدم */
+  workspaces: Workspace[];
+  /** المصانع اللي الحساب ده له وصول ليها */
+  mine: Workspace[];
+  workspace: Workspace | null;
+  /** الـslug اللي اتطلب في العنوان ومش موجود */
+  missing: string | null;
+};
+
 type FactoryApi = {
   db: Db;
   session: Session | null;
+  account: AccountState;
+  signUp: (account: SignUpInput, factory: FactoryInput) => Promise<void>;
+  signIn: (email: string, password: string, remember: boolean) => Promise<Workspace[]>;
+  signOut: () => void;
+  enterWorkspace: (factoryId: string) => void;
+  leaveWorkspace: () => void;
+  createWorkspace: (factory: FactoryInput) => void;
+  updateWorkspace: (patch: Partial<Workspace>) => void;
+  setModules: (modules: ModuleKey[]) => void;
+  inviteTeam: (rows: TeamRow[]) => void;
+  verifyEmail: (code: string) => void;
+  resendVerification: () => string;
+  startReset: (email: string) => string;
+  finishReset: (email: string, code: string, password: string) => Promise<void>;
   login: (member: Member) => void;
   logout: () => void;
   startDemo: (role: Role) => void;
@@ -362,17 +493,25 @@ function buildComputed(db: Db) {
 }
 
 export function FactoryProvider({ children }: { children: ReactNode }) {
-  const [db, setDb] = useState<Db>(() => loadDb() ?? { ...emptyShell() });
-  const [session, setSession] = useState<Session | null>(() => loadSession());
+  const [booted] = useState(boot);
+  const [book, setBook] = useState<Book>(booted.book);
+  const [accounts, setAccounts] = useState<UserAccount[]>(loadAccounts);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>(booted.workspaces);
+  const [current, setCurrent] = useState<CurrentState>(booted.current);
+  const [missing, setMissing] = useState<string | null>(booted.missing);
+  const [session, setSession] = useState<Session | null>(booted.session);
+  const db = book.data;
 
   useEffect(() => {
-    if (db.factory) saveDb(db);
-  }, [db]);
+    if (book.key && book.data.factory) localStorage.setItem(book.key, JSON.stringify(book.data));
+  }, [book]);
 
   useEffect(() => {
     if (session) localStorage.setItem(SESSION_KEY, JSON.stringify(session));
     else localStorage.removeItem(SESSION_KEY);
   }, [session]);
+
+  const setDb = (fn: (prev: Db) => Db) => setBook((b) => ({ ...b, data: fn(b.data) }));
 
   const mutate = (patch: Patch, entry?: Omit<AuditEntry, "id" | "factoryId" | "actorId" | "actorName" | "at">) => {
     setDb((prev) => {
@@ -386,7 +525,118 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
   };
 
   const login = (member: Member) => {
-    setSession({ memberId: member.id, email: member.email, name: member.name, role: member.role });
+    setSession({ memberId: member.id, email: member.email, name: member.name, role: member.role, factoryId: member.factoryId });
+  };
+
+  const persistWorkspaces = (rows: Workspace[]) => {
+    setWorkspaces(rows);
+    saveWorkspaces(rows);
+  };
+
+  const persistAccounts = (rows: UserAccount[]) => {
+    setAccounts(rows);
+    saveAccounts(rows);
+  };
+
+  const persistCurrent = (state: CurrentState) => {
+    setCurrent(state);
+    saveCurrent(state);
+  };
+
+  const user = accounts.find((a) => a.id === current.userId) ?? null;
+  const workspace = workspaces.find((w) => w.factoryId === current.factoryId) ?? null;
+
+  /** فتح مصنع: بنقرأ دفتره من مفتاحه، وبنبني الجلسة من عضويّة الحساب فيه */
+  const enterWorkspace = (factoryId: string, account: UserAccount | null) => {
+    const ws = workspaces.find((w) => w.factoryId === factoryId);
+    if (!ws) throw new Error("المصنع ده مش موجود على الجهاز.");
+    const data = readDb(ws.dbKey);
+    if (!data?.factory) throw new Error("بيانات المصنع ده مش موجودة على الجهاز.");
+    const role = account ? roleIn(ws, account.id) : "owner";
+    const member =
+      (account ? data.members.find((m) => m.email === account.email) : null) ??
+      data.members.find((m) => m.role === role) ??
+      data.members[0];
+    setBook({ key: ws.dbKey, data });
+    setMissing(null);
+    persistCurrent({ userId: account?.id ?? current.userId, factoryId, remember: current.remember });
+    persistWorkspaces(workspaces.map((w) => (w.factoryId === factoryId ? { ...w, lastAccessAt: new Date().toISOString() } : w)));
+    if (member) login(member);
+  };
+
+  /**
+   * مصنع اتعمل من غير حساب (تجربة أو مصنع محفوظ على الجهاز).
+   * بياخد مفتاح مستقل زي أي مصنع، فمش بيكتب فوق مصنع تاني.
+   */
+  const registerDeviceFactory = (data: Db, key: string) => {
+    const f = data.factory!;
+    const exists = workspaces.some((w) => w.factoryId === f.id);
+    const rows = exists
+      ? workspaces.map((w) => (w.factoryId === f.id ? { ...w, dbKey: key, name: f.name, lastAccessAt: new Date().toISOString() } : w))
+      : [
+          {
+            ...blankWorkspace(f.id, key, f.name, freeSlug(f.name, workspaces)),
+            industry: data.settings.industry,
+            ownerId: current.userId ?? "",
+            lastAccessAt: new Date().toISOString(),
+          },
+          ...workspaces,
+        ];
+    persistWorkspaces(rows);
+    persistCurrent({ ...current, factoryId: f.id });
+  };
+
+  /** إنشاء مصنع كامل: بيانات + workspace + مفتاح تخزين مستقل + جلسة مالك */
+  const spawnFactory = (input: FactoryInput, owner: UserAccount | null): Workspace => {
+    const name = input.name.trim();
+    if (!name) throw new Error("اسم المصنع مطلوب.");
+    if (input.website && !isUrl(input.website)) throw new Error("لينك الموقع مش مظبوط.");
+    const slug = input.subdomain.trim().toLowerCase();
+    if (slugState(slug, workspaces) !== "free") throw new Error("الـsubdomain مش متاح — اختار غيره.");
+
+    const industry = industryOf(input.types);
+    const created = emptyDb(name, industry);
+    const factoryId = created.factory!.id;
+    const ownerMember = created.members[0];
+    const members: Member[] = [
+      {
+        ...ownerMember,
+        name: owner?.fullName || ownerMember.name,
+        email: owner?.email || ownerMember.email,
+      },
+    ];
+    const data: Db = { ...created, members };
+
+    const row: Workspace = {
+      factoryId,
+      dbKey: dbKeyOf(factoryId),
+      name,
+      subdomain: slug,
+      types: input.types,
+      industry,
+      website: input.website.trim(),
+      country: input.country,
+      city: input.city.trim(),
+      address: input.address.trim(),
+      employees: input.employees,
+      employeesExact: input.employeesExact,
+      monthlyCapacity: input.monthlyCapacity,
+      productionLines: input.productionLines,
+      branches: input.branches,
+      logo: input.logo,
+      modules: input.modules,
+      ownerId: owner?.id ?? "",
+      access: [],
+      createdAt: new Date().toISOString(),
+      lastAccessAt: new Date().toISOString(),
+    };
+
+    persistWorkspaces([row, ...workspaces]);
+    setBook({ key: row.dbKey, data });
+    setMissing(null);
+    persistCurrent({ userId: owner?.id ?? current.userId, factoryId, remember: current.remember });
+    login(members[0]);
+    return row;
   };
 
   const api = useMemo<FactoryApi>(() => {
@@ -404,17 +654,145 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
       session,
       can,
       computed: buildComputed(db),
+      account: {
+        user,
+        workspaces,
+        mine: accessibleWorkspaces(workspaces, current.userId),
+        workspace,
+        missing,
+      },
+      /** التسجيل والمصنع في خطوة واحدة: الحساب لوحده من غير مصنع مالوش معنى */
+      signUp: async (input, factory) => {
+        const email = input.email.trim().toLowerCase();
+        if (!input.fullName.trim()) throw new Error("الاسم مطلوب.");
+        if (!isEmail(email)) throw new Error("الإيميل مش مظبوط.");
+        if (accounts.some((a) => a.email === email)) throw new Error("الإيميل ده مسجّل بالفعل — تقدر تدخل بيه.");
+        if (!checkPassword(input.password).ok) throw new Error("كلمة السر مش مطابقة للشروط.");
+        if (!input.termsAccepted) throw new Error("لازم توافق على الشروط.");
+        const salt = randomSalt();
+        const account: UserAccount = {
+          id: nid(),
+          fullName: input.fullName.trim(),
+          email,
+          phone: input.phone.trim(),
+          countryCode: input.countryCode,
+          passwordHash: await hashPassword(input.password, salt),
+          salt,
+          emailVerified: false,
+          verifyCode: sixDigitCode(),
+          verifySentAt: new Date().toISOString(),
+          termsAcceptedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+        };
+        persistAccounts([...accounts, account]);
+        spawnFactory(factory, account);
+      },
+      signIn: async (email, password, remember) => {
+        const clean = email.trim().toLowerCase();
+        const account = accounts.find((a) => a.email === clean);
+        // نفس الرسالة للإيميل الغلط والباسورد الغلط — مش بنقول لحد إن الإيميل مسجّل
+        const fail = new Error("الإيميل أو كلمة السر غلط.");
+        if (!account) throw fail;
+        if (!(await verifyPassword(password, account))) throw fail;
+        const mine = accessibleWorkspaces(workspaces, account.id);
+        persistCurrent({ userId: account.id, factoryId: mine.length === 1 ? mine[0].factoryId : null, remember });
+        setSession(null);
+        if (mine.length === 1) enterWorkspace(mine[0].factoryId, account);
+        return mine;
+      },
+      signOut: () => {
+        setSession(null);
+        persistCurrent({ userId: null, factoryId: null, remember: current.remember });
+        setBook({ key: "", data: emptyShell() });
+      },
+      enterWorkspace: (factoryId) => enterWorkspace(factoryId, user),
+      /** رجوع لاختيار المصنع: الحساب فاضل داخل، المصنع بس اللي بيتقفل */
+      leaveWorkspace: () => {
+        setSession(null);
+        persistCurrent({ ...current, factoryId: null });
+        setBook({ key: "", data: emptyShell() });
+      },
+      createWorkspace: (factory) => {
+        if (!user) throw new Error("لازم تكون داخل بحسابك.");
+        spawnFactory(factory, user);
+      },
+      updateWorkspace: (patch) => {
+        if (!workspace) return;
+        persistWorkspaces(workspaces.map((w) => (w.factoryId === workspace.factoryId ? { ...w, ...patch } : w)));
+      },
+      setModules: (modules) => {
+        if (!workspace) return;
+        persistWorkspaces(workspaces.map((w) => (w.factoryId === workspace.factoryId ? { ...w, modules } : w)));
+      },
+      /**
+       * الدعوات بتتسجّل في قائمة الموظفين بالمسمّى والصلاحية.
+       * إرسال الإيميل نفسه محتاج سيرفر، فالواجهة بتقول كده صريح.
+       */
+      inviteTeam: (rows) => {
+        const clean = rows.filter((r) => r.email.trim() || r.name.trim());
+        for (const r of clean) {
+          if (!isEmail(r.email)) throw new Error(`إيميل ${r.name || "الموظف"} مش مظبوط.`);
+        }
+        if (!clean.length) return;
+        const invites: Invite[] = clean.map((r) => ({
+          id: nid(),
+          factoryId: fid(db),
+          email: r.email.trim().toLowerCase(),
+          role: r.role,
+          createdAt: new Date().toISOString(),
+          status: "pending",
+          name: r.name.trim(),
+          title: r.title,
+          phone: r.phone.trim(),
+        }));
+        mutate({ invites: [...invites, ...db.invites] }, { action: "create", table: "invites", recordId: invites[0].id, before: null, after: { count: invites.length } });
+      },
+      verifyEmail: (code) => {
+        if (!user) throw new Error("مفيش حساب داخل.");
+        if (!user.verifyCode || code.trim() !== user.verifyCode) throw new Error("الكود غلط.");
+        persistAccounts(accounts.map((a) => (a.id === user.id ? { ...a, emailVerified: true, verifyCode: null } : a)));
+      },
+      resendVerification: () => {
+        if (!user) throw new Error("مفيش حساب داخل.");
+        const code = sixDigitCode();
+        persistAccounts(accounts.map((a) => (a.id === user.id ? { ...a, verifyCode: code, verifySentAt: new Date().toISOString() } : a)));
+        return code;
+      },
+      startReset: (email) => {
+        const clean = email.trim().toLowerCase();
+        const account = accounts.find((a) => a.email === clean);
+        if (!account) throw new Error("مفيش حساب بالإيميل ده على الجهاز.");
+        const code = sixDigitCode();
+        persistAccounts(accounts.map((a) => (a.id === account.id ? { ...a, verifyCode: code, verifySentAt: new Date().toISOString() } : a)));
+        return code;
+      },
+      finishReset: async (email, code, password) => {
+        const clean = email.trim().toLowerCase();
+        const account = accounts.find((a) => a.email === clean);
+        if (!account) throw new Error("مفيش حساب بالإيميل ده.");
+        if (!account.verifyCode || account.verifyCode !== code.trim()) throw new Error("الكود غلط أو منتهي.");
+        if (!checkPassword(password).ok) throw new Error("كلمة السر الجديدة مش مطابقة للشروط.");
+        const salt = randomSalt();
+        const passwordHash = await hashPassword(password, salt);
+        persistAccounts(accounts.map((a) => (a.id === account.id ? { ...a, salt, passwordHash, verifyCode: null } : a)));
+      },
       login,
       logout: () => setSession(null),
       startDemo: (r) => {
         const seeded = demoDb();
-        setDb(seeded);
+        const key = dbKeyOf(seeded.factory!.id);
+        setBook({ key, data: seeded });
+        setMissing(null);
+        registerDeviceFactory(seeded, key);
         const member = seeded.members.find((m) => m.role === r) ?? seeded.members[0];
         login(member);
       },
       createFactory: (name, industry) => {
         const created = emptyDb(name.trim() || "مصنعي", industry);
-        setDb(created);
+        const key = dbKeyOf(created.factory!.id);
+        setBook({ key, data: created });
+        setMissing(null);
+        registerDeviceFactory(created, key);
         login(created.members[0]);
       },
       setOverhead: (value) => {
@@ -616,7 +994,11 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         if (file.kind !== "factory-backup" || file.version !== 1 || !file.data?.factory) {
           throw new Error("ملف النسخة الاحتياطية مش مفهوم.");
         }
-        setDb(file.data);
+        // النسخة بترجع في مفتاح المصنع بتاعها، فمش بتكتب فوق مصنع تاني على الجهاز
+        const key = dbKeyOf(file.data.factory.id);
+        setBook({ key, data: file.data });
+        setMissing(null);
+        registerDeviceFactory(file.data, key);
         const owner = file.data.members.find((m) => m.role === "owner") ?? file.data.members[0];
         if (owner) login(owner);
       },
@@ -629,7 +1011,9 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
       }),
       resetDemo: () => {
         const seeded = demoDb();
-        setDb(seeded);
+        const key = dbKeyOf(seeded.factory!.id);
+        setBook({ key, data: seeded });
+        registerDeviceFactory(seeded, key);
         const member = seeded.members.find((m) => m.id === session?.memberId) ?? seeded.members[0];
         login(member);
       },
@@ -931,7 +1315,7 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         mutate({ members: db.members.filter((m) => m.id !== memberId) }, { action: "delete", table: "members", recordId: memberId, before, after: null });
       },
     };
-  }, [db, session]);
+  }, [db, session, accounts, workspaces, current, missing]);
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 }

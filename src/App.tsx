@@ -1,6 +1,12 @@
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { AppShell, MorePage } from "@/components/AppShell";
 import { Gate } from "@/pages/Gate";
+import { LandingPage } from "@/pages/LandingPage";
+import { LoginPage } from "@/pages/LoginPage";
+import { ForgotPasswordPage } from "@/pages/ForgotPasswordPage";
+import { SignupWizard } from "@/pages/SignupWizard";
+import { FactoryPickerPage } from "@/pages/FactoryPickerPage";
+import { TenantMissingPage } from "@/pages/TenantMissingPage";
 import { HomePage } from "@/pages/HomePage";
 import { IntelligencePage } from "@/pages/IntelligencePage";
 import { PartiesPage } from "@/pages/PartiesPage";
@@ -21,11 +27,49 @@ import { useFactory } from "@/store/context";
 import type { ReactNode } from "react";
 
 export default function App() {
-  const { session, db } = useFactory();
-  if (!session || !db.factory) return <Gate />;
+  const { session, db, account } = useFactory();
+  // الـslug اللي في العنوان مش معروف: بنقولها، مش بنفتح مصنع تاني بالغلط
+  if (account.missing) return <TenantMissingPage slug={account.missing} />;
+  const inApp = !!session && !!db.factory;
 
   return (
     <Routes>
+      {/*
+        رحلة التجهيز مسجّلة برّه الشرط، فلما المصنع بيتعمل في نص الرحلة
+        (آخر خطوة ٣) الـwizard مايتقفلش والبيانات مابتضيعش.
+      */}
+      <Route path="/signup" element={<SignupWizard />} />
+      <Route path="/signup/factory" element={<SignupWizard mode="factory" />} />
+      <Route path="/factories/new" element={<SignupWizard mode="factory" />} />
+      {inApp ? <AppRoutes /> : <PublicRoutes hasAccount={!!account.user} />}
+    </Routes>
+  );
+}
+
+function PublicRoutes({ hasAccount }: { hasAccount: boolean }) {
+  // حساب داخل من غير مصنع مفتوح: بيختار المصنع
+  if (hasAccount)
+    return (
+      <>
+        <Route path="/factories" element={<FactoryPickerPage />} />
+        <Route path="*" element={<Navigate to="/factories" replace />} />
+      </>
+    );
+  return (
+    <>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot" element={<ForgotPasswordPage />} />
+      <Route path="/device" element={<Gate />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </>
+  );
+}
+
+function AppRoutes() {
+  return (
+    <>
+      <Route path="/factories" element={<FactoryPickerPage />} />
       <Route element={<AppShell />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/more" element={<MorePage />} />
@@ -131,7 +175,7 @@ export default function App() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
-    </Routes>
+    </>
   );
 }
 
