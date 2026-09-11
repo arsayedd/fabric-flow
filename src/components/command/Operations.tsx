@@ -387,7 +387,7 @@ export function QualitySection({ range }: { range: Range }) {
 
   return (
     <Section title="الجودة" hint="العيب بيتولد فين، وبيكلّف كام" to="/orders">
-      <div className="grid gap-3 lg:grid-cols-3">
+      <div className="grid gap-3 lg:grid-cols-2">
         <Card>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -441,6 +441,9 @@ export function QualitySection({ range }: { range: Range }) {
           </p>
         </Card>
 
+      </div>
+
+      <div className="mt-3">
         <Card>
           <ChartFrame
             title="الخط × المرحلة"

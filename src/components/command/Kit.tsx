@@ -111,10 +111,13 @@ export function CommandHeader({
   state,
   onChange,
   modes,
+  bare = false,
 }: {
   state: DashState;
   onChange: (next: DashState) => void;
   modes: DashMode[];
+  /** مصنع لسه فاضي: مفيش فايدة من فلتر مدى ولا أوضاع على لوحة مفيهاش أرقام */
+  bare?: boolean;
 }) {
   const { session, db } = useFactory();
   // الاسم بالكامل: أول كلمة لوحدها بتطلّع نداء أعرج زي «يا صاحب»
@@ -130,11 +133,13 @@ export function CommandHeader({
             {name ? ` يا ${name}` : ""}
           </h2>
           <p className="text-sm text-muted-foreground">
-            ده اللي بيحصل في {db.factory?.name ?? "المصنع"} دلوقتي — والقرارات اللي مستنية منك.
+            {bare
+              ? `${db.factory?.name ?? "المصنع"} لسه في أول الطريق — دي الخطوات اللي بتشغّل اللوحة.`
+              : `ده اللي بيحصل في ${db.factory?.name ?? "المصنع"} دلوقتي — والقرارات اللي مستنية منك.`}
           </p>
         </div>
 
-        {modes.length > 1 ? (
+        {modes.length > 1 && !bare ? (
           <div
             role="tablist"
             aria-label="وضع اللوحة"
@@ -158,7 +163,7 @@ export function CommandHeader({
         ) : null}
       </div>
 
-      <RangeBar state={state} onChange={onChange} />
+      {bare ? null : <RangeBar state={state} onChange={onChange} />}
     </header>
   );
 }

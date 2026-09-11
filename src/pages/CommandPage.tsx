@@ -123,12 +123,12 @@ export function CommandPage() {
     return def && (def.perm === null || can.do(def.perm, "view"));
   });
 
-  const waves = useWaves(3);
   const empty = emptiness(db);
+  const waves = useWaves(3);
 
   return (
     <div className="space-y-5">
-      <CommandHeader state={{ ...state, mode }} onChange={setState} modes={modes} />
+      <CommandHeader state={{ ...state, mode }} onChange={setState} modes={modes} bare={empty.isEmpty} />
 
       {empty.isEmpty ? (
         <EmptyFactory />
