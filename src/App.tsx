@@ -25,6 +25,9 @@ import { CommandPage } from "@/pages/CommandPage";
 import { ProductsPage, ProductDetailPage } from "@/pages/ProductsPage";
 import { MaterialsPage, MaterialDetailPage } from "@/pages/MaterialsPage";
 import { AuditPage, SettingsPage, StaffPage } from "@/pages/StaffPage";
+import { DocumentsPage } from "@/pages/DocumentsPage";
+import { ExportsPage } from "@/pages/ExportsPage";
+import { VerifyPage } from "@/pages/VerifyPage";
 import { useFactory } from "@/store/context";
 import type { PermModule } from "@/store/permissions";
 import type { ReactNode } from "react";
@@ -41,6 +44,8 @@ export default function App() {
         رحلة التجهيز مسجّلة برّه الشرط، فلما المصنع بيتعمل في نص الرحلة
         (آخر خطوة ٣) الـwizard مايتقفلش والبيانات مابتضيعش.
       */}
+      {/* التحقق من مستند مفتوح بلا تسجيل دخول: الورقة بتتسلّم لناس بره النظام */}
+      <Route path="/verify/:number" element={<VerifyPage />} />
       <Route path="/signup" element={<SignupWizard />} />
       <Route path="/signup/factory" element={<SignupWizard mode="factory" />} />
       <Route path="/factories/new" element={<SignupWizard mode="factory" />} />
@@ -99,6 +104,8 @@ function appRoutes() {
         {guarded("/costing", "costing", <CostingPage />)}
         {guarded("/costs", "purchasing", <CostsPage />)}
         {guarded("/costs/:id", "purchasing", <CostItemPage />)}
+        {guarded("/documents", "reports", <DocumentsPage />)}
+        {guarded("/exports", "reports", <ExportsPage />)}
         {guarded("/staff", "staff", <StaffPage />)}
         {guarded("/audit", "audit", <AuditPage />)}
         <Route path="/settings" element={<SettingsPage />} />

@@ -24,6 +24,7 @@ import {
   Factory,
   Home,
   Package,
+  Printer,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -183,6 +184,15 @@ export const NAV: NavSection[] = [
     items: [item("/machines", "الماكينات", "machines", "machines", false)],
   },
   {
+    key: "documents",
+    label: "المستندات والطباعة",
+    icon: Printer,
+    items: [
+      item("/documents", "دفتر المستندات", "reports", null),
+      item("/exports", "مركز التصدير", "reports", null),
+    ],
+  },
+  {
     key: "reports",
     label: "التقارير والتحليلات",
     icon: BarChart3,
@@ -235,6 +245,8 @@ export const ROUTE_LABEL: Record<string, string> = {
   "/costing": "التكلفة والربحية",
   "/staff": "الموظفين والصلاحيات",
   "/audit": "سجل التعديلات",
+  "/documents": "دفتر المستندات",
+  "/exports": "مركز التصدير",
   "/settings": "إعدادات المصنع",
   "/help": "المساعدة والاختصارات",
   "/more": "المزيد",

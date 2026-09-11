@@ -13,6 +13,7 @@ import { costEntryPaid } from "@/store/compute";
 import { useFactory } from "@/store/context";
 import { ExportMenu } from "@/components/export/ExportMenu";
 import { datasetOf } from "@/store/datasets";
+import { DocumentButton } from "@/components/docs/DocumentPrint";
 import { partiesWithRole } from "@/store/parties";
 import { METHOD_LABEL, PAY_METHODS, type PayMethod } from "@/store/types";
 
@@ -135,13 +136,27 @@ export function CostItemPage() {
                 </div>
                 <Money value={e.amount} />
               </div>
-              <div className="mt-2 flex items-center justify-between text-sm">
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm">
                 {due > 0.5 ? <Badge tone="warn">باقي {qty(due, 0)}</Badge> : <Badge tone="ok">اتدفع</Badge>}
-                {can.edit && due > 0.5 ? (
-                  <Button size="sm" variant="outline" onClick={() => setPayId(e.id)}>
-                    دفعة
-                  </Button>
-                ) : null}
+                <div className="flex flex-wrap gap-2">
+                  <DocumentButton type="purchase" refId={e.id} label="فاتورة شراء" variant="ghost" />
+                  {db.costPayments
+                    .filter((p) => p.costEntryId === e.id)
+                    .map((p) => (
+                      <DocumentButton
+                        key={p.id}
+                        type="payvoucher"
+                        refId={p.id}
+                        label={`إذن دفع ${formatDate(p.date)}`}
+                        variant="ghost"
+                      />
+                    ))}
+                  {can.edit && due > 0.5 ? (
+                    <Button size="sm" variant="outline" onClick={() => setPayId(e.id)}>
+                      دفعة
+                    </Button>
+                  ) : null}
+                </div>
               </div>
               {can.delete ? (
                 <button className="mt-2 text-sm text-danger" onClick={() => deleteCostEntry(e.id)}>

@@ -861,6 +861,8 @@ export type DatasetOptions = {
   filters?: { label: string; value: string }[];
   /** الصفوف الظاهرة بس: التصدير بيطلع اللي المستخدم شايفه */
   ids?: Set<string>;
+  /** شرط على الصفوف — للشاشات اللي بتعرض جزء من جدول عام (كشف عميل واحد) */
+  where?: (row: ExportRow) => boolean;
   subtitle?: string;
   /** أرقام مختصرة زيادة على المجاميع */
   summary?: { label: string; value: string }[];
@@ -871,9 +873,11 @@ export function datasetOf(db: Db, key: string, opts: DatasetOptions = {}): Expor
   if (!def) throw new Error(`مفيش بيانات مسجّلة بالمفتاح ${key}`);
 
   const all = def.rows(db);
-  const rows = opts.ids ? all.filter((r) => opts.ids!.has(String(r.id))) : all;
+  let rows = all;
+  if (opts.where) rows = rows.filter(opts.where);
+  if (opts.ids) rows = rows.filter((r) => opts.ids!.has(String(r.id)));
   const filters = [...(opts.filters ?? [])];
-  if (opts.ids && rows.length !== all.length) {
+  if (rows.length !== all.length) {
     filters.push({ label: "الصفوف", value: `${qty(rows.length, 0)} من ${qty(all.length, 0)}` });
   }
 

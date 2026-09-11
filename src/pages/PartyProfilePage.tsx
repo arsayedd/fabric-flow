@@ -13,6 +13,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { cairoToday, formatDate, qty } from "@/lib/utils";
 import { whatsappReminder } from "@/store/compute";
 import { useFactory } from "@/store/context";
+import { DocumentButton } from "@/components/docs/DocumentPrint";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import { datasetOf } from "@/store/datasets";
 import {
   customerSegments,
   customerStats,
@@ -464,6 +467,21 @@ function AccountTab({
         </Card>
       ) : null}
 
+      {statement.length ? (
+        <div className="flex flex-wrap gap-2">
+          <DocumentButton type="statement" refId={partyId} label="اطبع كشف الحساب" />
+          <ExportMenu
+            module="finance"
+            dataset={() =>
+              datasetOf(db, "statements", {
+                where: (r) => String(r.id).startsWith(`${partyId}-`),
+                filters: [{ label: "الجهة", value: db.parties.find((p) => p.id === partyId)?.name ?? "" }],
+              })
+            }
+          />
+        </div>
+      ) : null}
+
       {statement.length === 0 ? (
         <p className="text-sm text-muted-foreground">لسه مفيش حركة.</p>
       ) : (
@@ -476,6 +494,7 @@ function AccountTab({
                 <th className="p-2.5 text-left font-medium">مدين</th>
                 <th className="p-2.5 text-left font-medium">دائن</th>
                 <th className="p-2.5 text-left font-medium">الرصيد</th>
+                <th className="p-2.5 text-left font-medium">مستند</th>
               </tr>
             </thead>
             <tbody>
@@ -494,6 +513,19 @@ function AccountTab({
                   <td className="p-2 text-left tabular">{l.credit ? <Money value={l.credit} /> : "—"}</td>
                   <td className="p-2 text-left tabular">
                     <Money value={l.balance} />
+                  </td>
+                  <td className="p-2 text-left">
+                    {/* الورقة بتطلع من الحركة نفسها: التوريدة فاتورتها وإذن تسليمها، والتحصيل إيصاله */}
+                    <div className="flex justify-end gap-1.5">
+                      {l.kind === "delivery" ? (
+                        <>
+                          <DocumentButton type="invoice" refId={l.id} label="فاتورة" variant="ghost" />
+                          <DocumentButton type="delivery" refId={l.id} label="تسليم" variant="ghost" />
+                        </>
+                      ) : (
+                        <DocumentButton type="receipt" refId={l.id} label="إيصال" variant="ghost" />
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

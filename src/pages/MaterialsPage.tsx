@@ -14,6 +14,7 @@ import { modelsUsingMaterial } from "@/store/costing";
 import { useFactory } from "@/store/context";
 import { ExportMenu } from "@/components/export/ExportMenu";
 import { datasetOf } from "@/store/datasets";
+import { DocumentButton } from "@/components/docs/DocumentPrint";
 import {
   dailyUsage,
   itemMovements,
@@ -49,6 +50,7 @@ export function MaterialsPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <DocumentButton type="stock" refId={db.factory?.id ?? ""} label="كشف جرد" />
           <ExportMenu module="inventory" dataset={() => datasetOf(db, "materials")} />
           {can.edit ? <Button onClick={() => setOpen(true)}>خامة جديدة</Button> : null}
         </div>

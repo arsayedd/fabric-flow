@@ -8,6 +8,7 @@ import { Card, DataRow } from "@/components/ui/card";
 import { Input, selectClass } from "@/components/ui/input";
 import { cairoToday, formatDate, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
+import { DocumentButton } from "@/components/docs/DocumentPrint";
 import { partyById } from "@/store/parties";
 import { bottleneck, orderCost, orderRequirements, orderStages, productById } from "@/store/manufacturing";
 import { useSeen } from "@/store/recents";
@@ -46,6 +47,14 @@ export function OrderDetailPage() {
           </p>
         </div>
         <Badge tone={status.tone}>{status.label}</Badge>
+      </div>
+
+      {/* الورق اللي بينزل أرض المصنع وبيروح للعميل — كله من نفس الأمر */}
+      <div className="flex flex-wrap gap-2">
+        <DocumentButton type="order" refId={order.id} />
+        <DocumentButton type="production" refId={order.id} />
+        <DocumentButton type="issue" refId={order.id} />
+        <DocumentButton type="qc" refId={order.id} />
       </div>
 
       <Card>

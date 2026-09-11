@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Input, selectClass } from "@/components/ui/input";
 import { cairoToday, formatDate, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
+import { DocumentButton } from "@/components/docs/DocumentPrint";
 import { ExportMenu } from "@/components/export/ExportMenu";
 import { datasetOf } from "@/store/datasets";
 import { PAY_TYPE_LABEL, WORKER_PAY_TYPES, type WorkerPayType } from "@/store/types";
@@ -198,6 +199,10 @@ export function WorkerProfilePage() {
         </div>
       </div>
       {w.advance > 0 ? <Badge tone="warn">سلفة مفتوحة {Math.round(w.advance)}</Badge> : null}
+
+      <div className="flex flex-wrap gap-2">
+        <DocumentButton type="payslip" refId={w.id} />
+      </div>
 
       {w.payType === "piece" ? (
         <div className="flex gap-2">
