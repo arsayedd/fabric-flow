@@ -69,26 +69,29 @@ export function AppShell() {
 
   return (
     <div className="flex min-h-dvh flex-col md:flex-row">
-      <aside className="hidden w-64 shrink-0 flex-col border-l border-[#1d2733] bg-primary text-primary-foreground md:sticky md:top-0 md:flex md:h-dvh">
-        <div className="px-3 pt-3">
-          <WorkspaceSwitcher />
-        </div>
-        <div className="mx-5 mb-3 mt-3 flex items-center justify-between border-t border-[#1d2733] pt-3">
-          <p className="text-xs text-accent">{session ? ROLE_LABEL[session.role] : ""}</p>
-          <span className="flex items-center gap-1.5 text-primary-foreground/40">
-            <Mark className="h-4 w-4" />
-            <span className="latin text-[10px]">SANAA</span>
-          </span>
-        </div>
-        <Tree tree={tree} openKey={here?.key ?? "home"} className="flex-1 overflow-y-auto px-3 pb-3" />
-        <button
-          onClick={logout}
-          className="m-3 flex items-center gap-2 rounded-md px-3 py-2 text-sm text-primary-foreground/60 hover:bg-[#161f2a]"
-        >
-          <LogOut className="h-4 w-4" />
-          خروج
-        </button>
-      </aside>
+      {/* العمود الخارجي بياخد لون القائمة، فالشريط الكحلي بيكمّل لآخر الصفحة ولو طويلة */}
+      <div className="hidden w-64 shrink-0 bg-primary md:block">
+        <aside className="sticky top-0 flex h-dvh flex-col border-l border-[#1d2733] text-primary-foreground">
+          <div className="px-3 pt-3">
+            <WorkspaceSwitcher />
+          </div>
+          <div className="mx-5 mb-3 mt-3 flex items-center justify-between border-t border-[#1d2733] pt-3">
+            <p className="text-xs text-accent">{session ? ROLE_LABEL[session.role] : ""}</p>
+            <span className="flex items-center gap-1.5 text-primary-foreground/40">
+              <Mark className="h-4 w-4" />
+              <span className="latin text-[10px]">SANAA</span>
+            </span>
+          </div>
+          <Tree tree={tree} openKey={here?.key ?? "home"} className="flex-1 overflow-y-auto px-3 pb-3" />
+          <button
+            onClick={logout}
+            className="m-3 flex items-center gap-2 rounded-md px-3 py-2 text-sm text-primary-foreground/60 hover:bg-[#161f2a]"
+          >
+            <LogOut className="h-4 w-4" />
+            خروج
+          </button>
+        </aside>
+      </div>
 
       <div className="flex min-w-0 flex-1 flex-col pb-20 md:pb-0">
         <Topbar onMenu={() => setDrawer(true)} onSearch={() => setPalette(true)} />
