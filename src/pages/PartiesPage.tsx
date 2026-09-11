@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import { datasetOf } from "@/store/datasets";
 import {
   customerSegments,
   customerStats,
@@ -81,7 +83,21 @@ export function PartiesPage() {
             كل من يتعامل مع المصنع في مكان واحد — العميل ممكن يكون تاجر، والمورّد ممكن يكون عميل، وسجل واحد يجمع كل ده.
           </p>
         </div>
-        {can.edit ? <Button onClick={() => setOpen(true)}>جهة جديدة</Button> : null}
+        <div className="flex shrink-0 gap-2">
+          <ExportMenu
+            module="parties"
+            dataset={() =>
+              datasetOf(db, "parties", {
+                ids: new Set(list.map((p) => p.id)),
+                filters: [
+                  { label: "الدور", value: filter === "all" ? "الكل" : PARTY_ROLE_LABEL[filter] },
+                  ...(term ? [{ label: "البحث", value: term }] : []),
+                ],
+              })
+            }
+          />
+          {can.edit ? <Button onClick={() => setOpen(true)}>جهة جديدة</Button> : null}
+        </div>
       </div>
 
       {pf.total > 0 ? (

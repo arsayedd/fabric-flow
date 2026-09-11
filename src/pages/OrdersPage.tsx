@@ -11,6 +11,8 @@ import { Card, DataRow } from "@/components/ui/card";
 import { Input, selectClass } from "@/components/ui/input";
 import { cairoToday, formatDate } from "@/lib/utils";
 import { useFactory } from "@/store/context";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import { datasetOf } from "@/store/datasets";
 import { customers, partyById } from "@/store/parties";
 import { productCost } from "@/store/manufacturing";
 import { TEMPLATES } from "@/store/templates";
@@ -38,7 +40,18 @@ export function OrdersPage() {
           <h2 className="text-2xl">أوامر الإنتاج</h2>
           <p className="text-sm text-muted-foreground">كل أمر بخط إنتاجه ونسبة إنجازه وتكلفة القطعة.</p>
         </div>
-        {can.edit ? <Button onClick={() => setOpen(true)}>أمر إنتاج</Button> : null}
+        <div className="flex gap-2">
+          <ExportMenu
+            module="production"
+            dataset={() =>
+              datasetOf(db, "orders", {
+                ids: new Set(orders.map((o) => o.id)),
+                filters: [{ label: "الحالة", value: FILTERS.find((f) => f.id === filter)?.label ?? "الكل" }],
+              })
+            }
+          />
+          {can.edit ? <Button onClick={() => setOpen(true)}>أمر إنتاج</Button> : null}
+        </div>
       </div>
 
       <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">

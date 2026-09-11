@@ -12,6 +12,8 @@ import { cairoToday, fileToDataUrl, formatDate, qty } from "@/lib/utils";
 import { methodNeedsReceipt, whatsappReminder } from "@/store/compute";
 import { clientBalance } from "@/store/compute";
 import { useFactory } from "@/store/context";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import { datasetOf } from "@/store/datasets";
 import { partyById } from "@/store/parties";
 import { METHOD_LABEL, PAY_METHODS, type PayMethod } from "@/store/types";
 import { Banknote } from "lucide-react";
@@ -43,9 +45,25 @@ export function CollectionsPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-2xl">التحصيل</h2>
-        <p className="text-sm text-muted-foreground">التحصيل بيتخصم من أقدم توريد الأول، فالمواعيد تفضل دقيقة.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-2xl">التحصيل</h2>
+          <p className="text-sm text-muted-foreground">التحصيل بيتخصم من أقدم توريد الأول، فالمواعيد تفضل دقيقة.</p>
+        </div>
+        <ExportMenu
+          module="finance"
+          dataset={() =>
+            tab === "pending"
+              ? datasetOf(db, "collections", {
+                  ids: new Set(computed.rec.pending.map((c) => c.id)),
+                  filters: [{ label: "العرض", value: "مستني تأكيد" }],
+                })
+              : datasetOf(db, "receivables", {
+                  ids: new Set(rows.map((r) => r.deliveryId)),
+                  filters: [{ label: "الفئة", value: TABS.find((t) => t.id === tab)?.label ?? "" }],
+                })
+          }
+        />
       </div>
 
       <div className="-mx-1 flex gap-1 overflow-x-auto pb-1">

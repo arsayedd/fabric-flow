@@ -12,6 +12,8 @@ import { Input, selectClass } from "@/components/ui/input";
 import { cairoToday, formatDate, qty } from "@/lib/utils";
 import { modelsUsingMaterial } from "@/store/costing";
 import { useFactory } from "@/store/context";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import { datasetOf } from "@/store/datasets";
 import {
   dailyUsage,
   itemMovements,
@@ -46,7 +48,10 @@ export function MaterialsPage() {
             الرصيد محسوب من حركات المخزن — تقدر تدوس على أي خامة وتشوف الحركات اللي كوّنته.
           </p>
         </div>
-        {can.edit ? <Button onClick={() => setOpen(true)}>خامة جديدة</Button> : null}
+        <div className="flex gap-2">
+          <ExportMenu module="inventory" dataset={() => datasetOf(db, "materials")} />
+          {can.edit ? <Button onClick={() => setOpen(true)}>خامة جديدة</Button> : null}
+        </div>
       </div>
 
       {rows.length === 0 ? (

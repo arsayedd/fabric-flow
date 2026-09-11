@@ -7,9 +7,11 @@ import { Field, Panel } from "@/components/Panel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, selectClass } from "@/components/ui/input";
-import { cairoToday, formatDate } from "@/lib/utils";
+import { cairoToday, formatDate, money } from "@/lib/utils";
 import { pnl } from "@/store/compute";
 import { useFactory } from "@/store/context";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import { datasetOf } from "@/store/datasets";
 import { partyById } from "@/store/parties";
 
 export function TreasuryPage() {
@@ -62,14 +64,24 @@ export function TreasuryPage() {
           <h2 className="text-2xl">الخزينة</h2>
           <p className="text-sm text-muted-foreground">رصيد كل حساب، الأرباح والخسائر، وكل اللي عليك.</p>
         </div>
-        {can.edit ? (
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setAccOpen(true)}>
-              حساب
-            </Button>
-            <Button onClick={() => setTxOpen(true)}>حركة</Button>
-          </div>
-        ) : null}
+        <div className="flex shrink-0 gap-2">
+          <ExportMenu
+            module="finance"
+            dataset={() =>
+              datasetOf(db, "treasury", {
+                summary: [{ label: "إجمالي الحسابات", value: money(computed.treasuryTotal) }],
+              })
+            }
+          />
+          {can.edit ? (
+            <>
+              <Button variant="outline" onClick={() => setAccOpen(true)}>
+                حساب
+              </Button>
+              <Button onClick={() => setTxOpen(true)}>حركة</Button>
+            </>
+          ) : null}
+        </div>
       </div>
 
       <Card className="bg-primary text-primary-foreground">

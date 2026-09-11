@@ -12,6 +12,8 @@ import { Card, DataRow } from "@/components/ui/card";
 import { Input, selectClass } from "@/components/ui/input";
 import { qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import { datasetOf } from "@/store/datasets";
 import { activeBom, bomLines, productCost, routingLines, unitName } from "@/store/manufacturing";
 import { useSeen } from "@/store/recents";
 
@@ -28,7 +30,10 @@ export function ProductsPage() {
             كل منتج بخاماته وعملياته — والتكلفة بتتحسب لوحدها، مش بتتكتب بالإيد.
           </p>
         </div>
-        {can.edit ? <Button onClick={() => setOpen(true)}>منتج جديد</Button> : null}
+        <div className="flex gap-2">
+          <ExportMenu module="sales" dataset={() => datasetOf(db, "products")} />
+          {can.edit ? <Button onClick={() => setOpen(true)}>منتج جديد</Button> : null}
+        </div>
       </div>
 
       {db.products.length === 0 ? (

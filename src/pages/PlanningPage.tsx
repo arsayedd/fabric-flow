@@ -11,6 +11,8 @@ import { Card } from "@/components/ui/card";
 import { Input, selectClass } from "@/components/ui/input";
 import { addDays, cairoToday, formatDate, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import { datasetOf } from "@/store/datasets";
 import {
   capacityOf,
   capacityOutlook,
@@ -45,6 +47,16 @@ export function PlanningPage() {
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
+          <ExportMenu
+            module="planning"
+            dataset={() =>
+              datasetOf(db, "schedule", {
+                filters: [
+                  { label: "الطاقة", value: `${cap.hoursPerDay} ساعة × ${cap.daysPerWeek} يوم × ${cap.utilizationPct}٪` },
+                ],
+              })
+            }
+          />
           <Button variant="outline" onClick={() => setSimOpen(true)}>
             لو…؟
           </Button>

@@ -11,11 +11,13 @@ import { Input, selectClass } from "@/components/ui/input";
 import { cairoToday, formatDate, qty } from "@/lib/utils";
 import { costEntryPaid } from "@/store/compute";
 import { useFactory } from "@/store/context";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import { datasetOf } from "@/store/datasets";
 import { partiesWithRole } from "@/store/parties";
 import { METHOD_LABEL, PAY_METHODS, type PayMethod } from "@/store/types";
 
 export function CostsPage() {
-  const { computed, can, addCostItem } = useFactory();
+  const { db, computed, can, addCostItem } = useFactory();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("");
@@ -27,7 +29,10 @@ export function CostsPage() {
           <h2 className="text-2xl">التكاليف</h2>
           <p className="text-sm text-muted-foreground">كل بند بحركاته والمورد وإيه اتدفع وإيه لأ.</p>
         </div>
-        {can.edit ? <Button variant="outline" onClick={() => setOpen(true)}>بند جديد</Button> : null}
+        <div className="flex gap-2">
+          <ExportMenu module="purchasing" dataset={() => datasetOf(db, "purchases")} />
+          {can.edit ? <Button variant="outline" onClick={() => setOpen(true)}>بند جديد</Button> : null}
+        </div>
       </div>
       {computed.costItems.length === 0 ? (
         <EmptyState icon={Warehouse} title="مفيش بنود" body="ضيف بند تكلفة عشان تسجل المصروف عليه." />

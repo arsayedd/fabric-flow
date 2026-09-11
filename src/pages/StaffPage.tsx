@@ -10,6 +10,8 @@ import { formatDate } from "@/lib/utils";
 import { supabaseConfigured } from "@/lib/supabase";
 import { MODULE_KEYS, MODULE_LABEL, MODULE_READY, SLUG_MESSAGE, slugState } from "@/store/account";
 import { useFactory } from "@/store/context";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import { datasetOf } from "@/store/datasets";
 import {
   ACTION_LABEL,
   MODULE_LABEL as PERM_MODULE_LABEL,
@@ -38,7 +40,10 @@ export function StaffPage() {
             اكتب إيميله واختَر دوره. أول ما يعمل حساب بنفس الإيميل بيتضاف للمصنع.
           </p>
         </div>
-        <Button onClick={() => setOpen(true)}>دعوة</Button>
+        <div className="flex gap-2">
+          <ExportMenu module="staff" dataset={() => datasetOf(db, "members")} />
+          <Button onClick={() => setOpen(true)}>دعوة</Button>
+        </div>
       </div>
 
       <section className="space-y-2">
@@ -264,11 +269,14 @@ export function AuditPage() {
   const actionLabel = { create: "إضافة", update: "تعديل", delete: "مسح", restore: "ترجيع نسخة" };
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-2xl">سجل التعديلات</h2>
-        <p className="text-sm text-muted-foreground">
-          صاحب المصنع بس اللي يشوف مين ضاف أو عدّل أو مسح، وإمتى، والقيمة قبلها كانت كام.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-2xl">سجل التعديلات</h2>
+          <p className="text-sm text-muted-foreground">
+            صاحب المصنع بس اللي يشوف مين ضاف أو عدّل أو مسح، وإمتى، والقيمة قبلها كانت كام.
+          </p>
+        </div>
+        <ExportMenu module="audit" dataset={() => datasetOf(db, "audit")} />
       </div>
       <div className="space-y-2">
         {db.auditLog.map((a) => (

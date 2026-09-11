@@ -237,7 +237,9 @@ export function datasetSheets(ds: ExportDataset, meta: { factory: string; user: 
           : totals.has(c.key)
             ? {
                 kind: "formula" as const,
-                // SUBTOTAL مش SUM: لو فلترت في Excel، المجموع يمشي مع الفلتر
+                // SUBTOTAL مش SUM لسببين: بيمشي مع الفلتر جوه Excel،
+                // **وبيتجاهل أي SUBTOTAL تانية جوه المدى** — فمجاميع
+                // المجموعات اللي في نص الجدول مابتتعدّش مرتين في الإجمالي.
                 formula: `SUBTOTAL(${c.total === "avg" ? 101 : 109},${colName(i + 1)}${from}:${colName(i + 1)}${to})`,
                 as: c.type,
               }

@@ -11,6 +11,8 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import { datasetOf } from "@/store/datasets";
 import {
   profitAlerts,
   profitByLevel,
@@ -60,11 +62,21 @@ export function CostingPage() {
             فين بتكسب وفين بتخسر وليه — محسوبة من الخامات والعمليات والإنتاج الفعلي، مش من أرقام مكتوبة بالإيد.
           </p>
         </div>
-        {can.finance ? (
-          <Button variant="outline" onClick={() => setMarginOpen(true)}>
-            هامش الهدف
-          </Button>
-        ) : null}
+        <div className="flex shrink-0 gap-2">
+          <ExportMenu
+            module="costing"
+            dataset={() =>
+              datasetOf(db, "costing", {
+                filters: [{ label: "الترتيب", value: RANK_SORTS.find((s) => s.key === sort)?.label ?? "" }],
+              })
+            }
+          />
+          {can.finance ? (
+            <Button variant="outline" onClick={() => setMarginOpen(true)}>
+              هامش الهدف
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

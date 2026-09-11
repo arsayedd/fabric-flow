@@ -11,11 +11,13 @@ import { Card } from "@/components/ui/card";
 import { Input, selectClass } from "@/components/ui/input";
 import { cairoToday, formatDate, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
+import { ExportMenu } from "@/components/export/ExportMenu";
+import { datasetOf } from "@/store/datasets";
 import { PAY_TYPE_LABEL, WORKER_PAY_TYPES, type WorkerPayType } from "@/store/types";
 import { useSeen } from "@/store/recents";
 
 export function WorkersPage() {
-  const { computed, can, markAttendance, addWorker } = useFactory();
+  const { db, computed, can, markAttendance, addWorker } = useFactory();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>(computed.workers.map((w) => w.id));
   const today = cairoToday();
@@ -32,11 +34,14 @@ export function WorkersPage() {
           <h2 className="text-2xl">العمال</h2>
           <p className="text-sm text-muted-foreground">يومية أو شهري أو بالقطعة. حضور جماعي بدوسة.</p>
         </div>
-        {can.edit ? (
-          <Button variant="outline" onClick={() => setOpen(true)}>
-            عامل جديد
-          </Button>
-        ) : null}
+        <div className="flex gap-2">
+          <ExportMenu module="workers" dataset={() => datasetOf(db, "workers")} />
+          {can.edit ? (
+            <Button variant="outline" onClick={() => setOpen(true)}>
+              عامل جديد
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <Card>
