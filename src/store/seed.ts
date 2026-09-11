@@ -356,6 +356,32 @@ export function demoDb(): Db {
     { id: nid(), factoryId: FID, productId: "p3", operationId: op("تعبئة"), seq: 3, rate: 2, stdMinutes: 2 },
   ];
 
+  /**
+   * مشتريات الخامات بأسعارها وتواريخها — أسعار الخامات بتتغير مع الوقت،
+   * وده أساس تاريخ تكلفة الموديل: [الخامة، الكمية، سعر الوحدة، قبل كام يوم]
+   */
+  const purchases: [string, number, number, number][] = [
+    ["قماش قطن", 300, 74, 60],
+    ["قماش قطن", 350, 88, 14],
+    ["قماش قطن", 200, 96, 5],
+    ["قماش كتان", 200, 120, 20],
+    ["بطانة", 300, 30, 20],
+    ["خيط بوليستر", 120, 18, 25],
+    ["أزرار", 2000, 1.3, 40],
+    ["أزرار", 2000, 1.7, 25],
+    ["سوست", 300, 4, 25],
+    ["تيكت وباركود", 2000, 1, 25],
+    ["كيس تغليف", 1500, 2, 25],
+  ];
+
+  /** المتوسط المرجّح لسعر الخامة لحد تاريخ معيّن — نفس اللي محرك التكلفة بيعيد حسابه */
+  const avgAt = (name: string, daysAgo = 0): number | null => {
+    const rows = purchases.filter(([n, , , d]) => n === name && d >= daysAgo);
+    if (!rows.length) return null;
+    const q = rows.reduce((s, [, qy]) => s + qy, 0);
+    return rows.reduce((s, [, qy, price]) => s + qy * price, 0) / q;
+  };
+
   const materials = tpl.materials.map((m) => {
     const reorder: Record<string, number> = {
       "قماش قطن": 400,
@@ -367,7 +393,12 @@ export function demoDb(): Db {
       "تيكت وباركود": 500,
       "كيس تغليف": 500,
     };
-    return { ...m, reorderPoint: reorder[m.name] ?? 0, defaultVendor: "مورد السوق" };
+    return {
+      ...m,
+      avgCost: avgAt(m.name) ?? m.avgCost,
+      reorderPoint: reorder[m.name] ?? 0,
+      defaultVendor: "مورد السوق",
+    };
   });
 
   const mv = (
@@ -383,24 +414,22 @@ export function demoDb(): Db {
     notes = "",
   ) => ({ id: nid(), factoryId: FID, date, itemType, itemId, warehouseId, kind, qty, unitCost, refType, refId, notes });
 
-  const cost = (name: string) => materials.find((m) => m.name === name)!.avgCost;
+  /** سعر الخامة وقت صرفها لأمر SN-1042 — المتوسط المرجّح للمشتريات لحد يومها */
+  const costAtIssue = (name: string) => avgAt(name, 10) ?? materials.find((m) => m.name === name)!.avgCost;
 
   const stockMovements = [
-    mv("material", mat("قماش قطن"), whMat, "purchase", 850, cost("قماش قطن"), addDays(today, -14), "cost_entry", "ce1", "أقمشة قمصان"),
-    mv("material", mat("قماش كتان"), whMat, "purchase", 200, cost("قماش كتان"), addDays(today, -20)),
-    mv("material", mat("بطانة"), whMat, "purchase", 300, cost("بطانة"), addDays(today, -20)),
-    mv("material", mat("خيط بوليستر"), whMat, "purchase", 120, cost("خيط بوليستر"), addDays(today, -25)),
-    mv("material", mat("أزرار"), whMat, "purchase", 4000, cost("أزرار"), addDays(today, -25)),
-    mv("material", mat("سوست"), whMat, "purchase", 300, cost("سوست"), addDays(today, -25)),
-    mv("material", mat("تيكت وباركود"), whMat, "purchase", 2000, cost("تيكت وباركود"), addDays(today, -25)),
-    mv("material", mat("كيس تغليف"), whMat, "purchase", 1500, cost("كيس تغليف"), addDays(today, -25)),
+    ...purchases.map(([name, qty, price, ago]) =>
+      name === "قماش قطن"
+        ? mv("material", mat(name), whMat, "purchase", qty, price, addDays(today, -ago), "cost_entry", "ce1", "أقمشة قمصان")
+        : mv("material", mat(name), whMat, "purchase", qty, price, addDays(today, -ago)),
+    ),
     // صرف خامات أمر SN-1042
-    mv("material", mat("قماش قطن"), whMat, "issue", -518.4, cost("قماش قطن"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
-    mv("material", mat("خيط بوليستر"), whMat, "issue", -15, cost("خيط بوليستر"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
-    mv("material", mat("أزرار"), whMat, "issue", -2142, cost("أزرار"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
-    mv("material", mat("تيكت وباركود"), whMat, "issue", -300, cost("تيكت وباركود"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
-    mv("material", mat("كيس تغليف"), whMat, "issue", -300, cost("كيس تغليف"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
-    mv("material", mat("قماش قطن"), whMat, "waste", -12, cost("قماش قطن"), addDays(today, -9), "order", "o1", "هالك قص"),
+    mv("material", mat("قماش قطن"), whMat, "issue", -518.4, costAtIssue("قماش قطن"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
+    mv("material", mat("خيط بوليستر"), whMat, "issue", -15, costAtIssue("خيط بوليستر"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
+    mv("material", mat("أزرار"), whMat, "issue", -2142, costAtIssue("أزرار"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
+    mv("material", mat("تيكت وباركود"), whMat, "issue", -300, costAtIssue("تيكت وباركود"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
+    mv("material", mat("كيس تغليف"), whMat, "issue", -300, costAtIssue("كيس تغليف"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
+    mv("material", mat("قماش قطن"), whMat, "waste", -12, costAtIssue("قماش قطن"), addDays(today, -9), "order", "o1", "هالك قص"),
     // إنتاج تام
     mv("product", "p1", whFg, "receipt_fg", 190, 212, addDays(today, -3), "order", "o1", "تام جزئي"),
     mv("product", "p3", whFg, "receipt_fg", 160, 114, addDays(today, -5), "order", "o5"),

@@ -3,6 +3,7 @@ import {
   Boxes,
   Brain,
   CalendarClock,
+  Coins,
   Factory,
   Home,
   Package,
@@ -40,6 +41,7 @@ const supervisorNav = [
 
 const moreLinks = [
   { to: "/planning", label: "التخطيط والطاقة", icon: CalendarClock },
+  { to: "/costing", label: "التكلفة والربحية", icon: Coins },
   { to: "/intelligence", label: "ذكاء العملاء", icon: Brain },
   { to: "/products", label: "المنتجات", icon: Package },
   { to: "/materials", label: "المخزن", icon: Boxes },

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, DataRow } from "@/components/ui/card";
 import { Input, selectClass } from "@/components/ui/input";
 import { cairoToday, formatDate, qty } from "@/lib/utils";
+import { modelsUsingMaterial } from "@/store/costing";
 import { useFactory } from "@/store/context";
 import {
   dailyUsage,
@@ -323,6 +324,8 @@ export function MaterialDetailPage() {
         </Card>
       ) : null}
 
+      <AffectedModels materialId={material.id} />
+
       <section>
         <h3 className="mb-2 text-base">حركات المخزن</h3>
         <div className="overflow-hidden rounded-lg border border-border bg-card">
@@ -348,5 +351,41 @@ export function MaterialDetailPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+/** الموديلات اللي تكلفتها بتتغير لما سعر الخامة دي يتغير */
+function AffectedModels({ materialId }: { materialId: string }) {
+  const { db, can } = useFactory();
+  if (!can.finance) return null;
+  const rows = modelsUsingMaterial(db, materialId);
+  if (!rows.length) return null;
+
+  return (
+    <Card>
+      <h3 className="text-base">الموديلات المتأثرة بسعر الخامة</h3>
+      <p className="mt-1 text-xs text-muted-foreground">
+        أي تغيير في سعر الوحدة بيعيد حساب تكلفة الموديلات دي وهوامشها في نفس اللحظة — مفيش إعادة إدخال.
+      </p>
+      <ul className="mt-2 list-none space-y-2">
+        {rows.map((r) => (
+          <li key={r.product.id}>
+            <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+              <Link to={`/products/${r.product.id}`} className="font-medium underline-offset-4 hover:underline">
+                {r.product.name}
+              </Link>
+              <span className="tabular text-muted-foreground">
+                {qty(r.effectiveQty)} {r.unit} للقطعة · <Money value={r.lineCost} /> ·{" "}
+                {qty(Math.round(r.sharePct), 0)}٪ من التكلفة
+                {r.marginPct === null ? "" : ` · هامش ${qty(Math.round(r.marginPct), 0)}٪`}
+              </span>
+            </div>
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+              <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, r.sharePct)}%` }} />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }

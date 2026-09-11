@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ChevronLeft, Package, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { CostingSection } from "@/components/Costing";
 import { EmptyState } from "@/components/EmptyState";
 import { Money } from "@/components/Money";
 import { Field, Panel } from "@/components/Panel";
@@ -365,6 +366,7 @@ export function ProductDetailPage() {
           <div className="mt-3 grid gap-2 md:grid-cols-[1fr_7rem_auto]">
             <select
               className={selectClass}
+              aria-label="اختَر عملية"
               value={operationId}
               onChange={(e) => {
                 setOperationId(e.target.value);
@@ -397,6 +399,8 @@ export function ProductDetailPage() {
           </div>
         ) : null}
       </section>
+
+      {can.finance ? <CostingSection productId={product.id} /> : null}
     </div>
   );
 }

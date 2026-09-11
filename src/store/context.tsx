@@ -225,6 +225,7 @@ type FactoryApi = {
   setOverhead: (value: number) => void;
   setScoreWeights: (weights: ScoreWeights) => void;
   setCapacity: (capacity: CapacitySettings) => void;
+  setTargetMargin: (value: number) => void;
   addMaterial: (input: Omit<Material, "id" | "factoryId">) => void;
   updateMaterial: (id: string, patch: Partial<Material>) => void;
   addProduct: (input: Omit<Product, "id" | "factoryId">) => void;
@@ -431,6 +432,15 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         mutate(
           { settings: { ...db.settings, scoreWeights: weights } },
           { action: "update", table: "settings", recordId: "score_weights", before: db.settings?.scoreWeights ?? null, after: weights },
+        );
+      },
+      /** هامش الهدف: قرار مالي، بيحدّد تكلفة الهدف وأقل سعر مقبول لكل موديل */
+      setTargetMargin: (value) => {
+        if (!can.finance) throw new Error("هامش الهدف للمالك والمحاسب بس.");
+        if (!(value > 0 && value < 100)) throw new Error("هامش الهدف لازم يكون بين ١ و٩٩٪.");
+        mutate(
+          { settings: { ...db.settings, targetMarginPct: value } },
+          { action: "update", table: "settings", recordId: "target_margin", before: db.settings?.targetMarginPct ?? null, after: value },
         );
       },
       /** قرار الطاقة: بيغيّر جدول المصنع كله، فمحتاج صلاحية تعديل وبيتسجل */

@@ -9,6 +9,7 @@ import { cairoToday, formatDate } from "@/lib/utils";
 import { useFactory } from "@/store/context";
 import { IntelligenceTeaser } from "./IntelligencePage";
 import { PlanningTeaser } from "./PlanningPage";
+import { CostingTeaser } from "./CostingPage";
 
 export function HomePage() {
   const { can, computed } = useFactory();
@@ -82,6 +83,8 @@ export function HomePage() {
       )}
 
       <PlanningTeaser />
+
+      <CostingTeaser />
 
       <IntelligenceTeaser />
 

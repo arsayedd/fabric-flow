@@ -314,6 +314,8 @@ export type Settings = {
   overheadPerUnit: number;
   /** أوزان سكور العميل — صاحب المصنع يقدر يعدّلها */
   scoreWeights?: Record<"purchase" | "payment" | "growth" | "frequency" | "profit" | "quality" | "relationship", number>;
+  /** هامش الربح المستهدف % — أساس تكلفة الهدف وأقل سعر مقبول */
+  targetMarginPct?: number;
   /** قرار الطاقة: أساس الجدولة كلها */
   capacity?: {
     hoursPerDay: number;
