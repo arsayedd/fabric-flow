@@ -83,17 +83,28 @@ export function PlanningPage() {
               <p className="text-sm text-muted-foreground">{w.label}</p>
               <span className="text-xs text-muted-foreground">{qty(w.days, 0)} يوم عمل</span>
             </div>
-            <p className="mt-1 text-xl tabular">{Math.round(w.pct)}٪ محمّل</p>
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
-              <div
-                className={`h-full rounded-full ${w.pct >= 95 ? "bg-danger" : w.pct >= 80 ? "bg-warn" : "bg-ok"}`}
-                style={{ width: `${w.pct}%` }}
-              />
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              متاح {qty(Math.round(w.available), 0)} دقيقة · مشغول {qty(Math.round(w.used), 0)} · فاضي{" "}
-              {qty(Math.round(w.remaining), 0)}
-            </p>
+            {w.days === 0 ? (
+              <>
+                <p className="mt-1 text-xl">يوم راحة</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  أسبوع العمل {qty(cap.daysPerWeek, 0)} أيام، فالشغل بيبدأ أول يوم عمل جاي.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="mt-1 text-xl tabular">{qty(Math.round(w.pct), 0)}٪ محمّل</p>
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={`h-full rounded-full ${w.pct >= 95 ? "bg-danger" : w.pct >= 80 ? "bg-warn" : "bg-ok"}`}
+                    style={{ width: `${w.pct}%` }}
+                  />
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  متاح {qty(Math.round(w.available), 0)} دقيقة · مشغول {qty(Math.round(w.used), 0)} · فاضي{" "}
+                  {qty(Math.round(w.remaining), 0)}
+                </p>
+              </>
+            )}
           </Card>
         ))}
       </div>
@@ -181,7 +192,7 @@ export function PlanningPage() {
               <li key={l.line}>
                 <div className="flex items-baseline justify-between gap-3 text-sm">
                   <span className="truncate">{l.line}</span>
-                  <span className="shrink-0 tabular text-muted-foreground">{Math.round(l.share)}٪</span>
+                  <span className="shrink-0 tabular text-muted-foreground">{qty(Math.round(l.share), 0)}٪</span>
                 </div>
                 <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
                   <div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(100, l.share)}%` }} />
@@ -220,6 +231,8 @@ export function PlanningPage() {
               ))}
             </div>
           </div>
+        ) : needs.rows.length ? (
+          <p className="mb-2 text-sm text-ok">كل الخامات اللي الأوامر المفتوحة محتاجاها موجودة في المخزن — مفيش نقص دلوقتي.</p>
         ) : null}
 
         {needs.rows.length ? (
@@ -501,7 +514,7 @@ function SimResult({ sim }: { sim: Simulation }) {
             {sim.priceKnown ? (
               <>
                 الإيراد بسعر البيع المسجّل: <Money value={sim.revenue} /> — ربح <Money value={sim.profit} /> (هامش{" "}
-                {Math.round(sim.marginPct ?? 0)}٪)
+                {qty(Math.round(sim.marginPct ?? 0), 0)}٪)
               </>
             ) : (
               "سعر بيع المنتج مش مسجّل، فالربح مش محسوب — سجّل السعر في كارت المنتج."
@@ -567,7 +580,7 @@ export function PlanningTeaser() {
         </Link>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
-        حمل الأسبوع {Math.round(week?.pct ?? 0)}٪
+        حمل الأسبوع {qty(Math.round(week?.pct ?? 0), 0)}٪
         {plan.lateRows.length ? ` · ${plan.lateRows.length} أمر مش هيلحق ميعاده` : " · كل الأوامر بتلحق ميعادها"}
         {shortages.length ? ` · نقص في ${shortages.length} خامة` : ""}
       </p>
