@@ -43,10 +43,13 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 43127,
     strictPort: true,
+    // عشان نفق trycloudflare يعدّي لما نشارك السيستم مع حد يجربه
+    allowedHosts: [".trycloudflare.com"],
   },
   preview: {
     host: "0.0.0.0",
     port: 43127,
     strictPort: true,
+    allowedHosts: [".trycloudflare.com"],
   },
 });
