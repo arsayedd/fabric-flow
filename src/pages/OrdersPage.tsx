@@ -124,7 +124,7 @@ export function OrdersPage() {
                       aria-label="نسبة الإنجاز"
                     />
                     {can.delete ? (
-                      <Button size="sm" variant="danger" onClick={() => deleteOrder(o.id)}>
+                      <Button size="sm" variant="dangerGhost" onClick={() => deleteOrder(o.id)}>
                         مسح
                       </Button>
                     ) : null}

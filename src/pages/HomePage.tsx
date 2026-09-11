@@ -42,7 +42,7 @@ export function HomePage() {
             <CircleAlert className="h-4 w-4 text-accent" />
             <h3 className="text-base">محتاج منك النهارده</h3>
           </div>
-          <ul className="space-y-1 text-sm text-muted-foreground">
+          <ul className="list-none space-y-1 text-sm text-muted-foreground">
             {rec.overdue.length ? <li>{rec.overdue.length} مبلغ متأخر على العملاء</li> : null}
             {rec.today.length ? <li>{rec.today.length} مبلغ مستحق النهارده</li> : null}
             {rec.pending.length ? <li>{rec.pending.length} تحويل مستني تأكيد وصوله</li> : null}
