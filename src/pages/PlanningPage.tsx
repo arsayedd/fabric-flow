@@ -81,7 +81,7 @@ export function PlanningPage() {
           <Card key={w.key}>
             <div className="flex items-baseline justify-between gap-2">
               <p className="text-sm text-muted-foreground">{w.label}</p>
-              <span className="text-xs text-muted-foreground">{qty(w.days, 0)} يوم عمل</span>
+              {w.days > 0 ? <span className="text-xs text-muted-foreground">{qty(w.days, 0)} يوم عمل</span> : null}
             </div>
             {w.days === 0 ? (
               <>
@@ -122,7 +122,7 @@ export function PlanningPage() {
             <div className="mt-3 flex items-start gap-2 rounded-md border border-danger/30 bg-danger-soft/50 p-3">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-danger" />
               <p className="text-sm">
-                {plan.lateRows.length} أمر مش هيلحق ميعاده بالطاقة الحالية. أقربهم{" "}
+                {qty(plan.lateRows.length, 0)} أمر مش هيلحق ميعاده بالطاقة الحالية. أقربهم{" "}
                 <strong className="font-medium">{plan.lateRows[0].code}</strong> — ميعاده{" "}
                 {formatDate(plan.lateRows[0].dueDate)} وهيخلص {formatDate(plan.lateRows[0].finish)} (متأخر{" "}
                 {qty(plan.lateRows[0].lateDays, 0)} يوم عمل).
@@ -211,7 +211,7 @@ export function PlanningPage() {
           <h3 className="text-base">احتياج الخامات (MRP)</h3>
           {needs.shortages.length ? (
             <span className="text-sm text-danger">
-              نقص في {needs.shortages.length} خامة بتكلفة شراء تقديرية <Money value={needs.shortageCost} />
+              نقص في {qty(needs.shortages.length, 0)} خامة بتكلفة شراء تقديرية <Money value={needs.shortageCost} />
             </span>
           ) : null}
         </div>
@@ -291,7 +291,7 @@ export function PlanningPage() {
 
         {needs.blind.length ? (
           <p className="mt-2 text-xs text-warn">
-            {needs.blind.length} أمر مفتوح مالهوش قائمة خامات ({needs.blind.map((o) => o.code).join("، ")}) — احتياجه مش داخل
+            {qty(needs.blind.length, 0)} أمر مفتوح مالهوش قائمة خامات ({needs.blind.map((o) => o.code).join("، ")}) — احتياجه مش داخل
             في الحساب، والنظام مش بيخمّن خاماته.
           </p>
         ) : null}
@@ -581,7 +581,7 @@ export function PlanningTeaser() {
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
         حمل الأسبوع {qty(Math.round(week?.pct ?? 0), 0)}٪
-        {plan.lateRows.length ? ` · ${plan.lateRows.length} أمر مش هيلحق ميعاده` : " · كل الأوامر بتلحق ميعادها"}
+        {plan.lateRows.length ? ` · ${qty(plan.lateRows.length, 0)} أمر مش هيلحق ميعاده` : " · كل الأوامر بتلحق ميعادها"}
         {shortages.length ? ` · نقص في ${shortages.length} خامة` : ""}
       </p>
     </Card>
