@@ -1,0 +1,492 @@
+import { formatDate, qty } from "@/lib/utils";
+import { clientStatement, costEntryPaid, workerAdvance, workerBalance } from "./compute";
+import { materialStock, operationById, orderRequirements, orderStages, productById, unitName } from "./manufacturing";
+import { partyById } from "./parties";
+import { DOC_DEFS } from "./documents";
+import {
+  METHOD_LABEL,
+  ORDER_STATUS_LABEL,
+  PAY_TYPE_LABEL,
+  STOCK_KIND_LABEL,
+  type Db,
+  type DocType,
+} from "./types";
+
+/**
+ * بناء محتوى المستند من الدفاتر.
+ *
+ * المستند المطبوع **مابيتخزّنش**. اللي بيتخزّن هو سطر الهوية (النوع
+ * والرقم والتاريخ والمرجع)، والمحتوى بيتبنى هنا من نفس البيانات اللي
+ * الشاشات بتقراها. فالورقة المطبوعة تاني بعد شهر بتطلع بأرقام النظام
+ * الحالية، **ومفيش نسخة تانية من الحقيقة تقدر تخالف الأصل**.
+ *
+ * وفي مقابل ده: الورقة القديمة لو الأرقام اتغيّرت بعد طبعها، النسخة
+ * الجديدة بتبان مختلفة. وده الصح — لأن الدفتر هو المرجع، مش الورق.
+ * ولو المستند لازم يتقفل على أرقامه (فاتورة ضريبية مثلًا)، ده بيبقى
+ * قرار محاسبي بيتعمل بـ**إلغاء وإعادة إصدار**، مش بتعديل صامت.
+ */
+
+export type DocBody = {
+  /** عنوان المستند زي ما بيطلع في الورقة */
+  title: string;
+  /** الجهة: عميل، مورد، عامل… */
+  party?: { label: string; name: string; rows: { label: string; value: string }[] };
+  /** بيانات في الترويسة جنب الرقم */
+  meta: { label: string; value: string }[];
+  cols: { label: string; align?: "start" | "end"; width?: string }[];
+  rows: string[][];
+  totals: { label: string; value: number; strong?: boolean; negative?: boolean }[];
+  /** المبلغ اللي المستند بيمثّله — بيتسجّل في الدفتر للموافقات */
+  amount: number | null;
+  /** خانات المستلم: إذن التسليم بلا الخانات دي مش إثبات */
+  receiptBlock?: boolean;
+  note?: string;
+  /** المستند ده ينفع يطلع على النوع ده من السجلات؟ */
+  ok: boolean;
+  /** لو مش ينفع — السبب */
+  why?: string;
+};
+
+function missing(title: string, why: string): DocBody {
+  return { title, meta: [], cols: [], rows: [], totals: [], amount: null, ok: false, why };
+}
+
+/* ── البناء لكل نوع ────────────────────────────────────────────── */
+
+export function buildBody(db: Db, type: DocType, refId: string, refExtra?: string | null): DocBody {
+  const title = DOC_DEFS[type].label;
+  switch (type) {
+    case "order":
+      return orderDoc(db, refId, title);
+    case "production":
+      return productionDoc(db, refId, title);
+    case "issue":
+      return issueDoc(db, refId, title);
+    case "qc":
+      return qcDoc(db, refId, title);
+    case "delivery":
+      return deliveryDoc(db, refId, title, true);
+    case "invoice":
+      return deliveryDoc(db, refId, title, false);
+    case "receipt":
+      return receiptDoc(db, refId, title);
+    case "statement":
+      return statementDoc(db, refId, title, refExtra);
+    case "purchase":
+      return purchaseDoc(db, refId, title);
+    case "grn":
+      return grnDoc(db, refId, title);
+    case "payvoucher":
+      return payVoucherDoc(db, refId, title);
+    case "payslip":
+      return payslipDoc(db, refId, title, refExtra);
+    case "stock":
+      return stockDoc(db, title);
+  }
+}
+
+function orderDoc(db: Db, id: string, title: string): DocBody {
+  const o = db.orders.find((x) => x.id === id);
+  if (!o) return missing(title, "أمر الإنتاج مش موجود.");
+  const client = partyById(db, o.clientId);
+  const value = o.quantity * o.piecePrice;
+
+  return {
+    title,
+    party: client
+      ? {
+          label: "العميل",
+          name: client.name,
+          rows: [
+            { label: "الهاتف", value: client.phone },
+            { label: "العنوان", value: client.address ?? "" },
+          ],
+        }
+      : { label: "الجهة", name: "مخزون المصنع", rows: [] },
+    meta: [
+      { label: "الخط", value: o.line },
+      { label: "الميعاد", value: formatDate(o.dueDate) },
+      { label: "الحالة", value: ORDER_STATUS_LABEL[o.status] },
+    ],
+    cols: [
+      { label: "الموديل" },
+      { label: "المنتج" },
+      { label: "الكمية", align: "end", width: "20mm" },
+      { label: "سعر القطعة", align: "end", width: "24mm" },
+      { label: "الإجمالي", align: "end", width: "26mm" },
+    ],
+    rows: [
+      [
+        o.model,
+        productById(db, o.productId)?.sku ?? "—",
+        qty(o.quantity, 0),
+        qty(o.piecePrice, 2),
+        qty(value, 2),
+      ],
+    ],
+    totals: [{ label: "قيمة الأمر", value, strong: true }],
+    amount: value,
+    note: o.notes || undefined,
+    ok: true,
+  };
+}
+
+function productionDoc(db: Db, id: string, title: string): DocBody {
+  const o = db.orders.find((x) => x.id === id);
+  if (!o) return missing(title, "أمر الإنتاج مش موجود.");
+  const stages = orderStages(db, o);
+
+  return {
+    title,
+    party: { label: "الموديل", name: `${o.model} — ${qty(o.quantity, 0)} قطعة`, rows: [{ label: "الخط", value: o.line }] },
+    meta: [
+      { label: "رقم الأمر", value: o.code },
+      { label: "الميعاد", value: formatDate(o.dueDate) },
+    ],
+    cols: [
+      { label: "المرحلة" },
+      { label: "المطلوب", align: "end" },
+      { label: "المنفّذ", align: "end" },
+      { label: "الباقي", align: "end" },
+      { label: "معاد", align: "end" },
+      { label: "هالك", align: "end" },
+    ],
+    rows: stages.map((s) => [
+      s.name,
+      qty(o.quantity, 0),
+      qty(s.good, 0),
+      qty(Math.max(0, o.quantity - s.good), 0),
+      qty(s.rework, 0),
+      qty(s.scrap, 0),
+    ]),
+    totals: [],
+    amount: null,
+    note: stages.length ? undefined : "الأمر ده مالوش مسار عمليات مسجّل، فالورقة طلعت بلا مراحل.",
+    ok: true,
+  };
+}
+
+function issueDoc(db: Db, id: string, title: string): DocBody {
+  const o = db.orders.find((x) => x.id === id);
+  if (!o) return missing(title, "أمر الإنتاج مش موجود.");
+  const reqs = orderRequirements(db, o);
+  if (!reqs.length) return missing(title, "الأمر ده مالوش قائمة مواد، فمفيش خامات تتصرف عليه.");
+  const total = reqs.reduce((s, r) => s + r.required * r.unitCost, 0);
+
+  return {
+    title,
+    party: { label: "لأمر إنتاج", name: `${o.code} — ${o.model}`, rows: [{ label: "الكمية", value: qty(o.quantity, 0) }] },
+    meta: [{ label: "الخط", value: o.line }],
+    cols: [
+      { label: "الخامة" },
+      { label: "الوحدة", width: "18mm" },
+      { label: "المطلوب", align: "end" },
+      { label: "المصروف", align: "end" },
+      { label: "الباقي", align: "end" },
+      { label: "التكلفة", align: "end" },
+    ],
+    rows: reqs.map((r) => [
+      r.name,
+      r.unit,
+      qty(r.required, 2),
+      qty(r.issued, 2),
+      qty(r.remaining, 2),
+      qty(r.required * r.unitCost, 2),
+    ]),
+    totals: [{ label: "قيمة الخامات", value: total, strong: true }],
+    amount: total,
+    ok: true,
+  };
+}
+
+function qcDoc(db: Db, id: string, title: string): DocBody {
+  const o = db.orders.find((x) => x.id === id);
+  if (!o) return missing(title, "أمر الإنتاج مش موجود.");
+  const entries = db.stageEntries.filter((s) => s.orderId === id);
+  if (!entries.length) return missing(title, "مفيش حركات إنتاج على الأمر ده، فمفيش حاجة تتفحص.");
+
+  return {
+    title,
+    party: { label: "أمر الإنتاج", name: `${o.code} — ${o.model}`, rows: [] },
+    meta: [{ label: "الكمية", value: qty(o.quantity, 0) }],
+    cols: [
+      { label: "التاريخ", width: "24mm" },
+      { label: "العملية" },
+      { label: "العامل" },
+      { label: "سليم", align: "end" },
+      { label: "معاد", align: "end" },
+      { label: "هالك", align: "end" },
+    ],
+    rows: entries.map((s) => [
+      formatDate(s.date),
+      operationById(db, s.operationId)?.name ?? "—",
+      db.workers.find((w) => w.id === s.workerId)?.name ?? "—",
+      qty(s.qtyGood, 0),
+      qty(s.qtyRework, 0),
+      qty(s.qtyScrap, 0),
+    ]),
+    totals: [],
+    amount: null,
+    note: "التصرف في المعاد والهالك بيتكتب بإيد مسؤول الجودة تحت.",
+    receiptBlock: true,
+    ok: true,
+  };
+}
+
+function deliveryDoc(db: Db, id: string, title: string, asDelivery: boolean): DocBody {
+  const d = db.deliveries.find((x) => x.id === id);
+  if (!d) return missing(title, "التوريدة مش موجودة.");
+  const client = partyById(db, d.clientId);
+  const unit = d.quantity ? d.amount / d.quantity : null;
+
+  return {
+    title,
+    party: {
+      label: "العميل",
+      name: client?.name ?? "عميل محذوف",
+      rows: [
+        { label: "الهاتف", value: client?.phone ?? "" },
+        { label: "العنوان", value: client?.address ?? "" },
+        { label: "الرقم الضريبي", value: client?.taxId ?? "" },
+      ],
+    },
+    meta: [{ label: "الاستحقاق", value: formatDate(d.dueDate) }],
+    cols: [
+      { label: "الصنف" },
+      { label: "الكمية", align: "end", width: "20mm" },
+      ...(asDelivery ? [] : [{ label: "سعر الوحدة", align: "end" as const, width: "24mm" }]),
+      { label: "الإجمالي", align: "end", width: "26mm" },
+    ],
+    rows: [
+      [
+        d.model || "توريدة",
+        d.quantity === null ? "—" : qty(d.quantity, 0),
+        ...(asDelivery ? [] : [unit === null ? "—" : qty(unit, 2)]),
+        qty(d.amount, 2),
+      ],
+    ],
+    totals: asDelivery ? [] : [{ label: "الصافي", value: d.amount, strong: true }],
+    amount: d.amount,
+    receiptBlock: asDelivery,
+    note: d.notes || undefined,
+    ok: true,
+  };
+}
+
+function receiptDoc(db: Db, id: string, title: string): DocBody {
+  const c = db.collections.find((x) => x.id === id);
+  if (!c) return missing(title, "التحصيل مش موجود.");
+  const client = partyById(db, c.clientId);
+  const after = client ? clientStatement(db, client.id).at(-1)?.balance ?? 0 : 0;
+
+  return {
+    title,
+    party: { label: "من", name: client?.name ?? "عميل محذوف", rows: [{ label: "الهاتف", value: client?.phone ?? "" }] },
+    meta: [{ label: "الطريقة", value: METHOD_LABEL[c.method] }],
+    cols: [{ label: "البيان" }, { label: "المبلغ", align: "end" }],
+    rows: [
+      [`تحصيل ${METHOD_LABEL[c.method]}`, qty(c.amount, 2)],
+      ...(c.chequeDate ? [["تاريخ الشيك", formatDate(c.chequeDate)]] : []),
+    ],
+    totals: [
+      { label: "المبلغ المستلم", value: c.amount, strong: true },
+      { label: "الرصيد بعد التحصيل", value: after },
+    ],
+    amount: c.amount,
+    note:
+      c.status === "pending"
+        ? "التحصيل ده لسه بانتظار تأكيد، فالإيصال مش إثبات دخول فلوس الخزينة."
+        : undefined,
+    ok: true,
+  };
+}
+
+function statementDoc(db: Db, partyId: string, title: string, from?: string | null): DocBody {
+  const party = partyById(db, partyId);
+  if (!party) return missing(title, "الجهة مش موجودة.");
+  const all = clientStatement(db, partyId);
+  const lines = from ? all.filter((l) => l.date >= from) : all;
+  if (!all.length) return missing(title, "مفيش حركة على الجهة دي.");
+  const last = all.at(-1)!;
+
+  return {
+    title,
+    party: {
+      label: "الجهة",
+      name: party.name,
+      rows: [
+        { label: "الهاتف", value: party.phone },
+        { label: "الرقم الضريبي", value: party.taxId ?? "" },
+      ],
+    },
+    meta: [{ label: "عدد الحركات", value: qty(lines.length, 0) }],
+    cols: [
+      { label: "التاريخ", width: "24mm" },
+      { label: "البيان" },
+      { label: "مدين", align: "end" },
+      { label: "دائن", align: "end" },
+      { label: "الرصيد", align: "end" },
+    ],
+    rows: lines.map((l) => [
+      formatDate(l.date),
+      l.label,
+      l.debit ? qty(l.debit, 2) : "—",
+      l.credit ? qty(l.credit, 2) : "—",
+      qty(l.balance, 2),
+    ]),
+    totals: [
+      { label: "إجمالي التوريدات", value: all.reduce((s, l) => s + l.debit, 0) },
+      { label: "إجمالي التحصيل", value: all.reduce((s, l) => s + l.credit, 0) },
+      { label: "الرصيد المستحق", value: last.balance, strong: true },
+    ],
+    amount: last.balance,
+    note: from ? `الكشف من ${formatDate(from)} — والرصيد متراكم من قبل التاريخ ده.` : undefined,
+    ok: true,
+  };
+}
+
+function purchaseDoc(db: Db, id: string, title: string): DocBody {
+  const e = db.costEntries.find((x) => x.id === id);
+  if (!e) return missing(title, "بند التكلفة مش موجود.");
+  const paid = costEntryPaid(db, e.id);
+  const item = db.costItems.find((i) => i.id === e.costItemId);
+  const vendor = partyById(db, e.partyId);
+
+  return {
+    title,
+    party: {
+      label: "المورد",
+      name: vendor?.name ?? e.vendor ?? "—",
+      rows: [
+        { label: "الهاتف", value: vendor?.phone ?? "" },
+        { label: "الرقم الضريبي", value: vendor?.taxId ?? "" },
+      ],
+    },
+    meta: [],
+    cols: [
+      { label: "البند" },
+      { label: "الوحدة", width: "18mm" },
+      { label: "الكمية", align: "end" },
+      { label: "الإجمالي", align: "end" },
+    ],
+    rows: [[item?.name ?? "—", item?.unit ?? "—", e.quantity === null ? "—" : qty(e.quantity, 2), qty(e.amount, 2)]],
+    totals: [
+      { label: "قيمة الفاتورة", value: e.amount, strong: true },
+      { label: "المدفوع", value: paid },
+      { label: "الباقي", value: e.amount - paid },
+    ],
+    amount: e.amount,
+    note: e.notes || undefined,
+    ok: true,
+  };
+}
+
+function grnDoc(db: Db, id: string, title: string): DocBody {
+  const m = db.stockMovements.find((x) => x.id === id);
+  if (!m) return missing(title, "حركة المخزن مش موجودة.");
+  if (m.kind !== "purchase" && m.kind !== "opening") {
+    return missing(title, "إذن الاستلام بيطلع من حركة شراء أو رصيد افتتاحي بس.");
+  }
+  const name = db.materials.find((x) => x.id === m.itemId)?.name ?? productById(db, m.itemId)?.name ?? "صنف محذوف";
+  const unitId = db.materials.find((x) => x.id === m.itemId)?.unitId ?? null;
+
+  return {
+    title,
+    party: { label: "المخزن", name: db.warehouses.find((w) => w.id === m.warehouseId)?.name ?? "—", rows: [] },
+    meta: [{ label: "نوع الحركة", value: STOCK_KIND_LABEL[m.kind] }],
+    cols: [
+      { label: "الصنف" },
+      { label: "الوحدة", width: "18mm" },
+      { label: "الكمية", align: "end" },
+      { label: "سعر الوحدة", align: "end" },
+      { label: "القيمة", align: "end" },
+    ],
+    rows: [[name, unitName(db, unitId), qty(m.qty, 2), qty(m.unitCost, 2), qty(m.qty * m.unitCost, 2)]],
+    totals: [{ label: "قيمة الاستلام", value: m.qty * m.unitCost, strong: true }],
+    amount: m.qty * m.unitCost,
+    receiptBlock: true,
+    note: m.notes || undefined,
+    ok: true,
+  };
+}
+
+function payVoucherDoc(db: Db, id: string, title: string): DocBody {
+  const p = db.costPayments.find((x) => x.id === id);
+  if (!p) return missing(title, "الدفعة مش موجودة.");
+  const entry = db.costEntries.find((e) => e.id === p.costEntryId);
+  const item = entry ? db.costItems.find((i) => i.id === entry.costItemId) : null;
+  const vendor = entry ? partyById(db, entry.partyId) : null;
+
+  return {
+    title,
+    party: { label: "المستفيد", name: vendor?.name ?? entry?.vendor ?? "—", rows: [{ label: "الهاتف", value: vendor?.phone ?? "" }] },
+    meta: [
+      { label: "الطريقة", value: METHOD_LABEL[p.method] },
+      { label: "الحساب", value: db.accounts.find((a) => a.id === p.accountId)?.name ?? "—" },
+    ],
+    cols: [{ label: "البيان" }, { label: "المبلغ", align: "end" }],
+    rows: [[`دفعة عن ${item?.name ?? "بند تكلفة"}`, qty(p.amount, 2)]],
+    totals: [{ label: "المبلغ المدفوع", value: p.amount, strong: true }],
+    amount: p.amount,
+    receiptBlock: true,
+    ok: true,
+  };
+}
+
+function payslipDoc(db: Db, workerId: string, title: string, from?: string | null): DocBody {
+  const w = db.workers.find((x) => x.id === workerId);
+  if (!w) return missing(title, "العامل مش موجود.");
+  const earnings = db.workerEarnings.filter((e) => e.workerId === workerId && (!from || e.date >= from));
+  const payments = db.workerPayments.filter((p) => p.workerId === workerId && (!from || p.date >= from));
+  const earned = earnings.reduce((s, e) => s + e.amount, 0);
+  const paid = payments.filter((p) => p.kind === "pay").reduce((s, p) => s + p.amount, 0);
+
+  const KIND: Record<string, string> = { attendance: "يومية", piece: "بالقطعة", bonus: "مكافأة" };
+  return {
+    title,
+    party: {
+      label: "العامل",
+      name: w.name,
+      rows: [
+        { label: "نظام الأجر", value: PAY_TYPE_LABEL[w.payType] },
+        { label: "الهاتف", value: w.phone },
+      ],
+    },
+    meta: [{ label: "عدد الحركات", value: qty(earnings.length, 0) }],
+    cols: [{ label: "التاريخ", width: "24mm" }, { label: "النوع" }, { label: "البيان" }, { label: "المبلغ", align: "end" }],
+    rows: earnings.map((e) => [formatDate(e.date), KIND[e.kind] ?? e.kind, e.notes || "—", qty(e.amount, 2)]),
+    totals: [
+      { label: "إجمالي المستحق", value: earned },
+      { label: "المصروف", value: paid, negative: true },
+      { label: "سلف قائمة", value: workerAdvance(db, workerId), negative: true },
+      { label: "الرصيد", value: workerBalance(db, workerId), strong: true },
+    ],
+    amount: workerBalance(db, workerId),
+    receiptBlock: true,
+    ok: true,
+  };
+}
+
+function stockDoc(db: Db, title: string): DocBody {
+  const rows = materialStock(db);
+  if (!rows.length) return missing(title, "مفيش خامات مسجّلة.");
+
+  return {
+    title,
+    meta: [{ label: "عدد الأصناف", value: qty(rows.length, 0) }],
+    cols: [
+      { label: "الكود", width: "22mm" },
+      { label: "الخامة" },
+      { label: "الوحدة", width: "18mm" },
+      { label: "رصيد النظام", align: "end" },
+      { label: "الجرد الفعلي", align: "end", width: "26mm" },
+      { label: "الفرق", align: "end", width: "22mm" },
+    ],
+    rows: rows.map((m) => [m.sku, m.name, unitName(db, m.unitId), qty(m.qty, 2), "", ""]),
+    totals: [{ label: "قيمة المخزون بالنظام", value: rows.reduce((s, m) => s + m.value, 0), strong: true }],
+    amount: rows.reduce((s, m) => s + m.value, 0),
+    note: "الجرد الفعلي والفرق بيتكتبوا بالقلم وقت العد، وبعدها بيتسجّلوا كتسوية مخزن.",
+    receiptBlock: true,
+    ok: true,
+  };
+}

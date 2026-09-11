@@ -7,7 +7,7 @@ import { customerStats, partyById, partyCredit } from "./parties";
 import { mrp, openOrders, orderLoad, schedule } from "./planning";
 import { DOC_DEFS, DOC_STATUS_LABEL } from "./documents";
 import type { PermModule } from "./permissions";
-import { METHOD_LABEL, ORDER_STATUS_LABEL, PAY_TYPE_LABEL, ROLE_LABEL, type Db } from "./types";
+import { METHOD_LABEL, ORDER_STATUS_LABEL, PAY_TYPE_LABEL, ROLE_LABEL, STOCK_KIND_LABEL, type Db } from "./types";
 
 /**
  * سجل البيانات القابلة للتصدير.
@@ -495,28 +495,18 @@ export const DATASETS: DatasetDef[] = [
       text("warehouse", "المخزن", 16),
       text("notes", "ملاحظات", 20),
     ],
-    rows: (db) => {
-      const KIND: Record<string, string> = {
-        receipt: "استلام",
-        issue: "صرف",
-        waste: "هالك",
-        adjust: "تسوية",
-        produce: "إنتاج",
-        deliver: "تسليم",
-        return: "مرتجع",
-      };
-      return db.stockMovements.map((m) => ({
+    rows: (db) =>
+      db.stockMovements.map((m) => ({
         id: m.id,
         date: m.date,
         item: (m.itemType === "material" ? materialById(db, m.itemId)?.name : productById(db, m.itemId)?.name) ?? "صنف محذوف",
-        kind: KIND[m.kind] ?? m.kind,
+        kind: STOCK_KIND_LABEL[m.kind],
         qty: m.qty,
         unitCost: m.unitCost,
         value: m.qty * m.unitCost,
         warehouse: db.warehouses.find((w) => w.id === m.warehouseId)?.name ?? "",
         notes: m.notes,
-      }));
-    },
+      })),
   },
   {
     key: "purchases",
