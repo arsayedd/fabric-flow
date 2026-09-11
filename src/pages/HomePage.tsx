@@ -12,10 +12,11 @@ export function HomePage() {
   const { can, computed } = useFactory();
   if (!can.finance) return <SupervisorHome />;
 
-  const { rec, treasuryTotal, monthPnl, owe, orders } = computed;
+  const { rec, treasuryTotal, monthPnl, owe, orders, stock } = computed;
   const dueNow = rec.overdue.length + rec.today.length;
   const running = orders.filter((o) => o.status === "running");
   const stuck = orders.filter((o) => o.status === "late" || o.status === "stopped");
+  const lowStock = stock.filter((s) => s.state !== "ok");
 
   return (
     <div className="space-y-5">
@@ -36,7 +37,7 @@ export function HomePage() {
         <Stat label="عليك للموردين" value={<Money value={owe.vendorTotal} />} to="/costs" />
       </div>
 
-      {dueNow > 0 || rec.pending.length > 0 || stuck.length > 0 ? (
+      {dueNow > 0 || rec.pending.length > 0 || stuck.length > 0 || lowStock.length > 0 ? (
         <Card className="border-r-2 border-r-accent">
           <div className="mb-2 flex items-center gap-2">
             <CircleAlert className="h-4 w-4 text-accent" />
@@ -47,14 +48,24 @@ export function HomePage() {
             {rec.today.length ? <li>{rec.today.length} مبلغ مستحق النهارده</li> : null}
             {rec.pending.length ? <li>{rec.pending.length} تحويل مستني تأكيد وصوله</li> : null}
             {stuck.length ? <li>{stuck.length} أمر إنتاج متأخر أو متوقف</li> : null}
+            {lowStock.length ? (
+              <li>
+                {lowStock.length} خامة خلصت أو قرّبت تخلص — أولها {lowStock[0].name}
+              </li>
+            ) : null}
           </ul>
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             <Button asChild size="sm">
               <Link to="/collections">افتح التحصيل</Link>
             </Button>
             {stuck.length ? (
               <Button asChild size="sm" variant="outline">
                 <Link to="/orders">أوامر الإنتاج</Link>
+              </Button>
+            ) : null}
+            {lowStock.length ? (
+              <Button asChild size="sm" variant="outline">
+                <Link to="/materials">المخزن</Link>
               </Button>
             ) : null}
           </div>
@@ -75,7 +86,7 @@ export function HomePage() {
         ) : (
           <div className="grid gap-2 md:grid-cols-2">
             {running.slice(0, 4).map((o) => (
-              <Link key={o.id} to="/orders" className="rounded-lg border border-border bg-card p-3.5">
+              <Link key={o.id} to={`/orders/${o.id}`} className="rounded-lg border border-border bg-card p-3.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="latin tabular text-sm text-muted-foreground">#{o.code}</span>
                   <Badge tone={STATUS[o.status].tone}>{STATUS[o.status].label}</Badge>
@@ -130,6 +141,7 @@ function SupervisorHome() {
   const present = computed.attendanceToday.length;
   const missing = Math.max(0, db.workers.length - present);
   const running = computed.orders.filter((o) => o.status === "running" || o.status === "late");
+  const lowStock = computed.stock.filter((s) => s.state !== "ok");
 
   return (
     <div className="space-y-5">
@@ -160,11 +172,27 @@ function SupervisorHome() {
         </Card>
       )}
 
+      {lowStock.length ? (
+        <Card className="border-r-2 border-r-warn">
+          <h3 className="text-base">خامات على وش الخلاص</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {lowStock
+              .slice(0, 3)
+              .map((s) => s.name)
+              .join("، ")}
+            {lowStock.length > 3 ? ` و${lowStock.length - 3} غيرهم` : ""}. بلّغ الإدارة قبل ما الخط يقف.
+          </p>
+          <Button asChild size="sm" variant="outline" className="mt-3">
+            <Link to="/materials">افتح المخزن</Link>
+          </Button>
+        </Card>
+      ) : null}
+
       <section>
         <SectionHead title="أوامر على الخطوط" to="/orders" />
         <div className="overflow-hidden rounded-lg border border-border bg-card">
           {running.map((o) => (
-            <Link key={o.id} to="/orders" className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 last:border-0">
+            <Link key={o.id} to={`/orders/${o.id}`} className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 last:border-0">
               <div>
                 <p>
                   {o.model} <span className="latin tabular text-sm text-muted-foreground">#{o.code}</span>

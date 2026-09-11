@@ -1,7 +1,9 @@
 import {
   Banknote,
+  Boxes,
   Factory,
   Home,
+  Package,
   LogOut,
   MoreHorizontal,
   ScrollText,
@@ -29,11 +31,14 @@ const financeNav = [
 const supervisorNav = [
   { to: "/", label: "الرئيسية", icon: Home, end: true },
   { to: "/orders", label: "الإنتاج", icon: Factory },
+  { to: "/materials", label: "المخزن", icon: Boxes },
   { to: "/workers", label: "العمال", icon: UsersRound },
   { to: "/settings", label: "إعدادات", icon: Settings },
 ];
 
 const moreLinks = [
+  { to: "/products", label: "المنتجات", icon: Package },
+  { to: "/materials", label: "المخزن", icon: Boxes },
   { to: "/costs", label: "التكاليف", icon: Warehouse },
   { to: "/workers", label: "العمال", icon: UsersRound },
   { to: "/treasury", label: "الخزينة", icon: Wallet },

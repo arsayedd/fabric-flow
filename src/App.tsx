@@ -8,6 +8,9 @@ import { CostsPage, CostItemPage } from "@/pages/CostsPage";
 import { WorkersPage, WorkerProfilePage } from "@/pages/WorkersPage";
 import { TreasuryPage } from "@/pages/TreasuryPage";
 import { OrdersPage } from "@/pages/OrdersPage";
+import { OrderDetailPage } from "@/pages/OrderDetailPage";
+import { ProductsPage, ProductDetailPage } from "@/pages/ProductsPage";
+import { MaterialsPage, MaterialDetailPage } from "@/pages/MaterialsPage";
 import { AuditPage, SettingsPage, StaffPage } from "@/pages/StaffPage";
 import { useFactory } from "@/store/context";
 import type { ReactNode } from "react";
@@ -24,6 +27,11 @@ export default function App() {
         <Route path="/workers" element={<WorkersPage />} />
         <Route path="/workers/:id" element={<WorkerProfilePage />} />
         <Route path="/orders" element={<OrdersPage />} />
+        <Route path="/orders/:id" element={<OrderDetailPage />} />
+        <Route path="/products" element={<ProductsPage />} />
+        <Route path="/products/:id" element={<ProductDetailPage />} />
+        <Route path="/materials" element={<MaterialsPage />} />
+        <Route path="/materials/:id" element={<MaterialDetailPage />} />
         <Route
           path="/collections"
           element={

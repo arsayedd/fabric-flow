@@ -9,7 +9,7 @@ import { Input, selectClass } from "@/components/ui/input";
 import { formatDate } from "@/lib/utils";
 import { supabaseConfigured } from "@/lib/supabase";
 import { useFactory } from "@/store/context";
-import { ROLE_LABEL, ROLES, type Role } from "@/store/types";
+import { INDUSTRY_LABEL, ROLE_LABEL, ROLES, type Role } from "@/store/types";
 
 export function StaffPage() {
   const { db, invite, acceptInvite, changeRole, removeMember, session } = useFactory();
@@ -165,7 +165,7 @@ export function AuditPage() {
 }
 
 export function SettingsPage() {
-  const { exportBackup, resetDemo, db, can } = useFactory();
+  const { exportBackup, resetDemo, setOverhead, db, can } = useFactory();
 
   const download = () => {
     const backup = exportBackup();
@@ -193,6 +193,29 @@ export function SettingsPage() {
           </p>
         </div>
         <Lockup className="hidden w-24 shrink-0 sm:block" />
+      </Card>
+
+      <Card>
+        <h3 className="text-base">نشاط المصنع</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {INDUSTRY_LABEL[db.settings.industry]} — الوحدات والفئات والعمليات اتجهزت على أساسه، وتقدر تعدّلها من
+          المنتجات والمخزن.
+        </p>
+        {can.finance ? (
+          <label className="mt-4 block">
+            <span className="mb-1.5 block text-sm text-muted-foreground">
+              أوفرهيد على القطعة (إيجار وكهرباء وإدارة موزّعة)
+            </span>
+            <Input
+              inputMode="decimal"
+              defaultValue={db.settings.overheadPerUnit}
+              onBlur={(e) => {
+                setOverhead(Number(e.target.value) || 0);
+                toast.success("الأوفرهيد اتحدّث وتكلفة المنتجات اتحسبت من تاني.");
+              }}
+            />
+          </label>
+        ) : null}
       </Card>
 
       <Card>
