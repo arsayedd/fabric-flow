@@ -43,6 +43,11 @@ export function money(amount: number): string {
   }).format(Math.round(amount));
 }
 
+/** كميات المخزن والإنتاج بنفس أرقام الفلوس */
+export function qty(value: number, maximumFractionDigits = 2): string {
+  return new Intl.NumberFormat("ar-EG", { maximumFractionDigits }).format(value);
+}
+
 export function moneyPlain(amount: number): string {
   return new Intl.NumberFormat("ar-EG", {
     maximumFractionDigits: 0,

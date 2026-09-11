@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, DataRow } from "@/components/ui/card";
 import { Input, selectClass } from "@/components/ui/input";
+import { qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
 import { activeBom, bomLines, productCost, routingLines, unitName } from "@/store/manufacturing";
 
@@ -180,7 +181,7 @@ export function ProductDetailPage() {
     useFactory();
   const product = db.products.find((p) => p.id === id);
   const [materialId, setMaterialId] = useState("");
-  const [qty, setQty] = useState("");
+  const [amount, setAmount] = useState("");
   const [waste, setWaste] = useState("0");
   const [operationId, setOperationId] = useState("");
   const [rate, setRate] = useState("");
@@ -252,7 +253,7 @@ export function ProductDetailPage() {
             <Money value={c.profit} signed />
           </DataRow>
           <DataRow label="زمن التصنيع">
-            <span className="tabular">{Math.round(c.minutes)} دقيقة</span>
+            <span className="tabular">{qty(c.minutes, 0)} دقيقة</span>
           </DataRow>
         </dl>
         {c.profit < 0 ? (
@@ -275,7 +276,7 @@ export function ProductDetailPage() {
                 <div className="min-w-0">
                   <p className="truncate">{l.name}</p>
                   <p className="text-sm text-muted-foreground tabular">
-                    {l.qtyPerUnit} {l.unit} + هالك {l.wastePct}٪ = {l.effectiveQty.toFixed(2)} {l.unit}
+                    {qty(l.qtyPerUnit)} {l.unit} + هالك {qty(l.wastePct, 0)}٪ = {qty(l.effectiveQty)} {l.unit}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -301,18 +302,18 @@ export function ProductDetailPage() {
                 </option>
               ))}
             </select>
-            <Input inputMode="decimal" placeholder="الكمية" value={qty} onChange={(e) => setQty(e.target.value)} />
+            <Input inputMode="decimal" placeholder="الكمية" value={amount} onChange={(e) => setAmount(e.target.value)} />
             <Input inputMode="decimal" placeholder="هالك ٪" value={waste} onChange={(e) => setWaste(e.target.value)} />
             <Button
               onClick={() => {
                 try {
                   addBomItem(product.id, {
                     materialId,
-                    qtyPerUnit: Number(qty) || 0,
+                    qtyPerUnit: Number(amount) || 0,
                     wastePct: Number(waste) || 0,
                   });
                   setMaterialId("");
-                  setQty("");
+                  setAmount("");
                   setWaste("0");
                 } catch (e) {
                   toast.error(e instanceof Error ? e.message : "مش قادر أضيف الخامة.");
@@ -344,7 +345,7 @@ export function ProductDetailPage() {
                       {r.name}
                       {r.isOutsourced ? <Badge tone="muted" className="mr-2">تشغيل خارجي</Badge> : null}
                     </p>
-                    <p className="text-sm text-muted-foreground tabular">{r.stdMinutes} دقيقة للقطعة</p>
+                    <p className="text-sm text-muted-foreground tabular">{qty(r.stdMinutes)} دقيقة للقطعة</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

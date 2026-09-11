@@ -9,7 +9,7 @@ import { Badge, type Tone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, DataRow } from "@/components/ui/card";
 import { Input, selectClass } from "@/components/ui/input";
-import { cairoToday, formatDate } from "@/lib/utils";
+import { cairoToday, formatDate, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
 import {
   dailyUsage,
@@ -84,7 +84,7 @@ export function MaterialsPage() {
                           : `الرصيد تحت حد الطلب`}
                     </span>
                     <span className="shrink-0 tabular text-muted-foreground">
-                      اشترِ {suggestedPurchase(r)} {unitName(db, r.unitId)}
+                      اشترِ {qty(suggestedPurchase(r), 0)} {unitName(db, r.unitId)}
                     </span>
                   </li>
                 ))}
@@ -102,7 +102,7 @@ export function MaterialsPage() {
                 <div className="min-w-0">
                   <p className="truncate">{r.name}</p>
                   <p className="text-sm text-muted-foreground tabular">
-                    {r.qty.toFixed(2)} {unitName(db, r.unitId)} · متوسط التكلفة {Math.round(r.avgCost)}
+                    {qty(r.qty)} {unitName(db, r.unitId)} · متوسط التكلفة {Math.round(r.avgCost)}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
@@ -209,7 +209,7 @@ export function MaterialDetailPage() {
   const { db, can, addStockMovement, updateMaterial } = useFactory();
   const material = db.materials.find((m) => m.id === id);
   const [kind, setKind] = useState<StockKind>("purchase");
-  const [qty, setQty] = useState("");
+  const [amount, setAmount] = useState("");
   const [unitCost, setUnitCost] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -234,7 +234,7 @@ export function MaterialDetailPage() {
         <dl className="divide-y divide-border/60">
           <DataRow label="الرصيد الحالي">
             <span className="tabular font-medium">
-              {qtyNow.toFixed(2)} {unit}
+              {qty(qtyNow)} {unit}
             </span>
           </DataRow>
           <DataRow label="قيمة الرصيد">
@@ -242,7 +242,7 @@ export function MaterialDetailPage() {
           </DataRow>
           <DataRow label="متوسط الاستهلاك">
             <span className="tabular">
-              {perDay.toFixed(2)} {unit} / يوم
+              {qty(perDay)} {unit} / يوم
             </span>
           </DataRow>
           <DataRow label="تكفي كام يوم">
@@ -278,7 +278,7 @@ export function MaterialDetailPage() {
               <option value="waste">{STOCK_KIND_LABEL.waste}</option>
               <option value="adjust">{STOCK_KIND_LABEL.adjust}</option>
             </select>
-            <Input inputMode="decimal" placeholder={`الكمية بالـ${unit}`} value={qty} onChange={(e) => setQty(e.target.value)} />
+            <Input inputMode="decimal" placeholder={`الكمية بالـ${unit}`} value={amount} onChange={(e) => setAmount(e.target.value)} />
             <Input
               inputMode="decimal"
               placeholder="تكلفة الوحدة"
@@ -301,7 +301,7 @@ export function MaterialDetailPage() {
                   itemId: material.id,
                   warehouseId: db.warehouses.find((w) => w.kind === "material")?.id ?? null,
                   kind,
-                  qty: Number(qty) || 0,
+                  qty: Number(amount) || 0,
                   unitCost: cost,
                   refType: "",
                   refId: null,
@@ -310,7 +310,7 @@ export function MaterialDetailPage() {
                 if (kind === "purchase" && Number(unitCost) > 0) {
                   updateMaterial(material.id, { avgCost: Number(unitCost) });
                 }
-                setQty("");
+                setAmount("");
                 setNotes("");
                 toast.success("الحركة اتسجلت والرصيد اتحدّث.");
               } catch (e) {
@@ -340,7 +340,7 @@ export function MaterialDetailPage() {
                 </div>
                 <span className={`shrink-0 tabular font-medium ${m.qty > 0 ? "text-ok" : "text-danger"}`}>
                   {m.qty > 0 ? "+" : ""}
-                  {m.qty.toFixed(2)} {unit}
+                  {qty(m.qty)} {unit}
                 </span>
               </div>
             ))

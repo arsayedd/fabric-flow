@@ -6,7 +6,7 @@ import { Badge, STATUS } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, DataRow } from "@/components/ui/card";
 import { Input, selectClass } from "@/components/ui/input";
-import { cairoToday, formatDate } from "@/lib/utils";
+import { cairoToday, formatDate, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
 import { bottleneck, orderCost, orderRequirements, orderStages, productById } from "@/store/manufacturing";
 
@@ -102,12 +102,12 @@ export function OrderDetailPage() {
                 <div className="min-w-0">
                   <p className="truncate">{r.name}</p>
                   <p className="text-sm text-muted-foreground tabular">
-                    مطلوب {r.required.toFixed(2)} {r.unit} · اتصرف {r.issued.toFixed(2)}
+                    مطلوب {qty(r.required)} {r.unit} · اتصرف {qty(r.issued)}
                   </p>
                 </div>
                 <div className="shrink-0 text-left">
                   {r.shortage > 0.0001 ? (
-                    <Badge tone="danger">ناقص {r.shortage.toFixed(2)}</Badge>
+                    <Badge tone="danger">ناقص {qty(r.shortage)}</Badge>
                   ) : r.remaining > 0.0001 ? (
                     <Badge tone="gold">جاهز للصرف</Badge>
                   ) : (
@@ -138,8 +138,8 @@ export function OrderDetailPage() {
                 <div className="flex items-baseline justify-between gap-3">
                   <p>{s.name}</p>
                   <p className="tabular text-sm text-muted-foreground">
-                    {s.good} من {order.quantity}
-                    {s.scrap ? ` · تالف ${s.scrap}` : ""}
+                    {qty(s.good, 0)} من {qty(order.quantity, 0)}
+                    {s.scrap ? ` · تالف ${qty(s.scrap, 0)}` : ""}
                   </p>
                 </div>
                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
