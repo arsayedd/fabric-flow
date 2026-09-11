@@ -55,7 +55,10 @@ export function PartiesPage() {
   );
 
   const pf = computed.portfolio;
-  const alerts = computed.alerts.slice(0, 5);
+  // أهم تنبيه لكل جهة بس — عشان الاسم ميتكررش في نفس القائمة
+  const alerts = computed.alerts
+    .filter((a, i, all) => all.findIndex((x) => x.partyId === a.partyId) === i)
+    .slice(0, 5);
   const concentrated = pf.topShare !== null && pf.topShare >= 50 && pf.customers >= 3;
 
   return (
@@ -109,8 +112,8 @@ export function PartiesPage() {
         <Card>
           <h3 className="text-base">مين أركز عليه النهارده</h3>
           <ul className="mt-2 list-none space-y-2.5">
-            {alerts.map((a, i) => (
-              <li key={`${a.partyId}-${i}`} className="flex items-start justify-between gap-3">
+            {alerts.map((a) => (
+              <li key={a.partyId} className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <Link to={a.to} className="font-medium underline-offset-4 hover:underline">
                     {a.name}
