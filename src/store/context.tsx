@@ -44,6 +44,7 @@ import {
   type Workspace,
 } from "./account";
 import { partyAlerts, portfolio } from "./parties";
+import { allowed, denied, roleMatrix, type PermAction, type PermMatrix, type PermModule } from "./permissions";
 import {
   activeBom,
   bomLines,
@@ -397,12 +398,21 @@ type FactoryApi = {
   exportBackup: () => BackupFile;
   resetDemo: () => void;
   can: {
+    /** السؤال الوحيد: «الدور ده يعمل الفعل ده في الموديول ده؟» */
+    do: (module: PermModule, action: PermAction) => boolean;
+    /** مصفوفة الدور الحالي — للعرض في شاشة الصلاحيات */
+    matrix: PermMatrix;
+    /**
+     * اختصارات قديمة بمعنى واسع: «يقدر يعدّل حاجة» مش «يعدّل الحاجة دي».
+     * التحقق الدقيق بيحصل في `can.do` وفي الميوتيشن نفسها.
+     */
     finance: boolean;
     edit: boolean;
     delete: boolean;
     staff: boolean;
     audit: boolean;
   };
+  setPermissions: (role: Role, matrix: PermMatrix) => void;
   addParty: (input: Partial<Party> & { name: string }) => string;
   updateParty: (id: string, patch: Partial<Party>) => void;
   deleteParty: (id: string) => void;
@@ -663,13 +673,26 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
   };
 
   const api = useMemo<FactoryApi>(() => {
-    const role = session?.role;
+    const role = session?.role ?? "supervisor";
+    const matrix = roleMatrix(role, db.settings?.permissions);
+    /** الصلاحية سؤال واحد، والجواب واحد في القائمة والزر والميوتيشن */
+    const may = (module: PermModule, action: PermAction) => (session ? allowed(matrix, module, action) : false);
+    /**
+     * نقطة المنع الحقيقية. الزر المخفي مش منع — ده اللي بيرفض التنفيذ.
+     * (على السيرفر نفس المصفوفة بتتحوّل لـRLS + تحقق في الدوال.)
+     */
+    const need = (module: PermModule, action: PermAction) => {
+      if (!may(module, action)) throw denied(module, action);
+    };
+    const anyOf = (action: PermAction, modules: PermModule[]) => modules.some((m) => may(m, action));
     const can = {
-      finance: role === "owner" || role === "accountant",
-      edit: role === "owner" || role === "accountant",
-      delete: role === "owner",
-      staff: role === "owner",
-      audit: role === "owner",
+      do: may,
+      matrix,
+      finance: may("finance", "view") && may("finance", "create"),
+      edit: anyOf("edit", ["production", "inventory", "parties", "sales", "finance", "costing"]),
+      delete: anyOf("delete", ["production", "inventory", "parties", "sales", "finance", "purchasing", "workers"]),
+      staff: may("staff", "edit"),
+      audit: may("audit", "view"),
     };
 
     return {
@@ -818,8 +841,21 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         registerDeviceFactory(created, key);
         login(created.members[0]);
       },
+      /**
+       * تعديل مصفوفة دور. صاحب المصنع بس، وبيتسجّل في سجل التعديلات —
+       * لأن «مين وسّع صلاحية مين وامتى» سؤال محاسبي مش تفصيلة واجهة.
+       */
+      setPermissions: (target, next) => {
+        need("staff", "edit");
+        if (target === "owner") throw new Error("صلاحيات صاحب المصنع مابتتقلّصش — ده اللي بيفتح الباب لو حصلت مشكلة.");
+        const before = db.settings.permissions?.[target] ?? null;
+        mutate(
+          { settings: { ...db.settings, permissions: { ...db.settings.permissions, [target]: next } } },
+          { action: "update", table: "settings", recordId: `permissions:${target}`, before, after: next },
+        );
+      },
       setOverhead: (value) => {
-        if (!can.finance) throw new Error("الحسابات للمالك والمحاسب بس.");
+        need("finance", "edit");
         mutate(
           { settings: { ...db.settings, overheadPerUnit: Math.max(0, value) } },
           { action: "update", table: "settings", recordId: "overhead", before: db.settings, after: { overheadPerUnit: value } },
@@ -827,7 +863,7 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
       },
       /** أوزان السكور: صاحب المصنع بس، وبتتسجل في سجل التعديلات */
       setScoreWeights: (weights) => {
-        if (!can.staff) throw new Error("أوزان السكور لصاحب المصنع بس.");
+        need("settings", "edit");
         const total = Object.values(weights).reduce((s, v) => s + v, 0);
         if (total <= 0) throw new Error("مجموع الأوزان لازم يكون أكبر من صفر.");
         mutate(
@@ -837,7 +873,7 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
       },
       /** هامش الهدف: قرار مالي، بيحدّد تكلفة الهدف وأقل سعر مقبول لكل موديل */
       setTargetMargin: (value) => {
-        if (!can.finance) throw new Error("هامش الهدف للمالك والمحاسب بس.");
+        need("costing", "edit");
         if (!(value > 0 && value < 100)) throw new Error("هامش الهدف لازم يكون بين ١ و٩٩٪.");
         mutate(
           { settings: { ...db.settings, targetMarginPct: value } },
@@ -846,7 +882,7 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
       },
       /** قرار الطاقة: بيغيّر جدول المصنع كله، فمحتاج صلاحية تعديل وبيتسجل */
       setCapacity: (capacity) => {
-        if (!can.edit) throw new Error("إعداد الطاقة للمالك والمحاسب بس.");
+        need("planning", "edit");
         if (!(capacity.hoursPerDay > 0)) throw new Error("ساعات العمل لازم تكون أكبر من صفر.");
         if (!(capacity.daysPerWeek >= 1 && capacity.daysPerWeek <= 7)) throw new Error("أيام العمل من ١ لـ٧.");
         if (!(capacity.utilizationPct > 0 && capacity.utilizationPct <= 100)) {
@@ -861,25 +897,29 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         );
       },
       addMaterial: (input) => {
+        need("inventory", "create");
         if (!input.name.trim()) throw new Error("اسم الخامة مطلوب.");
         const row: Material = { ...input, id: nid(), factoryId: fid(db), name: input.name.trim() };
         mutate({ materials: [row, ...db.materials] }, { action: "create", table: "materials", recordId: row.id, before: null, after: row });
       },
       updateMaterial: (id, patch) => {
+        need("inventory", "edit");
         const before = db.materials.find((m) => m.id === id);
         mutate({ materials: db.materials.map((m) => (m.id === id ? { ...m, ...patch } : m)) }, { action: "update", table: "materials", recordId: id, before, after: patch });
       },
       addProduct: (input) => {
+        need("sales", "create");
         if (!input.name.trim()) throw new Error("اسم المنتج مطلوب.");
         const row: Product = { ...input, id: nid(), factoryId: fid(db), name: input.name.trim() };
         mutate({ products: [row, ...db.products] }, { action: "create", table: "products", recordId: row.id, before: null, after: row });
       },
       updateProduct: (id, patch) => {
+        need("sales", "edit");
         const before = db.products.find((p) => p.id === id);
         mutate({ products: db.products.map((p) => (p.id === id ? { ...p, ...patch } : p)) }, { action: "update", table: "products", recordId: id, before, after: patch });
       },
       deleteProduct: (id) => {
-        if (!can.delete) throw new Error("صاحب المصنع بس اللي يمسح.");
+        need("sales", "delete");
         if (db.orders.some((o) => o.productId === id)) throw new Error("المنتج مرتبط بأوامر إنتاج — مينفعش يتمسح.");
         const before = db.products.find((p) => p.id === id);
         const bomIds = db.boms.filter((b) => b.productId === id).map((b) => b.id);
@@ -894,6 +934,7 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         );
       },
       addBomItem: (productId, input) => {
+        need("sales", "edit");
         if (!input.materialId) throw new Error("اختار الخامة الأول.");
         if (!(input.qtyPerUnit > 0)) throw new Error("الكمية لازم أكبر من صفر.");
         let bom = activeBom(db, productId);
@@ -906,10 +947,12 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         mutate({ boms, bomItems: [...db.bomItems, row] }, { action: "create", table: "bom_items", recordId: row.id, before: null, after: row });
       },
       removeBomItem: (id) => {
+        need("sales", "edit");
         const before = db.bomItems.find((i) => i.id === id);
         mutate({ bomItems: db.bomItems.filter((i) => i.id !== id) }, { action: "delete", table: "bom_items", recordId: id, before, after: null });
       },
       addRoutingStep: (productId, operationId, rate, stdMinutes) => {
+        need("sales", "edit");
         if (!operationId) throw new Error("اختار العملية الأول.");
         if (db.routingSteps.some((r) => r.productId === productId && r.operationId === operationId)) {
           throw new Error("العملية دي موجودة في المسار.");
@@ -919,15 +962,18 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         mutate({ routingSteps: [...db.routingSteps, row] }, { action: "create", table: "routing_steps", recordId: row.id, before: null, after: row });
       },
       removeRoutingStep: (id) => {
+        need("sales", "edit");
         const before = db.routingSteps.find((r) => r.id === id);
         mutate({ routingSteps: db.routingSteps.filter((r) => r.id !== id) }, { action: "delete", table: "routing_steps", recordId: id, before, after: null });
       },
       addOperation: (name, rate, minutes, outsourced) => {
+        need("production", "create");
         if (!name.trim()) throw new Error("اسم العملية مطلوب.");
         const row: Operation = { id: nid(), factoryId: fid(db), name: name.trim(), defaultRate: rate, defaultMinutes: minutes, isOutsourced: outsourced };
         mutate({ operations: [...db.operations, row] }, { action: "create", table: "operations", recordId: row.id, before: null, after: row });
       },
       addStockMovement: (input) => {
+        need("inventory", "create");
         if (!input.qty) throw new Error("الكمية لازم تكون أكبر من صفر.");
         const out = input.kind === "issue" || input.kind === "waste" || input.kind === "delivery";
         const qty = out ? -Math.abs(input.qty) : input.kind === "adjust" ? input.qty : Math.abs(input.qty);
@@ -938,6 +984,7 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         mutate({ stockMovements: [row, ...db.stockMovements] }, { action: "create", table: "stock_movements", recordId: row.id, before: null, after: row });
       },
       issueOrderMaterials: (orderId) => {
+        need("inventory", "edit");
         const order = db.orders.find((o) => o.id === orderId);
         if (!order) throw new Error("أمر الإنتاج مش موجود.");
         const bomId = order.bomId ?? (order.productId ? activeBom(db, order.productId)?.id ?? null : null);
@@ -970,6 +1017,7 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         );
       },
       addStageEntry: (input) => {
+        need("production", "create");
         const order = db.orders.find((o) => o.id === input.orderId);
         if (!order) throw new Error("أمر الإنتاج مش موجود.");
         if (input.qtyGood + input.qtyRework + input.qtyScrap <= 0) throw new Error("سجّل كمية واحدة على الأقل.");
@@ -1014,6 +1062,9 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         );
       },
       importBackup: (file) => {
+        // الاسترجاع لصاحب المصنع بس. جهاز مفيهوش حساب بيستخدم الاسترجاع
+        // كأول خطوة (نقل مصنع لجهاز جديد)، فمفيش دور يتأكد منه ساعتها.
+        if (session) need("settings", "edit");
         if (file.kind !== "factory-backup" || file.version !== 1 || !file.data?.factory) {
           throw new Error("ملف النسخة الاحتياطية مش مفهوم.");
         }
@@ -1041,6 +1092,7 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         login(member);
       },
       addParty: (input) => {
+        need("parties", "create");
         if (!input.name.trim()) throw new Error("اسم الجهة مطلوب.");
         const row: Party = {
           ...blankParty(fid(db), input.name.trim()),
@@ -1053,6 +1105,7 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         return row.id;
       },
       updateParty: (id, patch) => {
+        need("parties", "edit");
         const before = db.parties.find((p) => p.id === id);
         mutate(
           { parties: db.parties.map((p) => (p.id === id ? { ...p, ...patch } : p)) },
@@ -1060,7 +1113,7 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         );
       },
       deleteParty: (id) => {
-        if (!can.delete) throw new Error("صاحب المصنع بس اللي يمسح.");
+        need("parties", "delete");
         const before = db.parties.find((p) => p.id === id);
         mutate(
           {
@@ -1077,7 +1130,7 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
       },
       /** الدمج بينقل كل الحركات للسجل الأساسي ويأرشف المكرر بدل ما يمسحه */
       mergeParties: (duplicateId, keepId) => {
-        if (!can.edit) throw new Error("التعديل للمالك والمحاسب بس.");
+        need("parties", "edit");
         if (duplicateId === keepId) throw new Error("مينفعش تدمج السجل في نفسه.");
         const dup = db.parties.find((p) => p.id === duplicateId);
         const keep = db.parties.find((p) => p.id === keepId);
@@ -1111,24 +1164,29 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         );
       },
       addContact: (input) => {
+        need("parties", "edit");
         if (!input.name.trim()) throw new Error("اسم جهة الاتصال مطلوب.");
         const row: PartyContact = { ...input, id: nid(), factoryId: fid(db), name: input.name.trim() };
         mutate({ contacts: [...db.contacts, row] }, { action: "create", table: "party_contacts", recordId: row.id, before: null, after: row });
       },
       removeContact: (id) => {
+        need("parties", "edit");
         const before = db.contacts.find((c) => c.id === id);
         mutate({ contacts: db.contacts.filter((c) => c.id !== id) }, { action: "delete", table: "party_contacts", recordId: id, before, after: null });
       },
       addAddress: (input) => {
+        need("parties", "edit");
         if (!input.line.trim()) throw new Error("اكتب العنوان.");
         const row: PartyAddress = { ...input, id: nid(), factoryId: fid(db) };
         mutate({ addresses: [...db.addresses, row] }, { action: "create", table: "party_addresses", recordId: row.id, before: null, after: row });
       },
       removeAddress: (id) => {
+        need("parties", "edit");
         const before = db.addresses.find((a) => a.id === id);
         mutate({ addresses: db.addresses.filter((a) => a.id !== id) }, { action: "delete", table: "party_addresses", recordId: id, before, after: null });
       },
       addCommunication: (input) => {
+        need("parties", "create");
         const row: Communication = { ...input, id: nid(), factoryId: fid(db), actorName: session?.name ?? "النظام" };
         const extra: PartyTask[] = [];
         if (input.nextAction.trim() && input.nextDate) {
@@ -1152,6 +1210,7 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         );
       },
       addTask: (input) => {
+        need("parties", "create");
         if (!input.title.trim()) throw new Error("اكتب المهمة.");
         const row: PartyTask = {
           id: nid(),
@@ -1166,6 +1225,7 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         mutate({ tasks: [row, ...db.tasks] }, { action: "create", table: "party_tasks", recordId: row.id, before: null, after: row });
       },
       toggleTask: (id) => {
+        need("parties", "edit");
         const before = db.tasks.find((t) => t.id === id);
         mutate(
           { tasks: db.tasks.map((t) => (t.id === id ? { ...t, status: t.status === "open" ? "done" : "open" } : t)) },
@@ -1173,16 +1233,18 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         );
       },
       addDelivery: (input) => {
+        need("sales", "create");
         if (!input.amount || input.amount <= 0) throw new Error("مينفعش توريد بمبلغ صفر.");
         const row: Delivery = { ...input, id: nid(), factoryId: fid(db) };
         mutate({ deliveries: [row, ...db.deliveries] }, { action: "create", table: "deliveries", recordId: row.id, before: null, after: row });
       },
       deleteDelivery: (id) => {
-        if (!can.delete) throw new Error("صاحب المصنع بس اللي يمسح.");
+        need("sales", "delete");
         const before = db.deliveries.find((d) => d.id === id);
         mutate({ deliveries: db.deliveries.filter((d) => d.id !== id) }, { action: "delete", table: "deliveries", recordId: id, before, after: null });
       },
       addCollection: (input) => {
+        need("finance", "create");
         if (!input.amount || input.amount <= 0) throw new Error("مبلغ التحصيل لازم أكبر من صفر.");
         const needs = input.method === "bank" || input.method === "instapay" || input.method === "wallet";
         if (needs && !input.receiptImage) throw new Error("صورة التحويل إجبارية في التحويلات.");
@@ -1203,6 +1265,7 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         mutate({ collections: [row, ...db.collections] }, { action: "create", table: "collections", recordId: row.id, before: null, after: row });
       },
       confirmCollection: (id) => {
+        need("finance", "edit");
         const before = db.collections.find((c) => c.id === id);
         mutate(
           { collections: db.collections.map((c) => (c.id === id ? { ...c, status: "confirmed" as const } : c)) },
@@ -1210,26 +1273,29 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         );
       },
       deleteCollection: (id) => {
-        if (!can.delete) throw new Error("صاحب المصنع بس اللي يمسح.");
+        need("finance", "delete");
         const before = db.collections.find((c) => c.id === id);
         mutate({ collections: db.collections.filter((c) => c.id !== id) }, { action: "delete", table: "collections", recordId: id, before, after: null });
       },
       addCostItem: (name, unit) => {
+        need("purchasing", "create");
         const row: CostItem = { id: nid(), factoryId: fid(db), name: name.trim(), unit: unit.trim() || "بند" };
         mutate({ costItems: [...db.costItems, row] }, { action: "create", table: "cost_items", recordId: row.id, before: null, after: row });
       },
       addCostEntry: (input) => {
+        need("purchasing", "create");
         if (!input.amount || input.amount <= 0) throw new Error("المبلغ لازم أكبر من صفر.");
         const row: CostEntry = { ...input, id: nid(), factoryId: fid(db) };
         mutate({ costEntries: [row, ...db.costEntries] }, { action: "create", table: "cost_entries", recordId: row.id, before: null, after: row });
       },
       addCostPayment: (input) => {
+        need("finance", "create");
         if (!input.amount || input.amount <= 0) throw new Error("دفعة بمبلغ صفر مش مقبولة.");
         const row: CostPayment = { ...input, id: nid(), factoryId: fid(db) };
         mutate({ costPayments: [row, ...db.costPayments] }, { action: "create", table: "cost_payments", recordId: row.id, before: null, after: row });
       },
       deleteCostEntry: (id) => {
-        if (!can.delete) throw new Error("صاحب المصنع بس اللي يمسح.");
+        need("purchasing", "delete");
         const before = db.costEntries.find((e) => e.id === id);
         mutate(
           {
@@ -1240,19 +1306,22 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         );
       },
       addWorker: (input) => {
+        need("workers", "create");
         const row: Worker = { id: nid(), factoryId: fid(db), name: input.name.trim(), payType: input.payType, rate: input.rate, phone: input.phone.trim() };
         mutate({ workers: [row, ...db.workers] }, { action: "create", table: "workers", recordId: row.id, before: null, after: row });
       },
       updateWorker: (id, patch) => {
+        need("workers", "edit");
         const before = db.workers.find((w) => w.id === id);
         mutate({ workers: db.workers.map((w) => (w.id === id ? { ...w, ...patch } : w)) }, { action: "update", table: "workers", recordId: id, before, after: patch });
       },
       deleteWorker: (id) => {
-        if (!can.delete) throw new Error("صاحب المصنع بس اللي يمسح.");
+        need("workers", "delete");
         const before = db.workers.find((w) => w.id === id);
         mutate({ workers: db.workers.filter((w) => w.id !== id) }, { action: "delete", table: "workers", recordId: id, before, after: null });
       },
       markAttendance: (workerIds, date) => {
+        need("workers", "create");
         const existing = new Set(db.workerEarnings.filter((e) => e.date === date && e.kind === "attendance").map((e) => e.workerId));
         const added: WorkerEarning[] = [];
         for (const id of workerIds) {
@@ -1270,6 +1339,7 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         mutate({ workerEarnings: [...added, ...db.workerEarnings] }, { action: "create", table: "worker_earnings", recordId: added[0].id, before: null, after: { date, count: added.length } });
       },
       addPieceWork: (workerId, date, pieces, notes) => {
+        need("workers", "create");
         const w = db.workers.find((x) => x.id === workerId);
         if (!w) throw new Error("العامل مش موجود.");
         const row: WorkerEarning = {
@@ -1284,37 +1354,43 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         mutate({ workerEarnings: [row, ...db.workerEarnings] }, { action: "create", table: "worker_earnings", recordId: row.id, before: null, after: row });
       },
       addWorkerPayment: (input) => {
+        need("finance", "create");
         if (!input.amount || input.amount <= 0) throw new Error("المبلغ لازم أكبر من صفر.");
         const row: WorkerPayment = { ...input, id: nid(), factoryId: fid(db) };
         mutate({ workerPayments: [row, ...db.workerPayments] }, { action: "create", table: "worker_payments", recordId: row.id, before: null, after: row });
       },
       addOrder: (input) => {
+        need("production", "create");
         const row: Order = { ...input, id: nid(), factoryId: fid(db), code: nextOrderCode(db.orders) };
         mutate({ orders: [row, ...db.orders] }, { action: "create", table: "orders", recordId: row.id, before: null, after: row });
       },
       updateOrder: (id, patch) => {
+        need("production", "edit");
         const before = db.orders.find((o) => o.id === id);
         mutate({ orders: db.orders.map((o) => (o.id === id ? { ...o, ...patch } : o)) }, { action: "update", table: "orders", recordId: id, before, after: patch });
       },
       deleteOrder: (id) => {
-        if (!can.delete) throw new Error("صاحب المصنع بس اللي يمسح.");
+        need("production", "delete");
         const before = db.orders.find((o) => o.id === id);
         mutate({ orders: db.orders.filter((o) => o.id !== id) }, { action: "delete", table: "orders", recordId: id, before, after: null });
       },
       addManualTx: (input) => {
+        need("finance", "create");
         const row: ManualTx = { ...input, id: nid(), factoryId: fid(db) };
         mutate({ manualTx: [row, ...db.manualTx] }, { action: "create", table: "manual_tx", recordId: row.id, before: null, after: row });
       },
       addAccount: (name, kind) => {
+        need("finance", "create");
         const row: Account = { id: nid(), factoryId: fid(db), name: name.trim(), kind };
         mutate({ accounts: [...db.accounts, row] }, { action: "create", table: "accounts", recordId: row.id, before: null, after: row });
       },
       invite: (email, role) => {
-        if (!can.staff) throw new Error("صاحب المصنع بس اللي يضيف موظفين.");
+        need("staff", "create");
         const row: Invite = { id: nid(), factoryId: fid(db), email: email.trim().toLowerCase(), role, createdAt: new Date().toISOString(), status: "pending" };
         mutate({ invites: [row, ...db.invites] }, { action: "create", table: "invites", recordId: row.id, before: null, after: row });
       },
       acceptInvite: (id, name) => {
+        need("staff", "edit");
         const inv = db.invites.find((i) => i.id === id);
         if (!inv) return;
         const member: Member = { id: nid(), factoryId: fid(db), email: inv.email, name: name.trim() || inv.email, role: inv.role };
@@ -1327,12 +1403,12 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         );
       },
       changeRole: (memberId, role) => {
-        if (!can.staff) throw new Error("صاحب المصنع بس.");
+        need("staff", "edit");
         const before = db.members.find((m) => m.id === memberId);
         mutate({ members: db.members.map((m) => (m.id === memberId ? { ...m, role } : m)) }, { action: "update", table: "members", recordId: memberId, before, after: { role } });
       },
       removeMember: (memberId) => {
-        if (!can.staff) throw new Error("صاحب المصنع بس.");
+        need("staff", "edit");
         const before = db.members.find((m) => m.id === memberId);
         if (before?.role === "owner") throw new Error("مينفعش تشيل صاحب المصنع.");
         mutate({ members: db.members.filter((m) => m.id !== memberId) }, { action: "delete", table: "members", recordId: memberId, before, after: null });

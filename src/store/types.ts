@@ -1,3 +1,6 @@
+// استيراد نوع فقط، فبيتشال وقت البناء ومفيش دورة حقيقية بين الملفين
+import type { PermMatrix } from "./permissions";
+
 export const ROLES = ["owner", "accountant", "supervisor"] as const;
 export type Role = (typeof ROLES)[number];
 
@@ -320,6 +323,11 @@ export type Settings = {
   scoreWeights?: Record<"purchase" | "payment" | "growth" | "frequency" | "profit" | "quality" | "relationship", number>;
   /** هامش الربح المستهدف % — أساس تكلفة الهدف وأقل سعر مقبول */
   targetMarginPct?: number;
+  /**
+   * مصفوفة الصلاحيات لكل دور. الغايب معناه «سِيبه على الافتراضي»،
+   * فمصنع مافتحش الشاشة دي عمره بيفضل شغّال بنفس سلوك الأدوار التلاتة.
+   */
+  permissions?: Partial<Record<Role, PermMatrix>>;
   /** قرار الطاقة: أساس الجدولة كلها */
   capacity?: {
     hoursPerDay: number;

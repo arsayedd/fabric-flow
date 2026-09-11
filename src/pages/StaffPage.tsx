@@ -10,6 +10,18 @@ import { formatDate } from "@/lib/utils";
 import { supabaseConfigured } from "@/lib/supabase";
 import { MODULE_KEYS, MODULE_LABEL, MODULE_READY, SLUG_MESSAGE, slugState } from "@/store/account";
 import { useFactory } from "@/store/context";
+import {
+  ACTION_LABEL,
+  MODULE_LABEL as PERM_MODULE_LABEL,
+  PERM_ACTIONS,
+  PERM_MODULES,
+  ROLE_DEFAULTS,
+  allowed,
+  roleMatrix,
+  toggle,
+  type PermAction,
+  type PermModule,
+} from "@/store/permissions";
 import { INDUSTRY_LABEL, ROLE_LABEL, ROLES, type Role } from "@/store/types";
 
 export function StaffPage() {
@@ -61,6 +73,8 @@ export function StaffPage() {
           </Card>
         ))}
       </section>
+
+      <PermissionsCard />
 
       <section>
         <h3 className="mb-2 text-base">دعوات لسه متتقبلتش</h3>
@@ -129,6 +143,120 @@ export function StaffPage() {
         </Field>
       </Panel>
     </div>
+  );
+}
+
+/**
+ * مصفوفة الصلاحيات.
+ *
+ * الأدوار التلاتة بقت **نقطة بداية** مش سور: صاحب المصنع يفتح أو يقفل أي
+ * خانة بعينها. والمصفوفة مش ديكور — نفس الخانة دي هي اللي بترفض التنفيذ في
+ * العملية نفسها، مش بتخفي الزر وخلاص.
+ *
+ * اللي مش معدَّل بيفضل على الافتراضي، فمصنع مافتحش الشاشة دي عمره بيشتغل
+ * بنفس السلوك القديم بالحرف.
+ */
+function PermissionsCard() {
+  const { db, can, setPermissions } = useFactory();
+  const [target, setTarget] = useState<Role>("accountant");
+  if (!can.staff) return null;
+
+  const matrix = roleMatrix(target, db.settings.permissions);
+  const custom = !!db.settings.permissions?.[target];
+
+  const flip = (module: PermModule, action: PermAction) => {
+    try {
+      setPermissions(target, toggle(matrix, module, action));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "مش قادر أعدّل الصلاحية.");
+    }
+  };
+
+  return (
+    <Card>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base">الصلاحيات</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            الصلاحية مش إخفاء زر: اللي مش من حقه مايشوفش القسم في القائمة، ولو حاول ينفّذ من العنوان مباشرة، العملية نفسها
+            بترفض وبتقول له الصلاحية الناقصة بالاسم.
+          </p>
+        </div>
+        <select
+          className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+          value={target}
+          onChange={(e) => setTarget(e.target.value as Role)}
+        >
+          {ROLES.filter((r) => r !== "owner").map((r) => (
+            <option key={r} value={r}>
+              {ROLE_LABEL[r]}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="mt-4 overflow-x-auto">
+        <table className="w-full min-w-[26rem] text-sm">
+          <thead>
+            <tr className="border-b border-border text-xs text-muted-foreground">
+              <th className="py-2 text-right font-normal">القسم</th>
+              {PERM_ACTIONS.map((a) => (
+                <th key={a} className="px-1 py-2 text-center font-normal">
+                  {ACTION_LABEL[a]}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {PERM_MODULES.map((m) => (
+              <tr key={m} className="border-b border-border/60 last:border-0">
+                <td className="py-1.5">{PERM_MODULE_LABEL[m]}</td>
+                {PERM_ACTIONS.map((a) => {
+                  const on = allowed(matrix, m, a);
+                  return (
+                    <td key={a} className="px-1 py-1.5 text-center">
+                      <button
+                        onClick={() => flip(m, a)}
+                        aria-label={`${ACTION_LABEL[a]} ${PERM_MODULE_LABEL[m]}`}
+                        aria-pressed={on}
+                        className={`h-6 w-6 rounded border text-xs transition-colors ${
+                          on ? "border-accent bg-accent-soft text-accent" : "border-border bg-card text-muted-foreground/40 hover:border-accent/40"
+                        }`}
+                      >
+                        {on ? "✓" : "—"}
+                      </button>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">
+          {custom ? "معدَّل عن الافتراضي، وكل تعديل مسجّل في سجل التعديلات." : "على الافتراضي — مفيش تعديل محفوظ للدور ده."}
+        </p>
+        {custom ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setPermissions(target, ROLE_DEFAULTS[target]);
+              toast.success("رجعت لصلاحيات الدور الافتراضية.");
+            }}
+          >
+            رجّع الافتراضي
+          </Button>
+        ) : null}
+      </div>
+
+      <p className="mt-3 border-t border-border pt-3 text-xs leading-relaxed text-muted-foreground">
+        مستوى الوصول للبيانات (فرع / قسم / بياناته هو) لسه محتاج ربط السجلات بالفروع والأقسام، فدلوقتي كل صلاحية بتشتغل
+        على مستوى المصنع كله. والتحقق النهائي مكانه السيرفر: نفس المصفوفة دي هي اللي بتتحوّل لـRLS.
+      </p>
+    </Card>
   );
 }
 
