@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, Home, LogOut, MoreHorizontal, X } from "lucide-react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { Mark } from "@/components/Brand";
@@ -57,6 +57,9 @@ export function AppShell() {
   const [palette, setPalette] = useState(false);
   useCommandKey(useCallback(() => setPalette(true), []));
 
+  // فتح صفحة جديدة معناها تبدأ من أولها، مش من المكان اللي كنت واقف فيه في اللي قبلها
+  useEffect(() => window.scrollTo(0, 0), [loc.pathname]);
+
   const here = sectionOf(loc.pathname);
   const flat = tree.flatMap((s) => s.items);
   const mobileNav = MOBILE_PRIMARY.map((to) => flat.find((i) => i.to === to && i.ready))
@@ -66,7 +69,7 @@ export function AppShell() {
 
   return (
     <div className="flex min-h-dvh flex-col md:flex-row">
-      <aside className="hidden w-64 shrink-0 flex-col border-l border-[#1d2733] bg-primary text-primary-foreground md:flex">
+      <aside className="hidden w-64 shrink-0 flex-col border-l border-[#1d2733] bg-primary text-primary-foreground md:sticky md:top-0 md:flex md:h-dvh">
         <div className="px-3 pt-3">
           <WorkspaceSwitcher />
         </div>
