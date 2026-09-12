@@ -378,13 +378,19 @@ export function SettingsPage() {
       <Button className="w-full" onClick={download}>
         تنزيل نسخة احتياطية
       </Button>
-      {can.delete ? (
+      {/* الزرار ده بيبان في المساحة التجريبية بس — على مساحة حقيقية هو
+          «امسح كل شغلي» بعنوان لطيف */}
+      {db.factory?.demo && can.delete ? (
         <Button
           variant="outline"
           className="w-full"
           onClick={() => {
-            resetDemo();
-            toast.success("الداتا التجريبية رجعت.");
+            try {
+              resetDemo();
+              toast.success("الداتا التجريبية رجعت لأصلها.");
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : "مش قادر أرجّعها.");
+            }
           }}
         >
           رجّع الداتا التجريبية

@@ -1850,6 +1850,9 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         data: db,
       }),
       resetDemo: () => {
+        /* الحماية هنا مش في الواجهة: الرجوع بيمسح كل حاجة، فلازم يرفض على
+           أي مساحة مش تجريبية حتى لو حد ناداه من غير الزرار */
+        if (!db.factory?.demo) throw new Error("المساحة دي مش تجريبية — الرجوع كان هيمسح داتا حقيقية.");
         const seeded = demoDb();
         const key = dbKeyOf(seeded.factory!.id);
         setBook({ key, data: seeded });

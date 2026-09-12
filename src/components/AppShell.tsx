@@ -53,7 +53,7 @@ function useTree() {
 }
 
 export function AppShell() {
-  const { session, logout } = useFactory();
+  const { session, logout, db } = useFactory();
   const loc = useLocation();
   const tree = useTree();
   const [drawer, setDrawer] = useState(false);
@@ -98,6 +98,17 @@ export function AppShell() {
 
       <div className="flex min-w-0 flex-1 flex-col pb-20 md:pb-0">
         <Topbar onMenu={() => setDrawer(true)} onSearch={() => setPalette(true)} />
+        {/* الشريط ده بيفضل فوق كل شاشة في المساحة التجريبية: اللي بيتفرّج
+            لازم يعرف إن الأرقام اللي شايفها مش أرقام مصنع حقيقي، ولا
+            المفروض يبني عليها قرار */}
+        {db.factory?.demo ? (
+          <div className="border-b border-accent/30 bg-accent-soft/60 px-4 py-2 text-center text-sm md:px-8">
+            مساحة تجريبية — البيانات دي مولّدة للعرض، مش أرقام مصنع حقيقي.{" "}
+            <Link to="/settings" className="text-accent underline">
+              رجّعها لأصلها من الإعدادات
+            </Link>
+          </div>
+        ) : null}
         <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-4 md:px-8 md:py-6">
           <Crumbs />
           <Outlet />

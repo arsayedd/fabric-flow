@@ -1791,7 +1791,7 @@ export function demoDb(): Db {
   ];
 
   return {
-    factory: { id: FID, name: "مصنع النور للإنتاج", createdAt: addDays(today, -90) + "T08:00:00.000Z" },
+    factory: { id: FID, name: "مصنع النور للإنتاج", createdAt: addDays(today, -90) + "T08:00:00.000Z", demo: true },
     settings: { industry: "apparel", overheadPerUnit: 12 },
     members: DEMO_MEMBERS,
     invites: [

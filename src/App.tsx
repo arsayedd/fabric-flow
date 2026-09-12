@@ -43,6 +43,7 @@ import { CommandPage } from "@/pages/CommandPage";
 import { AiPage } from "@/pages/AiPage";
 import { ProductsPage, ProductDetailPage } from "@/pages/ProductsPage";
 import { MaterialsPage, MaterialDetailPage } from "@/pages/MaterialsPage";
+import { HealthPage } from "@/pages/HealthPage";
 import { AuditPage, SettingsPage, StaffPage } from "@/pages/StaffPage";
 import { DocumentsPage } from "@/pages/DocumentsPage";
 import { ExportsPage } from "@/pages/ExportsPage";
@@ -176,6 +177,7 @@ function appRoutes() {
         {guarded("/staff", "staff", <StaffPage />)}
         {guarded("/audit", "audit", <AuditPage />)}
         <Route path="/settings" element={<SettingsPage />} />
+        {guarded("/health", "settings", <HealthPage />)}
         <Route path="/clients" element={<Navigate to="/parties" replace />} />
         <Route path="/clients/:id" element={<LegacyClient />} />
         <Route path="*" element={<Navigate to="/" replace />} />

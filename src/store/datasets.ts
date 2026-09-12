@@ -21,6 +21,7 @@ import { itemName, partyName, returnImpact, unitCostOf } from "./returns";
 import { activeBom, bomLines, materialById, materialStock, operationById, orderStages, productById, stockQty, unitName } from "./manufacturing";
 import { customerStats, partiesWithRole, partyById, partyCredit } from "./parties";
 import { downtimeCauses, machineList, ticketList } from "./machines";
+import { integrityChecks } from "./integrity";
 import { clientOrderCash, clientProducts } from "./clients";
 import { mrp, openOrders, orderLoad, schedule } from "./planning";
 import { DOC_DEFS, DOC_STATUS_LABEL } from "./documents";
@@ -1949,6 +1950,31 @@ export const DATASETS: DatasetDef[] = [
         recordId: a.recordId.slice(0, 8),
       }));
     },
+  },
+  {
+    key: "integrity",
+    title: "فحوص سلامة الدفتر",
+    about: "كل فحص وعدد السجلات اللي مكسورة فيه وأمثلة بالاسم.",
+    area: "admin",
+    module: "settings",
+    screen: "/health",
+    cols: [
+      text("check", "الفحص", 28),
+      text("about", "بيمنع إيه", 40),
+      count("broken", "سجلات مكسورة", "none"),
+      text("samples", "أمثلة", 40),
+    ],
+    notes: [
+      "الفحص اللي عدده صفر معناه إنه اتحقّق دلوقتي على الدفتر الحالي، مش إنه اتحقّق مرة وخلاص.",
+    ],
+    rows: (db) =>
+      integrityChecks(db).map((c) => ({
+        id: c.key,
+        check: c.label,
+        about: c.about,
+        broken: c.count,
+        samples: c.samples.join(" · ") || "—",
+      })),
   },
 ];
 
