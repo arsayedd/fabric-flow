@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { Lockup } from "@/components/Brand";
+import { FieldIdContext } from "@/components/ui/field-context";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -54,13 +55,63 @@ export function Field({
   children: ReactNode;
   optional?: boolean;
 }) {
+  /*
+   * الِيبل لازم يبقى مربوط بخانته: الضغط على الاسم يفتح الخانة، والقارئ
+   * الصوتي يقول اسمها. والربط بيحصل بإن الخانة **جوه** الِيبل، مش
+   * بـ`htmlFor`.
+   *
+   * وده مش ذوق: `Field` مستخدم في ٢٩٧ مكان، وجواه خانات و`select` خام
+   * و`textarea`. الربط بالرقم بيحتاج كل نوع يقرا الرقم ويحطّه على نفسه،
+   * والـ`select`ات خام في ١٠٩ مكان — فأول ما جرّبنا `htmlFor` لوحده طلع
+   * خطأ تالت (`FormLabelForMatchesNonExistingId`) في الشاشات اللي جواها
+   * `select`، يعني لِيبل بيشاور على رقم مش موجود. واللفّ بيشتغل مع أي
+   * نوع من غير ما أي استخدام يتعدّل.
+   */
+  const id = useId();
   return (
     <div className="space-y-1.5">
       <Label>
-        {label}
-        {optional ? <span className="mr-1 text-xs text-muted-foreground">(اختياري)</span> : null}
+        <span className="mb-1.5 block">
+          {label}
+          {optional ? <span className="mr-1 text-xs text-muted-foreground">(اختياري)</span> : null}
+        </span>
+        <FieldIdContext.Provider value={id}>{children}</FieldIdContext.Provider>
       </Label>
-      {children}
+      {error ? <p className="text-xs text-danger">{error}</p> : hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * عنوان فوق **مجموعة** مش فوق خانة واحدة — أزرار اختيار، أو خانة
+ * معاها لِيبل بتاعها.
+ *
+ * موجود لأن `<label>` في الحالات دي عنصر غلط: اللِيبل بيربط اسم بخانة
+ * **واحدة**، فلِيبل فوق سبع أزرار مش بيربط حاجة بحاجة — الضغط عليه
+ * مابيعملش أي حاجة، والقارئ الصوتي مابيقولش الاسم ده لأي زرار. فبنستخدم
+ * `role="group"` ونربط الاسم بالمجموعة كلها، وهي الحاجة اللي `<label>`
+ * ماينفعش يعملها.
+ */
+export function FieldGroup({
+  label,
+  hint,
+  error,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  error?: string | null;
+  children: ReactNode;
+}) {
+  const id = useId();
+  return (
+    <div className="space-y-1.5">
+      <span id={id} className="mb-1.5 block text-sm font-medium text-foreground">
+        {label}
+      </span>
+      <div role="group" aria-labelledby={id} className="space-y-1.5">
+        {children}
+      </div>
       {error ? <p className="text-xs text-danger">{error}</p> : hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );

@@ -2,10 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Check, Loader2, PartyPopper, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-import { AuthShell, Field, PasswordInput, PasswordMeter } from "@/components/AuthShell";
+import { AuthShell, Field, FieldGroup, PasswordInput, PasswordMeter } from "@/components/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input, selectClass } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { cn, countLabel, qty } from "@/lib/utils";
 import { COUNTRIES, EMPLOYEE_BANDS, FACTORY_TYPES, JOB_TITLES, MODULE_ABOUT, MODULE_GROUPS, MODULE_KEYS, MODULE_LABEL, MODULE_READY, ROLE_EXPLAIN, ROOT_DOMAIN, SLUG_MESSAGE, checkPassword, effectiveModules, isEmail, isUrl, slugState, slugSuggestions, slugify, type EmployeeBand, type ModuleKey, type SlugState, type Workspace, workspaceUrl } from "@/store/account";
 import { useFactory, type FactoryInput, type TeamRow } from "@/store/context";
@@ -300,14 +299,16 @@ function AccountStep({
           className="latin text-left"
         />
       </Field>
-      <div className="space-y-1.5">
-        <Label>رقم الموبايل</Label>
+      <FieldGroup label="رقم الموبايل" hint="كود الدولة متخزّن مستقل عن الرقم.">
         <div className="flex gap-2">
           <select
             value={acc.countryCode}
             onChange={(e) => setAcc((p) => ({ ...p, countryCode: e.target.value }))}
             className={cn(selectClass, "latin w-28 shrink-0 text-left")}
             dir="ltr"
+            aria-label="كود الدولة"
+            name="countryCode"
+            autoComplete="tel-country-code"
           >
             {COUNTRIES.filter((c) => c.dial !== "+").map((c) => (
               <option key={c.dial} value={c.dial}>
@@ -321,10 +322,10 @@ function AccountStep({
             placeholder="1012345678"
             className="latin text-left"
             inputMode="tel"
+            aria-label="رقم الموبايل"
           />
         </div>
-        <p className="text-xs text-muted-foreground">كود الدولة متخزّن مستقل عن الرقم.</p>
-      </div>
+      </FieldGroup>
       <Field label="كلمة السر">
         <PasswordInput value={acc.password} onChange={(v) => setAcc((p) => ({ ...p, password: v }))} autoComplete="new-password" />
       </Field>
@@ -384,8 +385,7 @@ function FactoryStep({
         <Input value={fac.name} onChange={(e) => setFac((p) => ({ ...p, name: e.target.value }))} placeholder="مصنع النور للملابس الجاهزة" />
       </Field>
 
-      <div className="space-y-1.5">
-        <Label>نشاط المصنع</Label>
+      <FieldGroup label="نشاط المصنع">
         <div className="flex flex-wrap gap-2">
           {FACTORY_TYPES.map((t) => {
             const on = fac.types.includes(t);
@@ -408,7 +408,7 @@ function FactoryStep({
         <p className="text-xs text-muted-foreground">
           اختار أكتر من نشاط لو المصنع بيعمل أكتر من حاجة. أول نشاط بيحدّد الوحدات والخامات والعمليات اللي بتتجهّز معاك.
         </p>
-      </div>
+      </FieldGroup>
 
       <Field label="الموقع الإلكتروني" optional error={webBad ? "اللينك مش مظبوط." : null}>
         <Input
@@ -438,8 +438,7 @@ function FactoryStep({
         <Input value={fac.address} onChange={(e) => setFac((p) => ({ ...p, address: e.target.value }))} placeholder="المنطقة الصناعية، قطعة ٤٢" />
       </Field>
 
-      <div className="space-y-1.5">
-        <Label>عدد العاملين</Label>
+      <FieldGroup label="عدد العاملين">
         <div className="flex flex-wrap gap-2">
           {EMPLOYEE_BANDS.map((b) => (
             <button
@@ -461,8 +460,9 @@ function FactoryStep({
           placeholder="أو اكتب العدد بالضبط"
           className="mt-1"
           inputMode="numeric"
+          aria-label="عدد العاملين بالضبط"
         />
-      </div>
+      </FieldGroup>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label="الطاقة الشهرية" optional hint="قطعة في الشهر">
@@ -494,8 +494,7 @@ function FactoryStep({
         </Field>
       </div>
 
-      <div className="space-y-1.5">
-        <Label>لوجو المصنع (اختياري)</Label>
+      <FieldGroup label="لوجو المصنع (اختياري)">
         <div className="flex items-center gap-3">
           {fac.logo ? (
             <div className="relative">
@@ -524,7 +523,7 @@ function FactoryStep({
           </label>
         </div>
         {logoError ? <p className="text-xs text-danger">{logoError}</p> : <p className="text-xs text-muted-foreground">بيظهر جوّه النظام وفي الفواتير والتقارير.</p>}
-      </div>
+      </FieldGroup>
 
       <Nav onBack={onBack} next={{ label: "التالي: الـWorkspace", onClick: onNext }} disabled={!ok} />
     </div>

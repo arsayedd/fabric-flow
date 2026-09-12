@@ -158,7 +158,7 @@ export function PartiesPage() {
 
       <div className="relative">
         <Search className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="دور باسم، رقم، كود، أو تاج" className="pr-9" />
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="دور باسم، رقم، كود، أو تاج" className="pr-9" aria-label="دور في جهات التعامل" />
       </div>
 
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:flex-wrap md:px-0">

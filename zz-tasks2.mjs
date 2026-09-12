@@ -1,0 +1,24 @@
+import { readFileSync } from "node:fs";
+import { chromium } from "playwright-core";
+const src = readFileSync("src/store/account.ts", "utf8");
+const email = src.match(/email:\s*"([^"@]+@[^"]+)"/)[1], pwd = src.match(/password:\s*"([^"]+)"/)[1];
+const B = "https://sanaa.cloud";
+const b = await chromium.launch({ executablePath: "/usr/local/bin/google-chrome", args: ["--no-sandbox"] });
+const p = await b.newPage({ viewport: { width: 1280, height: 950 }, deviceScaleFactor: 2 });
+await p.goto(`${B}/login`, { waitUntil: "domcontentloaded" });
+await p.getByPlaceholder(/@/).first().fill(email);
+await p.locator('input[type="password"]').first().fill(pwd);
+await p.getByRole("button", { name: /دخول|تسجيل/ }).first().click();
+await p.locator("nav").first().waitFor({ timeout: 30000 });
+await p.waitForTimeout(1500);
+await p.goto(`${B}/tasks`, { waitUntil: "domcontentloaded" });
+await p.waitForTimeout(2500);
+const main = await p.locator("main").innerText();
+console.log("=== محتوى main في /tasks ===");
+console.log(main);
+console.log("=== طول النص:", main.replace(/\s/g,"").length);
+await p.screenshot({ path: "/opt/cursor/artifacts/screenshots/tasks-page.png", fullPage: false });
+// هل اللينك موجود في القائمة؟
+const links = await p.locator("nav a").evaluateAll((els) => els.map((e) => e.getAttribute("href")));
+console.log("\n/tasks في القائمة؟", links.includes("/tasks"), "| عدد اللينكات:", links.length);
+await b.close();
