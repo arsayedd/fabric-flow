@@ -67,3 +67,8 @@ console.log(`\nإجمالي: ${rows.length} · PASS ${n("PASS")} · FAIL ${n("FA
 const assertions = rows.reduce((s, r) => s + (r.pass ?? 0), 0);
 const fails = rows.reduce((s, r) => s + (r.fail ?? 0), 0);
 console.log(`تأكيدات: ${assertions} نجحت · ${fails} فشلت`);
+
+/* لازم يخرج بكود غلط لما يفشل حاجة. من غير السطر ده السويت كانت بتطبع
+   `FAIL` وترجع صفر، يعني أي حاجة بتقرا كود الخروج — CI أو `&&` في
+   سطر أوامر — بتشوف نجاح كامل والاختبار فاشل قدامها في نفس الشاشة. */
+if (n("FAIL") > 0) process.exit(1);

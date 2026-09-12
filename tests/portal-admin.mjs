@@ -97,8 +97,23 @@ try {
   const token = url.split("/p/")[1];
   ok("والتوكن ٤٠ حرف سِتّيني عشري", /^[0-9a-f]{40}$/.test(token), token);
 
-  /* التوكن مش مشتق من رقم العميل — لو كان، أي حد يخمّن لينك أي عميل */
-  ok("والتوكن مالوش علاقة برقم العميل", !token.includes(target.id.replace(/[^0-9a-f]/g, "")), target.id);
+  /* التوكن مش مشتق من رقم العميل — لو كان، أي حد يخمّن لينك أي عميل.
+     والقياس هنا مش «مش بيحتوي حروف الرقم»: رقم زي `cl-1` بيبقى `c1` بعد
+     شيل الشرطة، و`c1` بيظهر في توكن عشوائي ٤٠ حرف واحدة من كل سبعة —
+     يعني اختبار بيفشل بالحظ ويقول الكود غلط وهو سليم. اللي بيهم فعلًا
+     إن التوكن مش الرقم نفسه، ومش متكرر مع عميل تاني، وفيه عشوائية. */
+  const otherTokens = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => k.startsWith("factory-ledger.v1:"));
+    const db = JSON.parse(localStorage.getItem(key));
+    return (db.portalGrants ?? []).map((g) => [g.partyId, g.token]);
+  });
+  ok("والتوكن مش رقم العميل ولا جواه", !token.includes(target.id), target.id);
+  ok(
+    "ومافيش عميل تاني عنده نفس التوكن",
+    otherTokens.filter(([id, t]) => id !== target.id && t === token).length === 0,
+  );
+  const distinct = new Set(token).size;
+  ok("وفيه عشوائية حقيقية مش رقم مكمّل بأصفار", distinct >= 10, `${distinct} حرف مختلف`);
 
   const shown = await body();
   ok("الكارت بيقول اللينك لسه مااتفتحش", /لسه مااتفتحش/.test(shown));
