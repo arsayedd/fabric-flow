@@ -399,6 +399,7 @@ function NewReturnPanel({ open, onClose }: { open: boolean; onClose: () => void 
   const [deliveryId, setDeliveryId] = useState("");
   const [costEntryId, setCostEntryId] = useState("");
   const [orderId, setOrderId] = useState("");
+  const [bundleId, setBundleId] = useState("");
   const [problem, setProblem] = useState<ProblemKind | "">("");
   const [origin, setOrigin] = useState<ProblemOrigin | "">("");
   const [color, setColor] = useState("");
@@ -430,9 +431,25 @@ function NewReturnPanel({ open, onClose }: { open: boolean; onClose: () => void 
   /* أمر الإنتاج بيعرف خطه، فمافيش داعي المستخدم يختاره تاني */
   const pickOrder = (id: string) => {
     setOrderId(id);
+    setBundleId("");
     const order = db.orders.find((o) => o.id === id);
     if (order?.line) setLine(order.line);
   };
+
+  /*
+   * الباندل هو **مفتاح التتبع**: منه سلسلة كاملة للقص والفرشة والرول
+   * والعملية والعامل. وهو كمان بيعرف لونه ومقاسه، فاختياره بيملّي
+   * الخانتين دول — الكتابة بالإيد هنا مصدر تناقض مش مصدر معلومة.
+   */
+  const pickBundle = (id: string) => {
+    setBundleId(id);
+    const b = db.bundles.find((x) => x.id === id);
+    if (!b) return;
+    setColor(b.color);
+    setSize(b.size);
+  };
+
+  const bundles = db.bundles.filter((b) => b.orderId === orderId);
 
   /* التوريد المختار بيقول سعر القطعة — أحسن من إن المستخدم يدوّر عليه */
   const pickDelivery = (id: string) => {
@@ -456,7 +473,7 @@ function NewReturnPanel({ open, onClose }: { open: boolean; onClose: () => void 
         unitValue: Number(unitValue) || 0,
         deliveryId: deliveryId || null,
         orderId: orderId || null,
-        bundleId: null,
+        bundleId: bundleId || null,
         costEntryId: costEntryId || null,
         issueId: null,
         problem: problem || null,
@@ -587,6 +604,22 @@ function NewReturnPanel({ open, onClose }: { open: boolean; onClose: () => void 
         </select>
         <p className="mt-1 text-xs text-muted-foreground">منه بتتحسب تكلفة القطعة، فأثر المرتجع يطلع بالتكلفة الحقيقية.</p>
       </Field>
+      {orderId && bundles.length ? (
+        <Field label="الباندل">
+          <select className={selectClass} value={bundleId} onChange={(e) => pickBundle(e.target.value)}>
+            <option value="">مش محدد</option>
+            {bundles.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.code} — {b.color} / {b.size} · {qty(b.qty, 0)} قطعة
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-muted-foreground">
+            ده مفتاح التتبع: منه تعرف القطعة اتقصّت في أي فرشة، ومشيت على أي عملية، ومين شغّل عليها — فتعرف المشكلة
+            بدأت فين بالظبط.
+          </p>
+        </Field>
+      ) : null}
       <Field label="خط الإنتاج">
         <select className={selectClass} value={line} onChange={(e) => setLine(e.target.value)}>
           <option value="">مش محدد</option>
