@@ -33,9 +33,21 @@ if (!BASE) {
   process.exit(0);
 }
 
-const src = readFileSync(new URL("../src/store/seed.ts", import.meta.url), "utf8");
-const email = src.match(/email:\s*"([^"]+)"/)?.[1] ?? "";
+/*
+ * بيانات الدخول في `account.ts` مش `seed.ts`.
+ *
+ * النسخة الأولى من الملف ده كانت بتقرا من `seed.ts`، فبترجع فاضي،
+ * فبتكتب خانتين فاضيتين وبتكمل — والاختبار كان بينجح وهو مش داخل النظام
+ * أصلًا. فبنوقف هنا لو البيانات مالقيناهاش، بدل ما نقيس حاجة مش موجودة.
+ */
+const src = readFileSync(new URL("../src/store/account.ts", import.meta.url), "utf8");
+const email = src.match(/email:\s*"([^"@]+@[^"]+)"/)?.[1] ?? "";
 const pwd = src.match(/password:\s*"([^"]+)"/)?.[1] ?? "";
+if (!email || !pwd) {
+  console.log("  ✗ مش لاقيين بيانات الحساب التجريبي في account.ts");
+  console.log("\n0 نجحت · 1 فشلت");
+  process.exit(1);
+}
 
 const profile = mkdtempSync(join(tmpdir(), "sanaa-sw-"));
 let ctx;
@@ -89,8 +101,10 @@ try {
     .getByRole("button", { name: /دخول|تسجيل/ })
     .first()
     .click();
+  /* القائمة هي الدليل إننا جوّه فعلًا — نص اسم المصنع بيظهر في شاشة
+   * الدخول كمان، فمابيفرّقش بين داخل وبره */
   const landed = await page
-    .getByText("مصنع النور")
+    .locator("nav")
     .first()
     .waitFor({ timeout: 20_000 })
     .then(() => true)
@@ -107,14 +121,28 @@ try {
    */
   await open(page, "/");
   const before = loads;
+  /* أقسام القائمة بتتفتح واحد واحد — اللي إنت فيه مفتوح والباقي مقفول.
+   * فبنفتحهم كلهم زي ما المستخدم بيعمل قبل ما يضغط على القسم. */
+  const expand = async () => {
+    const heads = page.locator("nav > div > button");
+    for (let i = 0, n = await heads.count(); i < n; i++) {
+      const h = heads.nth(i);
+      if (await h.isVisible().catch(() => false)) await h.click().catch(() => {});
+    }
+  };
+  await expand();
+
   for (const [path, needle] of [
     ["/orders", /أوامر|الأوامر/],
     ["/parties", /عملاء|الأطراف|موردين/],
     ["/materials", /خامات|الخامات|مخزون/],
   ]) {
-    const link = page.locator(`a[href="${path}"]`).first();
-    const visible = await link.isVisible().catch(() => false);
-    if (!visible) {
+    let link = page.locator(`a[href="${path}"]`).first();
+    if (!(await link.isVisible().catch(() => false))) {
+      await expand();
+      link = page.locator(`a[href="${path}"]`).first();
+    }
+    if (!(await link.isVisible().catch(() => false))) {
       ok(false, `${path} مش ظاهر في القائمة`);
       continue;
     }
