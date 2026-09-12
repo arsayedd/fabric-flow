@@ -117,7 +117,7 @@ function cuttingDoc(db: Db, id: string, title: string): DocBody {
       ],
     },
     meta: [
-      { label: "التاريخ", value: formatDate(lay.date) },
+      { label: "تاريخ الفرشة", value: formatDate(lay.date) },
       { label: "طول الماركر", value: `${qty(lay.markerLengthM, 2)} م` },
       { label: "الحالة", value: LAY_STATUS_LABEL[lay.status] },
     ],
@@ -195,7 +195,7 @@ function subOutDoc(db: Db, id: string, title: string): DocBody {
       ],
     },
     meta: [
-      { label: "التاريخ", value: formatDate(sub.date) },
+      { label: "تاريخ الخروج", value: formatDate(sub.date) },
       { label: "المتوقع رجوعه", value: formatDate(sub.expectedDate) },
       { label: "الأمر", value: v.orderCode ?? "—" },
     ],
@@ -236,7 +236,7 @@ function subInDoc(db: Db, id: string, title: string): DocBody {
       ],
     },
     meta: [
-      { label: "التاريخ", value: formatDate(receipt.date) },
+      { label: "تاريخ الاستلام", value: formatDate(receipt.date) },
       { label: "الميعاد المتوقع", value: formatDate(sub.expectedDate) },
     ],
     cols: [{ label: "البند" }, { label: "الكمية", align: "end", width: "24mm" }],

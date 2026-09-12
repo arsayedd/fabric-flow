@@ -61,8 +61,18 @@ export type DatasetDef = {
 
 const text = (key: string, label: string, width?: number): ExportCol => ({ key, label, type: "text", width });
 const code = (key: string, label: string): ExportCol => ({ key, label, type: "code", width: 14 });
-const cash = (key: string, label: string, total: "sum" | "avg" | undefined = "sum"): ExportCol => ({ key, label, type: "money", total });
-const count = (key: string, label: string, total: "sum" | "avg" | undefined = "sum"): ExportCol => ({ key, label, type: "qty", total });
+/**
+ * `"none"` مش `undefined`.
+ *
+ * الفرق ده مش شكلي: القيمة الافتراضية في JavaScript بتشتغل كمان لما
+ * تبعت `undefined` صراحة، فـ`cash("price", "السعر", "none")` كان
+ * بيرجع «اجمع» بدل «ماتجمعش» — يعني عمود سعر البيع كان بيطلع تحته
+ * مجموع أسعار كل الموديلات، وده رقم مالوش أي معنى.
+ */
+type Total = "sum" | "avg" | "none";
+const totalOf = (t: Total) => (t === "none" ? undefined : t);
+const cash = (key: string, label: string, total: Total = "sum"): ExportCol => ({ key, label, type: "money", total: totalOf(total) });
+const count = (key: string, label: string, total: Total = "sum"): ExportCol => ({ key, label, type: "qty", total: totalOf(total) });
 const pct = (key: string, label: string): ExportCol => ({ key, label, type: "pct" });
 const day = (key: string, label: string): ExportCol => ({ key, label, type: "date" });
 
@@ -243,8 +253,8 @@ export const DATASETS: DatasetDef[] = [
       text("color", "اللون", 14),
       count("qty", "الكمية"),
       text("state", "الحالة", 24),
-      count("doneSteps", "عمليات خلصت", undefined),
-      count("totalSteps", "إجمالي العمليات", undefined),
+      count("doneSteps", "عمليات خلصت", "none"),
+      count("totalSteps", "إجمالي العمليات", "none"),
       count("rework", "معاد"),
       count("scrap", "هالك"),
       day("createdAt", "اتقص يوم"),
@@ -330,7 +340,7 @@ export const DATASETS: DatasetDef[] = [
     module: "production",
     screen: "/production",
     cols: [
-      count("seq", "الترتيب", undefined),
+      count("seq", "الترتيب", "none"),
       text("name", "العملية", 22),
       count("waiting", "باندل مستني"),
       count("waitingPieces", "قطع مستنية"),
@@ -426,7 +436,7 @@ export const DATASETS: DatasetDef[] = [
       text("phone", "الهاتف", 16),
       text("city", "المدينة"),
       cash("balance", "الرصيد"),
-      cash("limit", "حد الائتمان", undefined),
+      cash("limit", "حد الائتمان", "none"),
       count("orders", "عدد التوريدات"),
       day("last", "آخر تعامل"),
     ],
@@ -560,7 +570,7 @@ export const DATASETS: DatasetDef[] = [
       text("detail", "التفصيل", 24),
       cash("debit", "مدين"),
       cash("credit", "دائن"),
-      cash("balance", "الرصيد", undefined),
+      cash("balance", "الرصيد", "none"),
     ],
     rows: (db) =>
       db.parties
@@ -591,8 +601,8 @@ export const DATASETS: DatasetDef[] = [
       text("name", "المنتج", 26),
       text("category", "الفئة", 16),
       text("unit", "الوحدة"),
-      cash("price", "سعر البيع", undefined),
-      cash("cost", "تكلفة القطعة", undefined),
+      cash("price", "سعر البيع", "none"),
+      cash("cost", "تكلفة القطعة", "none"),
       pct("margin", "الهامش"),
       count("stock", "المخزون"),
     ],
@@ -623,13 +633,13 @@ export const DATASETS: DatasetDef[] = [
     screen: "/costing",
     cols: [
       text("name", "الموديل", 24),
-      cash("cost", "التكلفة", undefined),
-      cash("price", "السعر", undefined),
-      cash("profit", "ربح القطعة", undefined),
+      cash("cost", "التكلفة", "none"),
+      cash("price", "السعر", "none"),
+      cash("profit", "ربح القطعة", "none"),
       pct("margin", "الهامش"),
       count("produced", "المنتج"),
       cash("totalProfit", "إجمالي الربح"),
-      count("score", "الدرجة", undefined),
+      count("score", "الدرجة", "none"),
       text("verdict", "الحكم", 18),
     ],
     rows: (db) =>
@@ -662,7 +672,7 @@ export const DATASETS: DatasetDef[] = [
       { key: "qtyPerUnit", label: "للقطعة", type: "num2", total: "sum" },
       pct("wastePct", "الهالك"),
       { key: "effectiveQty", label: "الفعلي", type: "num2", total: "sum" },
-      cash("unitCost", "سعر الوحدة", undefined),
+      cash("unitCost", "سعر الوحدة", "none"),
       cash("lineCost", "تكلفة السطر"),
     ],
     rows: (db) =>
@@ -692,11 +702,11 @@ export const DATASETS: DatasetDef[] = [
       text("name", "الخامة", 24),
       text("unit", "الوحدة"),
       count("qty", "الرصيد"),
-      cash("avgCost", "متوسط السعر", undefined),
+      cash("avgCost", "متوسط السعر", "none"),
       cash("value", "قيمة المخزون"),
       { key: "perDay", label: "استهلاك يومي", type: "num2" },
-      count("daysOfCover", "أيام التغطية", undefined),
-      count("reorderPoint", "حد الطلب", undefined),
+      count("daysOfCover", "أيام التغطية", "none"),
+      count("reorderPoint", "حد الطلب", "none"),
       text("state", "الحالة"),
     ],
     rows: (db) =>
@@ -727,7 +737,7 @@ export const DATASETS: DatasetDef[] = [
       text("item", "الصنف", 24),
       text("kind", "نوع الحركة"),
       count("qty", "الكمية"),
-      cash("unitCost", "سعر الوحدة", undefined),
+      cash("unitCost", "سعر الوحدة", "none"),
       cash("value", "القيمة"),
       text("warehouse", "المخزن", 16),
       text("notes", "ملاحظات", 20),
@@ -825,11 +835,11 @@ export const DATASETS: DatasetDef[] = [
       count("lost", "فاقد"),
       count("outstanding", "لسه برّه"),
       pct("lossPct", "نسبة الفاقد"),
-      cash("rate", "أجر القطعة", undefined),
+      cash("rate", "أجر القطعة", "none"),
       cash("charge", "المستحق"),
       cash("paid", "المدفوع"),
       cash("due", "الباقي"),
-      count("lateDays", "أيام التأخير", undefined),
+      count("lateDays", "أيام التأخير", "none"),
       text("status", "الحالة"),
     ],
     rows: (db) =>
@@ -900,7 +910,7 @@ export const DATASETS: DatasetDef[] = [
     cols: [
       text("name", "العامل", 22),
       text("payType", "نظام الأجر"),
-      cash("rate", "السعر", undefined),
+      cash("rate", "السعر", "none"),
       text("phone", "الهاتف", 16),
       cash("earned", "المستحق"),
       cash("paid", "المدفوع"),
@@ -1024,7 +1034,7 @@ export const DATASETS: DatasetDef[] = [
       day("start", "البداية"),
       day("finish", "النهاية المتوقعة"),
       day("dueDate", "الميعاد"),
-      count("slack", "فرق الأيام", undefined),
+      count("slack", "فرق الأيام", "none"),
       text("verdict", "الحكم"),
     ],
     rows: (db) =>
@@ -1055,7 +1065,7 @@ export const DATASETS: DatasetDef[] = [
       { key: "available", label: "المتاح", type: "num2", total: "sum" },
       { key: "shortage", label: "النقص", type: "num2", total: "sum" },
       cash("value", "قيمة النقص"),
-      count("leadTimeDays", "مدة التوريد", undefined),
+      count("leadTimeDays", "مدة التوريد", "none"),
       day("orderBy", "يتطلب قبل"),
     ],
     rows: (db) =>
@@ -1118,7 +1128,7 @@ export const DATASETS: DatasetDef[] = [
       day("date", "التاريخ"),
       cash("amount", "المبلغ"),
       text("status", "الحالة"),
-      count("revision", "المراجعة", undefined),
+      count("revision", "المراجعة", "none"),
       text("createdBy", "أصدره", 18),
       text("reason", "سبب الإلغاء", 24),
     ],
