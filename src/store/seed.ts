@@ -813,6 +813,9 @@ export function demoDb(): Db {
     { id: "d6", factoryId: FID, clientId: "cl-4", date: addDays(today, -96), dueDate: addDays(today, -76), amount: 18800, model: "فستان صيفي", quantity: 40, notes: "آخر طلب قبل ما يتوقف" },
     { id: "d7", factoryId: FID, clientId: "cl-5", date: addDays(today, -40), dueDate: addDays(today, -12), amount: 180000, model: "طقم تصدير", quantity: 500, notes: "دفعة أولى اتجمعت" },
     { id: "d8", factoryId: FID, clientId: "cl-5", date: addDays(today, -6), dueDate: addDays(today, 20), amount: 95000, model: "طقم تصدير", quantity: 250, notes: "" },
+    // توريد جزئي مربوط بأمر SN-1042 بالمعرّف: هو اللي بيخلي سلسلة
+    // «من الأمر للتحصيل» مكتملة، والموديل يتعرف من الأمر مش من الاسم
+    { id: "d9", factoryId: FID, clientId: "cl-1", orderId: "o1", date: addDays(today, -3), dueDate: addDays(today, 12), amount: 53000, model: "قميص قطني", quantity: 200, notes: "دفعة أولى من الأمر، الباقي مع خلوص المكوى" },
   ];
 
   const collections = [

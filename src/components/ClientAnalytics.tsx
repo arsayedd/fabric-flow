@@ -47,12 +47,21 @@ export function ClientProductsTab({ partyId }: { partyId: string }) {
               الإيراد ناقص بنوده المسجّلة — مش الإيراد لوحده.
             </p>
           </div>
-          <div className="text-left">
-            <Money className="text-2xl" value={c.net} signed />
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              هامش {pctText(c.marginPct, 1)} على النطاق المحسوب
-            </p>
-          </div>
+          {/* من غير إيراد في النطاق، الصافي بيبقى «سالب تكلفة المرتجعات»
+              — رقم بيقول إن العميل خسران وهو مش بيقول حاجة أصلًا */}
+          {c.scopedRevenue > 0 ? (
+            <div className="text-left">
+              <Money className="text-2xl" value={c.net} signed />
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                هامش {pctText(c.marginPct, 1)} على النطاق المحسوب
+              </p>
+            </div>
+          ) : (
+            <div className="text-left">
+              <p className="text-2xl text-muted-foreground">—</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">مافيش نطاق متكلّف يتحسب عليه</p>
+            </div>
+          )}
         </div>
 
         {/* الفرق بين الإيراد الكلي والنطاق المحسوب مش خطأ — ده حدود
@@ -63,16 +72,16 @@ export function ClientProductsTab({ partyId }: { partyId: string }) {
             <Money className="text-lg" value={c.revenue} />
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">إيراد أوامر عارفين تكلفتها</p>
+            <p className="text-xs text-muted-foreground">إيراد موديلات عارفين تكلفتها</p>
             <Money className="text-lg" value={c.scopedRevenue} />
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {c.orderCount > 0
-                ? `${qty(c.orderCount, 0)} أمر · ${pctText(c.scopePct)} من الإيراد`
-                : "مافيش أمر إنتاج مربوط بتوريد"}
+              {c.productCount > 0
+                ? `${qty(c.productCount, 0)} موديل · ${pctText(c.scopePct)} من الإيراد`
+                : "مافيش موديل له ورقة تكلفة"}
             </p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">التكلفة المسجّلة</p>
+            <p className="text-xs text-muted-foreground">التكلفة المحمّلة</p>
             <Money className="text-lg" value={c.cost} />
           </div>
         </div>
@@ -93,10 +102,20 @@ export function ClientProductsTab({ partyId }: { partyId: string }) {
 
         {c.scopePct !== null && c.scopePct < 99 ? (
           <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">
-            الربح محسوب على {pctText(c.scopePct)} من إيراد العميل. الباقي توريدات مش مربوطة بأمر إنتاج
-            متسجّل، فتكلفتها الفعلية مش معروفة — والنسبة مكتوبة عشان الرقم مايتقراش أوسع من نطاقه.
+            الربح محسوب على {pctText(c.scopePct)} من إيراد العميل — الموديلات اللي ليها ورقة تكلفة.
+            الباقي توريدات موديلها مش في الكتالوج أو من غير قائمة خامات، فتكلفتها مش معروفة. والنسبة
+            مكتوبة عشان الرقم مايتقراش أوسع من نطاقه.
           </p>
         ) : null}
+
+        {/* الورقة تكلفة معيارية. الفعلي متسجّل على الأوامر، لكن ربطه
+            بالإيراد محتاج التوريد يكون مربوط بأمر — فبنقول العدد بس */}
+        <p className="mt-2 text-xs text-muted-foreground">
+          التكلفة هنا معيارية: ورقة تكلفة القطعة × المتسلّم.
+          {c.actualOrders > 0
+            ? ` والاستهلاك الفعلي متسجّل على ${qty(c.actualOrders, 0)} أمر — تلاقيه في شاشة التكاليف لكل أمر لوحده.`
+            : " ومافيش أمر للعميل ده اتسجّل عليه صرف خامات أو أجور فعلية."}
+        </p>
 
         <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
           {c.missing.map((x) => (
@@ -165,8 +184,14 @@ export function ClientProductsTab({ partyId }: { partyId: string }) {
                     ) : (
                       <Badge tone="muted">مش في الكتالوج</Badge>
                     )}
+                    {/* الصف ممكن يكون نصه مربوط بأمر ونصه مطابقة اسم —
+                        و«مطابقة بالاسم» لوحدها كانت بتخفي الربط الموجود */}
                     {r.productId && !r.exact ? (
-                      <span className="mt-0.5 block text-xs text-muted-foreground">مطابقة بالاسم</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        {r.exactRevenue > 0
+                          ? `${pctText((r.exactRevenue / r.revenue) * 100)} من أمر إنتاج، والباقي مطابقة بالاسم`
+                          : "مطابقة بالاسم"}
+                      </span>
                     ) : null}
                   </td>
                   <td className="p-2 text-left tabular">{r.deliveredQty > 0 ? qty(r.deliveredQty, 0) : "—"}</td>

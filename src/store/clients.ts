@@ -24,7 +24,7 @@
  * ٩٠٪ — رقم مريح وكاذب.
  */
 
-import { cairoToday, daysBetween } from "@/lib/utils";
+import { cairoToday, daysBetween, qty } from "@/lib/utils";
 import { caseCostTotal, customerCredits, fifoRemain, isEffective } from "./compute";
 import { costSheet } from "./costing";
 import { orderStages, productById } from "./manufacturing";
@@ -75,6 +75,8 @@ export type ClientProductRow = {
   deliveries: number;
   deliveredQty: number;
   revenue: number;
+  /** الجزء من إيراد الصف اللي ربطه بأمر إنتاج بالمعرّف */
+  exactRevenue: number;
   /** المنتَج في أوامر العميل دي — من المراحل، مش من نسبة مكتوبة */
   producedQty: number;
   returnedQty: number;
@@ -126,6 +128,7 @@ export function clientProducts(db: Db, partyId: string): ClientProducts {
     deliveries: number;
     deliveredQty: number;
     revenue: number;
+    exactRevenue: number;
     producedQty: number;
     returnedQty: number;
     returnCases: number;
@@ -147,6 +150,7 @@ export function clientProducts(db: Db, partyId: string): ClientProducts {
         deliveries: 0,
         deliveredQty: 0,
         revenue: 0,
+        exactRevenue: 0,
         producedQty: 0,
         returnedQty: 0,
         returnCases: 0,
@@ -167,6 +171,7 @@ export function clientProducts(db: Db, partyId: string): ClientProducts {
     const acc = take(res.product?.id ?? null, res.name, res.product?.sku ?? null, res.exact);
     acc.deliveries += 1;
     acc.revenue += d.amount;
+    if (res.exact) acc.exactRevenue += d.amount;
     if (d.quantity === null) acc.missingQty = true;
     else acc.deliveredQty += d.quantity;
   }
@@ -220,6 +225,7 @@ export function clientProducts(db: Db, partyId: string): ClientProducts {
       deliveries: a.deliveries,
       deliveredQty: a.deliveredQty,
       revenue: a.revenue,
+      exactRevenue: a.exactRevenue,
       producedQty: a.producedQty,
       returnedQty: a.returnedQty,
       returnCases: a.returnCases,
@@ -236,7 +242,9 @@ export function clientProducts(db: Db, partyId: string): ClientProducts {
   rows.sort((x, y) => y.revenue - x.revenue);
   const revenue = rows.reduce((s, r) => s + r.revenue, 0);
   const catalogRevenue = rows.filter((r) => r.productId).reduce((s, r) => s + r.revenue, 0);
-  const exactRevenue = rows.filter((r) => r.exact).reduce((s, r) => s + r.revenue, 0);
+  // على مستوى التوريد مش على مستوى الصف: صف فيه توريد واحد مربوط
+  // بالمعرّف وعشرة بالاسم مش «صفر ربط» — هو الربط اللي موجود فعلًا
+  const exactRevenue = rows.reduce((s, r) => s + r.exactRevenue, 0);
   const costedRevenue = rows.filter((r) => r.cost !== null).reduce((s, r) => s + r.revenue, 0);
 
   return {
@@ -264,10 +272,11 @@ export type ClientContribution = {
   /** كل الإيراد من أول يوم */
   revenue: number;
   /**
-   * إيراد الأوامر اللي عندنا تكلفتها الفعلية.
+   * إيراد الموديلات اللي عندها ورقة تكلفة.
    *
-   * الربح بيتحسب على ده بس. والفرق بينه وبين `revenue` مش خطأ — هو
-   * التوريدات اللي مش مربوطة بأمر إنتاج متسجّل، وتكلفتها مش معروفة.
+   * الربح بيتحسب على ده بس، وهو **نفس** النطاق اللي الجدول تحت بيحسب
+   * عليه ربح كل سطر. والفرق بينه وبين `revenue` مش خطأ — هو توريدات
+   * موديلها مش في الكتالوج أو من غير قائمة خامات، وتكلفته مش معروفة.
    */
   scopedRevenue: number;
   scopePct: number | null;
@@ -275,8 +284,10 @@ export type ClientContribution = {
   cost: number;
   net: number;
   marginPct: number | null;
-  /** الأوامر اللي الحساب بيقف عليها */
-  orderCount: number;
+  /** الموديلات اللي الحساب بيقف عليها */
+  productCount: number;
+  /** أوامر العميل اللي اتسجّلت عليها حركات صرف وأجور فعلية */
+  actualOrders: number;
   /** بنود العميل الحقيقية اللي النظام مش بيسجّلها لسه */
   missing: { label: string; why: string }[];
 };
@@ -284,71 +295,68 @@ export type ClientContribution = {
 /**
  * صافي المساهمة.
  *
- * البنود اللي بتتخصم كلها **من حركات حقيقية**: خامات مصروفة بتكلفتها
- * وقت الصرف، أجور مسجّلة بالقطعة أو بالمرحلة، أجر ورش خارجية من
- * إذونها، وتكلفة المرتجعات بسطورها. والأوفرهيد الوحيد اللي بيتحمّل هو
- * الرقم المكتوب في الإعدادات لكل قطعة — مش توزيع مخترع.
+ * الرقم ده **مجموع عمود الجدول اللي تحته**، مش حساب تاني موازي له.
+ * لو الكارت خصم بنطاق والجدول حسب بنطاق تاني، صاحب المصنع كان هيبص
+ * على رقمين متناقضين في شاشة واحدة ويسيب الاتنين.
+ *
+ * والأساس هو **ورقة التكلفة × المتسلّم**: الورقة نفسها مبنية على أسعار
+ * خامات حقيقية وأجور قطعة حقيقية، لكنها تكلفة معيارية للقطعة مش
+ * استهلاك أمر بعينه. الاستهلاك الفعلي متسجّل على الأوامر فعلًا — لكن
+ * ربطه بالإيراد محتاج إن التوريد يكون مربوط بالأمر، وده لسه مش متحقق
+ * على كل التوريدات. فبنقول عدد الأوامر اللي عندها تكلفة فعلية بدل ما
+ * نخلط الاتنين في رقم واحد.
+ *
+ * والمرتجعات وإشعارات الخصم **فعلية** مش معيارية، وبتتخصم كاملة: دي
+ * خسارة حصلت على العميل ده بعينه.
  */
 export function clientContribution(db: Db, partyId: string): ClientContribution {
   const dels = db.deliveries.filter((d) => d.clientId === partyId);
   const revenue = dels.reduce((s, d) => s + d.amount, 0);
   const orders = db.orders.filter((o) => o.clientId === partyId);
-  const orderIds = new Set(orders.map((o) => o.id));
 
-  // الأوامر اللي ليها توريد مربوط: دي النطاق اللي الإيراد والتكلفة
-  // فيه بيتكلموا عن نفس الشغل
-  const linked = dels.filter((d) => d.orderId && orderIds.has(d.orderId));
-  const scopedRevenue = linked.reduce((s, d) => s + d.amount, 0);
-  const scopedOrderIds = new Set(linked.map((d) => d.orderId as string));
+  const matrix = clientProducts(db, partyId);
+  const costed = matrix.rows.filter((r) => r.cost !== null && r.productId);
+  const scopedRevenue = costed.reduce((s, r) => s + r.revenue, 0);
 
-  const moves = db.stockMovements.filter(
-    (m) => m.refType === "order" && m.refId && scopedOrderIds.has(m.refId),
-  );
-  const materials = moves
-    .filter((m) => m.kind === "issue" || m.kind === "waste")
-    .reduce((s, m) => s + Math.abs(m.qty) * m.unitCost, 0);
+  // بنود الورقة × المتسلّم: نفس الضربة اللي طلّعت تكلفة السطر، متفكوكة
+  let materials = 0;
+  let waste = 0;
+  let labor = 0;
+  let outsourcing = 0;
+  let overhead = 0;
+  for (const r of costed) {
+    const sheet = costSheet(db, r.productId as string);
+    materials += sheet.materials * r.deliveredQty;
+    waste += sheet.waste * r.deliveredQty;
+    labor += sheet.labor * r.deliveredQty;
+    outsourcing += sheet.outsourced * r.deliveredQty;
+    overhead += sheet.overhead * r.deliveredQty;
+  }
 
-  const stageLabor = db.stageEntries
-    .filter((e) => scopedOrderIds.has(e.orderId))
-    .reduce((s, e) => s + e.qtyGood * e.rate, 0);
-  const opLabor = (db.bundleOps ?? []).reduce((s, op) => {
-    const bundle = (db.bundles ?? []).find((b) => b.id === op.bundleId);
-    if (!bundle || !scopedOrderIds.has(bundle.orderId)) return s;
-    return s + op.qtyGood * op.rate;
-  }, 0);
-
-  const outsourcing = (db.subcontracts ?? []).reduce((s, sc) => {
-    if (sc.status === "cancelled" || !sc.orderId || !scopedOrderIds.has(sc.orderId)) return s;
-    const received = (db.subReceipts ?? [])
-      .filter((r) => r.subcontractId === sc.id)
-      .reduce((a, r) => a + r.qtyGood + r.qtyRework, 0);
-    return s + received * sc.rate;
-  }, 0);
-
-  const produced = orders
-    .filter((o) => scopedOrderIds.has(o.id))
-    .reduce((s, o) => {
-      const stages = orderStages(db, o);
-      return s + (stages.length ? stages[stages.length - 1].good : 0);
-    }, 0);
-  const overhead = (db.settings?.overheadPerUnit ?? 0) * produced;
-
-  // المرتجعات بتتحمّل كلها، مش بنسبة النطاق: المرتجع خسارة حقيقية
-  // حصلت على العميل ده بعينه، ومالهاش علاقة بإحنا عارفين تكلفة أمره
-  // ولا لأ
   const rets = db.returns.filter((r) => r.partyId === partyId && r.status !== "cancelled");
   const returnCost = rets.reduce((s, r) => s + caseCostTotal(db, r), 0);
   const credits = customerCredits(db)
     .filter((c) => c.partyId === partyId)
     .reduce((s, c) => s + c.amount, 0);
 
+  const orderIds = new Set(orders.map((o) => o.id));
+  const actualOrders = new Set(
+    [
+      ...db.stockMovements
+        .filter((m) => m.refType === "order" && m.refId && orderIds.has(m.refId) && (m.kind === "issue" || m.kind === "waste"))
+        .map((m) => m.refId as string),
+      ...db.stageEntries.filter((e) => orderIds.has(e.orderId)).map((e) => e.orderId),
+    ],
+  ).size;
+
   const components: CostComponent[] = [
-    { key: "materials", label: "خامات مصروفة", amount: materials, from: "حركات صرف وهالك على أوامر العميل" },
-    { key: "labor", label: "أجور إنتاج", amount: stageLabor + opLabor, from: "تسجيل المراحل والعمليات بالقطعة" },
-    { key: "outsourcing", label: "تشغيل خارجي", amount: outsourcing, from: "الراجع من الورش × أجر القطعة" },
-    { key: "overhead", label: "أوفرهيد محمّل", amount: overhead, from: "رقم الإعدادات للقطعة × المنتَج" },
-    { key: "returns", label: "تكلفة المرتجعات", amount: returnCost, from: "سطور تكلفة الحالات وأوامر الإصلاح" },
-    { key: "credits", label: "إشعارات خصم", amount: credits, from: "المرتجعات اللي قرارها إشعار خصم" },
+    { key: "materials", label: "خامات", amount: materials, from: "قائمة الخامات × سعر الخامة × المتسلّم" },
+    { key: "waste", label: "هالك محتسب", amount: waste, from: "نسبة الهالك في قائمة الخامات" },
+    { key: "labor", label: "أجور إنتاج", amount: labor, from: "مسار التشغيل × أجر القطعة × المتسلّم" },
+    { key: "outsourcing", label: "تشغيل خارجي", amount: outsourcing, from: "عمليات الورش في مسار التشغيل" },
+    { key: "overhead", label: "أوفرهيد محمّل", amount: overhead, from: "رقم الإعدادات للقطعة × المتسلّم" },
+    { key: "returns", label: "تكلفة المرتجعات", amount: returnCost, from: "سطور تكلفة الحالات وأوامر الإصلاح — فعلية" },
+    { key: "credits", label: "إشعارات خصم", amount: credits, from: "المرتجعات اللي قرارها إشعار خصم — فعلية" },
   ].filter((c) => c.amount > EPS);
 
   const cost = components.reduce((s, c) => s + c.amount, 0);
@@ -362,7 +370,8 @@ export function clientContribution(db: Db, partyId: string): ClientContribution 
     cost,
     net,
     marginPct: scopedRevenue > EPS ? (net / scopedRevenue) * 100 : null,
-    orderCount: scopedOrderIds.size,
+    productCount: costed.length,
+    actualOrders,
     missing: [
       { label: "الشحن والتوصيل", why: "مافيش تكلفة شحن على التوريد — الشحن بيتسجّل كمصروف عام مش على العميل" },
       { label: "الخصومات التجارية", why: "سعر التوريد بيتسجّل صافي، فالخصم مش بند منفصل" },
@@ -585,31 +594,31 @@ export function orderCash(db: Db, order: Order): OrderCash {
       {
         key: "order",
         label: "الأمر",
-        detail: `${order.quantity} قطعة · ${order.line || "بدون خط"}`,
+        detail: `${qty(order.quantity, 0)} قطعة · ${order.line || "بدون خط"}`,
         done: true,
       },
       {
         key: "production",
         label: "الإنتاج",
-        detail: stages.length ? `خلص ${produced} من ${order.quantity}` : "مافيش مراحل مسجّلة",
+        detail: stages.length ? `خلص ${qty(produced, 0)} من ${qty(order.quantity, 0)}` : "مافيش مراحل مسجّلة",
         done: produced > 0,
       },
       {
         key: "delivery",
         label: "التسليم",
-        detail: mine.length ? `${mine.length} توريد · ${delivered} قطعة` : "مافيش توريد مربوط بالأمر",
+        detail: mine.length ? `${qty(mine.length, 0)} توريد · ${qty(delivered, 0)} قطعة` : "مافيش توريد مربوط بالأمر",
         done: mine.length > 0,
       },
       {
         key: "invoice",
         label: "الفاتورة",
-        detail: invoiced > 0 ? `${mine.length} فاتورة` : "مافيش قيمة مفوترة",
+        detail: invoiced > 0 ? `${qty(mine.length, 0)} فاتورة` : "مافيش قيمة مفوترة",
         done: invoiced > 0,
       },
       {
         key: "collection",
         label: "التحصيل",
-        detail: invoiced > 0 ? `اتحصّل ${Math.round(((invoiced - remaining) / invoiced) * 100)}٪` : "—",
+        detail: invoiced > 0 ? `اتحصّل ${qty(((invoiced - remaining) / invoiced) * 100, 0)}٪` : "—",
         done: invoiced > 0 && remaining <= 0.5,
       },
     ],
