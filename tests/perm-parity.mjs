@@ -48,8 +48,24 @@ for (const role of ["owner", "accountant", "supervisor"]) {
 }
 
 /* ── الجانب SQL ─────────────────────────────────────────────── */
-psql(["-q", "-c", `drop database if exists ${DB}`]);
-psql(["-q", "-c", `create database ${DB}`]);
+const reset = () => {
+  psql(["-q", "-c", `drop database if exists ${DB}`]);
+  psql(["-q", "-c", `create database ${DB}`]);
+};
+try {
+  reset();
+} catch {
+  /* الكلاستر واقف بعد restart — نشغّله مرة ونعيد */
+  try {
+    execFileSync("sudo", ["pg_ctlcluster", "16", "main", "start"], { stdio: "ignore" });
+    reset();
+  } catch (e) {
+    console.error("مش قادر يعمل قاعدة اختبار — ثبّت Postgres:");
+    console.error("  sudo apt-get install -y postgresql && sudo pg_ctlcluster 16 main start");
+    console.error(e.stderr ?? e.message);
+    process.exit(1);
+  }
+}
 const files = [
   join(ROOT, "supabase/tests/shim.sql"),
   join(ROOT, "supabase/schema.sql"),
@@ -104,4 +120,6 @@ for (const role of ["owner", "accountant", "supervisor"]) {
 }
 
 console.log(`\nخانات مطابقة ${pass} · مختلفة ${fail}`);
+/* بالصيغة اللي `run-all.mjs` بيقراها عشان الرقم يبان في الجدول */
+console.log(`${pass} نجحت · ${fail} فشلت`);
 process.exit(fail ? 1 : 0);

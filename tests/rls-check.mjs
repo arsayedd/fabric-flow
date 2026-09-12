@@ -10,7 +10,7 @@
  * محتاج Postgres محلي شغّال:
  *   sudo apt-get install -y postgresql && sudo pg_ctlcluster 16 main start
  */
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,20 +20,39 @@ const ROOT = join(HERE, "..");
 const DB = "sanaa_rls_test";
 const PSQL = "/usr/lib/postgresql/16/bin/psql";
 
-const run = (args, input) =>
-  execFileSync("sudo", ["-u", "postgres", PSQL, ...args], {
-    input,
-    encoding: "utf8",
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+/* لازم stderr مع stdout: تأكيدات `tst()` بتطلع NOTICE، والـNOTICE بيروح
+ * على stderr. لو قرينا stdout بس، الاختبار بيبان ناجح وهو ماعرضش ولا
+ * حسب ولا تأكيد واحد. */
+const run = (args, input) => {
+  const r = spawnSync("sudo", ["-u", "postgres", PSQL, ...args], { input, encoding: "utf8" });
+  if (r.error) throw r.error;
+  if (r.status !== 0) {
+    const err = new Error(`psql exited ${r.status}`);
+    err.stderr = r.stderr;
+    throw err;
+  }
+  return `${r.stdout}${r.stderr}`;
+};
 
-try {
+/* الكلاستر بيبقى واقف بعد أي restart، وماينفعش الاختبار ده يفشل لسبب
+ * زي ده — فنجرّب نشغّله مرة واحدة قبل ما نستسلم */
+const reset = () => {
   run(["-q", "-c", `drop database if exists ${DB}`]);
   run(["-q", "-c", `create database ${DB}`]);
-} catch (e) {
-  console.error("مش قادر يعمل قاعدة اختبار — Postgres شغّال؟");
-  console.error(e.stderr ?? e.message);
-  process.exit(1);
+};
+
+try {
+  reset();
+} catch {
+  try {
+    execFileSync("sudo", ["pg_ctlcluster", "16", "main", "start"], { stdio: "ignore" });
+    reset();
+  } catch (e) {
+    console.error("مش قادر يعمل قاعدة اختبار — ثبّت Postgres:");
+    console.error("  sudo apt-get install -y postgresql && sudo pg_ctlcluster 16 main start");
+    console.error(e.stderr ?? e.message);
+    process.exit(1);
+  }
 }
 
 const files = [
@@ -47,13 +66,18 @@ const files = [
 ];
 
 let failed = false;
+let checks = 0;
 for (const f of files) {
   const name = f.replace(`${ROOT}/`, "");
   try {
     const out = run(["-q", "-v", "ON_ERROR_STOP=1", "-d", DB, "-f", f]);
-    const notices = out.split("\n").filter((l) => l.trim());
     console.log(`▸ ${name}`);
-    for (const l of notices) console.log(l.replace(/^NOTICE:\s*/, ""));
+    for (const l of out.split("\n")) {
+      const clean = l.replace(/^NOTICE:\s*/, "").trimEnd();
+      if (!clean.trim()) continue;
+      if (clean.includes("✓")) checks += 1;
+      console.log(clean);
+    }
   } catch (e) {
     failed = true;
     console.log(`▸ ${name}`);
@@ -91,6 +115,17 @@ if (!failed) {
   }
 }
 
+/* لو حد شال تأكيدات من rls.sql، أو اتكتمت تاني، الرقم بيقل والاختبار
+ * بيفشل — بدل ما يعدّي وهو مش بيختبر حاجة */
+const FLOOR = 30;
+console.log(`\nتأكيدات عزل: ${checks}`);
+if (checks < FLOOR) {
+  console.error(`✗ المفروض ${FLOOR} تأكيد على الأقل — طلع ${checks}`);
+  failed = true;
+}
+
 run(["-q", "-c", `drop database if exists ${DB}`]);
+/* بالصيغة اللي `run-all.mjs` بيقراها عشان الرقم يبان في الجدول */
+console.log(`${checks} نجحت · ${failed ? 1 : 0} فشلت`);
 console.log(failed ? "\nفشل" : "\nنجح");
 process.exit(failed ? 1 : 0);
