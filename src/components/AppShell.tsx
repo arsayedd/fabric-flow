@@ -61,8 +61,22 @@ export function AppShell() {
   const [palette, setPalette] = useState(false);
   useCommandKey(useCallback(() => setPalette(true), []));
 
-  // فتح صفحة جديدة معناها تبدأ من أولها، مش من المكان اللي كنت واقف فيه في اللي قبلها
-  useEffect(() => window.scrollTo(0, 0), [loc.pathname]);
+  /*
+   * فتح صفحة جديدة معناها تبدأ من أولها، مش من المكان اللي كنت واقف فيه
+   * في اللي قبلها.
+   *
+   * والجسم بالأقواس مش شكل: السطر كان `useEffect(() => window.scrollTo(0, 0), …)`
+   * بسهم بيرجّع قيمة ضمنيًا. وريأكت بتاخد اللي الـeffect بيرجّعه كدالة
+   * تنظيف وبتناديه — فمتصفح `scrollTo` فيه بيرجّع أي قيمة مش `undefined`
+   * (ويب-فيو، أو بوليفيل تمرير، أو إضافة) بيخلّي ريأكت تنادي القيمة دي،
+   * فترمي `is not a function` جوه مرحلة الـcommit وتفكّ الشجرة كلها.
+   *
+   * والـeffect ده مربوط بـ`loc.pathname`، يعني التنظيف بيتنفّذ مع **كل**
+   * تنقّل — وده كان سبب «كل صفحة بدخلها لازم اعملها ريفريش».
+   */
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [loc.pathname]);
 
   const here = sectionOf(loc.pathname);
   const flat = tree.flatMap((s) => s.items);

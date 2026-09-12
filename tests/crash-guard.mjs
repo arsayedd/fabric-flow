@@ -176,6 +176,59 @@ try {
   );
 
   await page.evaluate(([k, json]) => localStorage.setItem(k, json), [key, full]);
+
+  /* ── ٥) متصفح `scrollTo` فيه بيرجّع قيمة ────────────────── */
+  console.log("\n— متصفح scrollTo فيه بيرجّع قيمة —");
+  /* الشكوى الأخيرة كانت `TypeError: l is not a function` في `Ol` — ودي
+     دالة ريأكت اللي بتنادي تنظيف الـeffect. والسبب كان سطر في الشِل
+     بيرجّع ناتج `window.scrollTo` ضمنيًا، والـeffect مربوط بالمسار،
+     فالتنظيف بيتنفّذ مع كل تنقّل. في كروم الناتج `undefined` فمافيش
+     مشكلة — عشان كده الهارنسات كلها كانت بتقول سليم. هنا بنعمل متصفح
+     بيرجّع قيمة، زي الويب-فيوهات وبوليفيلات التمرير. */
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await ctx.addInitScript(() => {
+    const real = window.scrollTo.bind(window);
+    window.scrollTo = (...args) => {
+      real(...args);
+      return true;
+    };
+  });
+  const p2 = await ctx.newPage();
+  const boom = [];
+  p2.on("pageerror", (e) => boom.push(String(e).split("\n")[0].slice(0, 160)));
+  /* ريأكت بتكتب العطل ده بـ`console.error` مش كـ`pageerror` لما الحاجز
+     بيمسكه — فالسامع الواحد كان بيخلّي التأكيد ينجح على متصفح واقع */
+  p2.on("console", (m) => {
+    if (m.type() === "error") boom.push(m.text().split("\n")[0].slice(0, 160));
+  });
+  await p2.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
+  await p2.getByPlaceholder(/@/).first().fill(email);
+  await p2.locator('input[type="password"]').first().fill(pwd);
+  await p2.getByRole("button", { name: /دخول|تسجيل/ }).first().click();
+  await p2.locator("nav").first().waitFor({ timeout: 30_000 });
+  await p2.waitForTimeout(1500);
+  ok("الدخول نفسه مابيقعش", !/الشاشة دي وقعت/.test(await p2.locator("body").innerText()), boom[0] ?? "");
+
+  const heads2 = p2.locator("nav > div > button");
+  for (let i = 0, n = await heads2.count(); i < n; i++) await heads2.nth(i).click().catch(() => {});
+  const hops = ["/parties", "/orders", "/collections", "/materials", "/parties"];
+  const crashedAt = [];
+  let hopped = 0;
+  for (const href of hops) {
+    const a = p2.locator(`nav a[href="${href}"]`).first();
+    if (!(await a.isVisible().catch(() => false))) continue;
+    await a.click({ timeout: 10_000 }).catch(() => {});
+    hopped++;
+    await p2.waitForTimeout(900);
+    if (/الشاشة دي وقعت/.test(await p2.locator("body").innerText().catch(() => ""))) crashedAt.push(href);
+  }
+  /* لازم نتأكد إننا اتنقّلنا فعلًا: لما التطبيق بيقع القائمة بتختفي،
+     فاللينكات مابتبقاش ظاهرة، فالّوب بيلفّ من غير ما يضغط حاجة
+     والتأكيد ينجح على متصفح مكسور تمامًا */
+  ok("اتنقّلنا فعلًا بين أقسام", hopped >= 3, `${hopped} ضغطة`);
+  ok("والتنقّل بين الأقسام مابيقعش", crashedAt.length === 0, crashedAt.join(", "));
+  ok("ومفيش «is not a function» في الكونسول", !boom.some((b) => /is not a function/.test(b)), boom.slice(0, 2).join(" | "));
+  await ctx.close();
 } catch (e) {
   fail++;
   console.log(`  ✗ الاختبار نفسه وقع — ${String(e).split("\n")[0]}`);
