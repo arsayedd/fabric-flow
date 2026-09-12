@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { DocumentButton } from "@/components/docs/DocumentPrint";
 import { ExportMenu } from "@/components/export/ExportMenu";
 import { cairoToday, formatDate, money, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
@@ -50,6 +51,20 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
+/**
+ * كل تاب بيصدّر جدوله.
+ *
+ * وتاب الموردين بيصدّر أوامر التوريد لأن التزام المورّد **مشتق منها**:
+ * الجدول اللي وراه هو نفسه، والملخص اللي على الشاشة بيتحسب من نفس
+ * السطور — فتصدير مجموعة تانية ليه كان هيبقى نفس الأرقام باسم تاني.
+ */
+const TAB_DATASET: Record<TabId, string> = {
+  orders: "supply",
+  batches: "batches",
+  available: "availability",
+  suppliers: "supply",
+};
+
 export function SupplyPage() {
   const { db, can } = useFactory();
   const [params, setParams] = useSearchParams();
@@ -88,7 +103,9 @@ export function SupplyPage() {
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
-          <ExportMenu module="purchasing" dataset={() => datasetOf(db, "supply")} />
+          {/* التصدير بيمشي مع التاب: الزر اللي بيطلّع نفس الملف من أي
+              تاب بيخلّي «مفيش قايمة بلا تصدير» جملة مش أكتر */}
+          <ExportMenu module="purchasing" dataset={() => datasetOf(db, TAB_DATASET[tab])} />
           {can.do("purchasing", "create") ? (
             <Button variant="gold" onClick={() => setNewOpen(true)}>
               أمر توريد
@@ -197,10 +214,13 @@ function Orders() {
 }
 
 function SupplyCard({ v }: { v: SupplyView }) {
-  const { can } = useFactory();
+  const { db, can } = useFactory();
   const [receive, setReceive] = useState(false);
   const [close, setClose] = useState(false);
   const o = v.order;
+  const receipts = (db.supplyReceipts ?? [])
+    .filter((r) => r.supplyOrderId === o.id)
+    .sort((a, b) => b.date.localeCompare(a.date));
   const editable = o.status === "open" || o.status === "partial";
 
   return (
@@ -246,6 +266,21 @@ function SupplyCard({ v }: { v: SupplyView }) {
           <LineRow key={l.line.id} l={l} closed={v.order.status === "closed"} />
         ))}
       </ul>
+
+      {/* الاستلامات كل واحد بورقته: الإذن هو اللي بيتوقّع عليه وقت نزول الشحنة */}
+      {receipts.length ? (
+        <ul className="mt-3 space-y-1.5 border-t border-border pt-3">
+          {receipts.map((r) => (
+            <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span className="text-muted-foreground">
+                <span className="latin">{r.code}</span> · {formatDate(r.date)}
+                {r.supplierDocNo ? ` · إذن المورّد ${r.supplierDocNo}` : ""}
+              </span>
+              <DocumentButton type="grn" refId={r.id} label="إذن استلام" variant="ghost" />
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       {o.closeReason ? (
         <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">

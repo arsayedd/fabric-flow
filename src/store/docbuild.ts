@@ -5,6 +5,7 @@ import { partyById } from "./parties";
 import { LAY_STATUS_LABEL, layMath } from "./cutting";
 import { bundleState, bundleTrail } from "./floor";
 import { subView, workshopStatement } from "./outsourcing";
+import { supplyItemName, supplyItemUnit } from "./supply";
 import { DOC_DEFS } from "./documents";
 import {
   METHOD_LABEL,
@@ -13,6 +14,7 @@ import {
   STOCK_KIND_LABEL,
   type Db,
   type DocType,
+  type SupplyReceipt,
 } from "./types";
 
 /**
@@ -586,6 +588,9 @@ function purchaseDoc(db: Db, id: string, title: string): DocBody {
 }
 
 function grnDoc(db: Db, id: string, title: string): DocBody {
+  const receipt = (db.supplyReceipts ?? []).find((r) => r.id === id);
+  if (receipt) return supplyReceiptDoc(db, receipt, title);
+
   const m = db.stockMovements.find((x) => x.id === id);
   if (!m) return missing(title, "حركة المخزن مش موجودة.");
   if (m.kind !== "purchase" && m.kind !== "opening") {
@@ -610,6 +615,81 @@ function grnDoc(db: Db, id: string, title: string): DocBody {
     amount: m.qty * m.unitCost,
     receiptBlock: true,
     note: m.notes || undefined,
+    ok: true,
+  };
+}
+
+/**
+ * إذن الاستلام على استلام توريد.
+ *
+ * الورقة دي هي اللي بيتوقّع عليها وقت نزول الشحنة، فلازم تحمل التفصيل
+ * اللي الخلاف بيتحسم بيه: المقبول والمرفوض والتالف والناقص في ورقة
+ * المورّد، كل واحد في خانته. إذن بيقول «دخل ٩٧٠» وبس مابيحسمش خلاف.
+ */
+function supplyReceiptDoc(db: Db, receipt: SupplyReceipt, title: string): DocBody {
+  const order = (db.supplyOrders ?? []).find((o) => o.id === receipt.supplyOrderId);
+  if (!order) return missing(title, "أمر التوريد بتاع الاستلام ده مش موجود.");
+  const lines = (db.supplyReceiptLines ?? []).filter((l) => l.receiptId === receipt.id);
+  if (!lines.length) return missing(title, "الاستلام مالوش سطور، فمفيش حاجة تتطبع.");
+
+  const vendor = partyById(db, order.partyId);
+  let acceptedValue = 0;
+  const rows = lines.map((l) => {
+    const orderLine = (db.supplyOrderLines ?? []).find((o) => o.id === l.supplyOrderLineId);
+    const price = orderLine?.unitPrice ?? 0;
+    acceptedValue += l.qtyAccepted * price;
+    const batch = (db.batches ?? []).find((b) => b.id === l.batchId);
+    return [
+      orderLine ? supplyItemName(db, orderLine.itemType, orderLine.itemId) : "بند محذوف",
+      orderLine ? supplyItemUnit(db, orderLine.itemType, orderLine.itemId) : "—",
+      orderLine ? qty(orderLine.qtyOrdered, 2) : "—",
+      qty(l.qtyAccepted, 2),
+      qty(l.qtyRejected, 2),
+      qty(l.qtyDamaged, 2),
+      qty(l.qtyMissing, 2),
+      batch?.code ?? "—",
+    ];
+  });
+
+  const rejected = lines.reduce((s, l) => s + l.qtyRejected + l.qtyDamaged, 0);
+  const missingDoc = lines.reduce((s, l) => s + l.qtyMissing, 0);
+
+  return {
+    title,
+    party: {
+      label: "المورّد",
+      name: vendor?.name ?? "—",
+      rows: [
+        { label: "أمر التوريد", value: order.code },
+        { label: "الهاتف", value: vendor?.phone ?? "" },
+      ],
+    },
+    meta: [
+      { label: "تاريخ الاستلام", value: formatDate(receipt.date) },
+      { label: "إذن المورّد", value: receipt.supplierDocNo || "مافيش" },
+      { label: "المخزن", value: db.warehouses.find((w) => w.id === receipt.warehouseId)?.name ?? "—" },
+    ],
+    cols: [
+      { label: "الصنف" },
+      { label: "الوحدة", width: "16mm" },
+      { label: "المطلوب", align: "end", width: "20mm" },
+      { label: "مقبول", align: "end", width: "20mm" },
+      { label: "مرفوض", align: "end", width: "18mm" },
+      { label: "تالف", align: "end", width: "18mm" },
+      { label: "ناقص بالمستند", align: "end", width: "24mm" },
+      { label: "الدفعة", width: "30mm" },
+    ],
+    rows,
+    totals: [{ label: "قيمة المقبول", value: acceptedValue, strong: true }],
+    amount: acceptedValue,
+    receiptBlock: true,
+    note: [
+      rejected > 0 ? `مرفوض وتالف ${qty(rejected, 2)} — مادخلش المخزن` : null,
+      missingDoc > 0 ? `ناقص في إذن المورّد ${qty(missingDoc, 2)} — مطالبة على المورّد` : null,
+      receipt.notes || null,
+    ]
+      .filter(Boolean)
+      .join(" · ") || undefined,
     ok: true,
   };
 }

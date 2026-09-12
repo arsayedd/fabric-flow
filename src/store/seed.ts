@@ -585,7 +585,7 @@ export function demoDb(): Db {
   const supplyReceipts: Db["supplyReceipts"] = [
     { id: "sr-1", factoryId: FID, code: "GRN-2026-000001", supplyOrderId: "so-1", date: addDays(today, -20), warehouseId: whMat, supplierDocNo: "SLM-4471", costEntryId: "ce6", notes: "" },
     { id: "sr-2", factoryId: FID, code: "GRN-2026-000002", supplyOrderId: "so-2", date: addDays(today, -13), warehouseId: whMat, supplierDocNo: "DLT-1180", costEntryId: "ce5", notes: "٢٠ متر وصلوا مبلولين من النقل" },
-    { id: "sr-3", factoryId: FID, code: "GRN-2026-000003", supplyOrderId: "so-4", date: addDays(today, -25), warehouseId: whMat, supplierDocNo: "ACC-990", costEntryId: null, notes: "نص الكمية" },
+    { id: "sr-3", factoryId: FID, code: "GRN-2026-000003", supplyOrderId: "so-4", date: addDays(today, -25), warehouseId: whMat, supplierDocNo: "ACC-990", costEntryId: null, notes: "نص الكمية وصلت، والباقي المورّد قال هيجي على دفعتين" },
   ];
 
   const supplyReceiptLines: Db["supplyReceiptLines"] = [

@@ -45,6 +45,20 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       out.push({ key: `act-${a.key}`, label: `إضافة ${a.label}`, hint: "تنفيذ", to: a.to, icon: a.icon, group: "أفعال" });
     }
 
+    /**
+     * «آخر ما شُوهد» فوق الشاشات عن قصد.
+     *
+     * القايمة كلها مقصوصة على أربعين سطر تحت، والشاشات وحدها أكتر من
+     * كده. فلو جت الأخيرة كانت بتتقص وتختفي — وهي الحاجة الوحيدة هنا
+     * اللي **مافيش طريق تاني لها**: الشاشات في القائمة الجانبية،
+     * والسجل اللي كنت فيه دلوقتي مش في أي مكان تاني.
+     */
+    if (!q) {
+      for (const seen of loadSeen(factoryId).slice(0, 5)) {
+        out.push({ key: `seen-${seen.id}`, label: seen.label, hint: "آخر ما شُوهد", to: seen.to, icon: Clock, group: "رجوع لآخر شغل" });
+      }
+    }
+
     for (const section of NAV) {
       for (const it of section.items) {
         if (!it.ready || !can.do(it.perm, "view")) continue;
@@ -70,12 +84,6 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           icon: iconFor(hit),
           group: "السجلات",
         });
-      }
-    }
-
-    if (!q) {
-      for (const seen of loadSeen(factoryId).slice(0, 5)) {
-        out.push({ key: `seen-${seen.id}`, label: seen.label, hint: "آخر ما شُوهد", to: seen.to, icon: Clock, group: "رجوع لآخر شغل" });
       }
     }
 

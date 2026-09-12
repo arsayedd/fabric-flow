@@ -2,6 +2,7 @@ import { formatDate, qty } from "@/lib/utils";
 import { KIND_MODULE } from "./codes";
 import { layMath } from "./cutting";
 import { materialById, stockQty, unitName } from "./manufacturing";
+import { batchView } from "./supply";
 import type { PermModule } from "./permissions";
 import { isThermal, type Paper } from "@/lib/print";
 import type { CodeKind, Db } from "./types";
@@ -57,6 +58,33 @@ export const LABEL_TYPES: LabelType[] = [
         title: m.name,
         sub: `${qty(stockQty(db, "material", m.id))} ${unitName(db, m.unitId)}`,
       })),
+  },
+  {
+    key: "batch",
+    /**
+     * ليبل الدفعة هو اللي بيخلّي الاستدعاء ممكن: من غيره، الطاقة اللي
+     * في المخزن بتبقى «قماش قطني» وبس، ومحدش يعرف جات من أنهي توريد.
+     */
+    label: "ليبل دفعة",
+    about: "بيتلزق على الطاقة أو الشوال وقت الاستلام — الكود بيفتح الدفعة ورصيدها ومصدرها.",
+    kind: "batch",
+    module: "inventory",
+    rows: (db) =>
+      (db.batches ?? []).map((b) => {
+        const v = batchView(db, b);
+        return {
+          id: b.id,
+          code: b.code,
+          title: v.name,
+          sub: [
+            b.supplierLot ? `لوط ${b.supplierLot}` : null,
+            v.partyName,
+            `باقي ${qty(v.remaining)} ${v.unit}`,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        };
+      }),
   },
   {
     key: "bundle",
