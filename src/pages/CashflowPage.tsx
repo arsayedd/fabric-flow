@@ -114,6 +114,7 @@ function ForecastTab() {
   const [horizon, setHorizon] = useState<number>(30);
   const f = useMemo(() => cashForecast(db, horizon), [db, horizon]);
   const moves = f.days.filter((d) => d.items.length);
+  const daysTo = f.shortfall ? Math.max(0, f.days.findIndex((d) => d.date === f.shortfall?.date)) : 0;
 
   return (
     <div className="space-y-4">
@@ -140,14 +141,9 @@ function ForecastTab() {
                 يوم {formatDate(f.shortfall.date)} الرصيد هيبقى <Money value={f.shortfall.balance} />
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                يعني عندك {countLabel(
-                  Math.max(0, f.days.findIndex((d) => d.date === f.shortfall?.date)),
-                  "يوم واحد",
-                  "يومين",
-                  "أيام",
-                  "يوم",
-                )}{" "}
-                قبل ما المطلوب يتعدّى اللي في الخزنة.
+                {daysTo === 0
+                  ? "المطلوب دلوقتي أكبر من اللي في الخزنة — مش بكرة، النهارده."
+                  : `يعني عندك ${qty(daysTo, 0)} ${countLabel(daysTo, "يوم", "يومين", "أيام", "يوم")} قبل ما المطلوب يتعدّى اللي في الخزنة.`}
               </p>
             </div>
           </div>
