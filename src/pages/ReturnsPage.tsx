@@ -102,7 +102,7 @@ export function ReturnsPage() {
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>(() =>
     params.get("tab") === "complaints" ? "complaints" : params.get("product") ? "models" : "list",
   );
-  const [newOpen, setNewOpen] = useState(false);
+  const [newOpen, setNewOpen] = useState(() => params.get("new") === "1");
   const [source, setSource] = useState<ReturnSource | "all">("all");
 
   /*

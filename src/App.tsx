@@ -29,6 +29,8 @@ import { LabelsPage } from "@/pages/LabelsPage";
 import { TracePage } from "@/pages/TracePage";
 import { OutsourcingPage } from "@/pages/OutsourcingPage";
 import { ReturnsPage } from "@/pages/ReturnsPage";
+import { QualityPage } from "@/pages/QualityPage";
+import { RepairsPage } from "@/pages/RepairsPage";
 import { InsightsPage } from "@/pages/InsightsPage";
 import { CostingPage } from "@/pages/CostingPage";
 import { CommandPage } from "@/pages/CommandPage";
@@ -112,6 +114,8 @@ function appRoutes() {
         */}
         <Route path="/returns" element={<ReturnsPage />} />
         <Route path="/insights" element={<InsightsPage />} />
+        {guarded("/quality", "quality", <QualityPage />)}
+        {guarded("/repairs", "quality", <RepairsPage />)}
         {guarded("/planning", "planning", <PlanningPage />)}
         {guarded("/products", "sales", <ProductsPage />)}
         {guarded("/products/:id", "sales", <ProductDetailPage />)}

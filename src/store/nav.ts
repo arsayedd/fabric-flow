@@ -31,6 +31,7 @@ import {
   ShieldCheck,
   ShoppingCart,
   Truck,
+  Undo2,
   UserRound,
   Users,
   UsersRound,
@@ -163,8 +164,6 @@ export const NAV: NavSection[] = [
     icon: ShoppingCart,
     items: [
       item("/deliveries", "التوريدات", "sales", "sales", false),
-      // مفتوح: كل مصدر مرتجع بياخد صلاحيته لوحده جوه الشاشة
-      item("/returns", "المرتجعات والشكاوى", "sales", null),
       item("/invoices", "الفواتير", "sales", "sales", false),
     ],
   },
@@ -180,9 +179,14 @@ export const NAV: NavSection[] = [
   },
   {
     key: "quality",
-    label: "الجودة",
+    label: "الجودة والمرتجعات",
     icon: ShieldCheck,
-    items: [item("/quality", "الفحص والعيوب", "quality", "quality", false)],
+    items: [
+      item("/quality", "مركز الجودة", "quality", "quality"),
+      // مفتوح: كل مصدر مرتجع بياخد صلاحيته لوحده جوه الشاشة
+      item("/returns", "المرتجعات والشكاوى", "sales", null),
+      item("/repairs", "أوامر الإصلاح", "quality", "quality"),
+    ],
   },
   {
     key: "machines",
@@ -246,6 +250,8 @@ export const ROUTE_LABEL: Record<string, string> = {
   "/intelligence": "ذكاء العملاء",
   "/insights": "استنتاجات صنعة",
   "/returns": "المرتجعات والشكاوى",
+  "/quality": "مركز الجودة",
+  "/repairs": "أوامر الإصلاح",
   "/orders": "أوامر الإنتاج",
   "/cutting": "القص والفرشات",
   "/production": "متابعة العمليات",
@@ -328,6 +334,8 @@ export const QUICK_ACTIONS: QuickAction[] = [
   { key: "product", label: "موديل", to: "/products?new=1", icon: Package, perm: "sales", action: "create" },
   { key: "cost", label: "فاتورة مشتريات", to: "/costs", icon: Coins, perm: "purchasing", action: "create" },
   { key: "tx", label: "حركة خزينة", to: "/treasury?new=1", icon: Wallet, perm: "finance", action: "create" },
+  // المرتجع بياخد صلاحية الطرف، وأقربها للمرتجع الغالب: مرتجع العميل
+  { key: "return", label: "مرتجع", to: "/returns?new=1", icon: Undo2, perm: "sales", action: "create" },
 ];
 
 /** أيقونات الكيانات في البحث الشامل — نفس الأيقونة في كل مكان */
