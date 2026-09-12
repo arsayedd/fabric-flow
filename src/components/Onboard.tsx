@@ -4,7 +4,7 @@ import { ArrowLeft, Check, MailCheck, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn, qty } from "@/lib/utils";
+import { cn, countLabel, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
 import { setupGaps, setupProgress } from "@/store/setup";
 
@@ -32,11 +32,13 @@ export function SetupGapsCard({ compact = false }: { compact?: boolean }) {
       <div className="flex items-start gap-2">
         <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
         <div className="min-w-0">
-          <h2 className="text-base">{qty(gaps.length, 0)} حاجة محتاجة اهتمامك في التجهيز</h2>
+          <h2 className="text-base">{countLabel(gaps.length, "حاجة واحدة", "حاجتين", "حاجات")} محتاجة اهتمامك في التجهيز</h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            {warn > 0
-              ? `منهم ${qty(warn, 0)} بيوقّفوا حساب أو ورقة فعلًا — الباقي بيحسّن الدقة.`
-              : "مفيش حاجة فيهم بتوقّف حساب — كلهم بيحسّنوا الدقة."}
+            {warn === 0
+              ? "مفيش حاجة فيهم بتوقّف حساب — كلهم بيحسّنوا الدقة."
+              : warn === 1
+                ? "منهم واحدة بتوقّف حساب أو ورقة فعلًا — الباقي بيحسّن الدقة."
+                : `منهم ${qty(warn, 0)} بيوقّفوا حساب أو ورقة فعلًا — الباقي بيحسّن الدقة.`}
           </p>
         </div>
       </div>

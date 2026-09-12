@@ -55,6 +55,22 @@ export function qty(value: number, maximumFractionDigits = 2): string {
   return new Intl.NumberFormat("ar-EG", { maximumFractionDigits }).format(value);
 }
 
+/**
+ * عدد + معدود بصيغته الصح.
+ *
+ * العربي مالوهش صيغتين زي الإنجليزي — عنده تلاتة: الواحد، والاتنين،
+ * والجمع من تلاتة لعشرة. فـ«٣ حاجة» غلط، و«١ دعوة» غلط، والاتنين
+ * بيخلّوا الجملة تقرا كترجمة آلية.
+ *
+ * والواحد والاتنين بيتكتبوا بالكلمة مش بالرقم: «دعوة واحدة» أنضف من
+ * «١ دعوة» وهي نفس المعلومة.
+ */
+export function countLabel(n: number, one: string, two: string, many: string): string {
+  if (n === 1) return one;
+  if (n === 2) return two;
+  return `${qty(n, 0)} ${many}`;
+}
+
 export function moneyPlain(amount: number): string {
   return new Intl.NumberFormat("ar-EG", {
     maximumFractionDigits: 0,
