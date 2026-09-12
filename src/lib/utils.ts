@@ -98,3 +98,30 @@ export async function fileToDataUrl(file: File, maxBytes = 5 * 1024 * 1024): Pro
     reader.readAsDataURL(file);
   });
 }
+
+/**
+ * صورة مصغّرة للتخزين مع السجل.
+ *
+ * صور المرتجعات بتتصوّر بموبايل، والصورة الواحدة ٤ ميجا. الدفتر المحلي
+ * مساحته محدودة، والصورة المطلوبة هنا غرضها **الإثبات** مش التفاصيل —
+ * فبنصغّرها لعرض ثابت وبنحوّلها JPEG. دي حد النسخة المحلية، ولما التخزين
+ * يبقى على السيرفر الأصل بيتحفظ كامل والمصغّرة تفضل للعرض.
+ */
+export async function imageToThumb(file: File, maxSide = 1000, quality = 0.72): Promise<string> {
+  const raw = await fileToDataUrl(file, 12 * 1024 * 1024);
+  if (!raw.startsWith("data:image/")) throw new Error("الملف مش صورة.");
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error("مش قادر أفتح الصورة."));
+    el.src = raw;
+  });
+  const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(img.width * scale));
+  canvas.height = Math.max(1, Math.round(img.height * scale));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return raw;
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", quality);
+}

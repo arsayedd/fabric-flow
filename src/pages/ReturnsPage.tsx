@@ -11,16 +11,19 @@ import { Card } from "@/components/ui/card";
 import { Input, selectClass } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ExportMenu } from "@/components/export/ExportMenu";
-import { cairoToday, formatDate, money, qty } from "@/lib/utils";
-import { useFactory } from "@/store/context";
+import { cairoToday, formatDate, imageToThumb, money, qty } from "@/lib/utils";
+import { useFactory, type RepairInput } from "@/store/context";
 import { datasetOf } from "@/store/datasets";
 import {
   RETURN_MODULE,
   complaintSummary,
+  costBreakdown,
   itemName,
   partyName,
   reasonPareto,
   reasonsFor,
+  repairCost,
+  repairsOf,
   returnImpact,
   returnsSummary,
   topReturnedModels,
@@ -38,18 +41,24 @@ import {
   PROBLEM_ORIGINS,
   PROBLEM_ORIGIN_LABEL,
   PRODUCTION_LINES,
+  REPAIR_DERIVED_COSTS,
+  REPAIR_STATUS_LABEL,
   ROOT_CAUSES,
   ROOT_CAUSE_LABEL,
   RETURN_CONDITION_LABEL,
+  RETURN_COST_KINDS,
+  RETURN_COST_LABEL,
   RETURN_REASON_DEFS,
   RETURN_RESOLUTIONS,
   RETURN_RESOLUTION_LABEL,
   RETURN_SOURCES,
   RETURN_SOURCE_LABEL,
   RETURN_STATUS_LABEL,
+  type AttachmentPhase,
   type Complaint,
   type ComplaintKind,
   type PayMethod,
+  type ReturnCostKind,
   type ProblemKind,
   type ProblemOrigin,
   type RootCause,
@@ -245,7 +254,9 @@ function ReturnCard({ r }: { r: ReturnEntry }) {
   const { db, can, cancelReturn } = useFactory();
   const [inspectOpen, setInspectOpen] = useState(false);
   const [settleOpen, setSettleOpen] = useState(false);
+  const [caseOpen, setCaseOpen] = useState(false);
   const impact = useMemo(() => returnImpact(db, r), [db, r]);
+  const reps = useMemo(() => repairsOf(db, r.id), [db, r.id]);
   const mod = RETURN_MODULE[r.source];
   const editable = can.do(mod, "edit");
 
@@ -274,11 +285,25 @@ function ReturnCard({ r }: { r: ReturnEntry }) {
           </div>
           <p className="mt-1 truncate">
             {qty(r.qty, 0)} × {itemName(db, r)}
+            {r.color || r.size ? (
+              <span className="text-muted-foreground"> · {[r.color, r.size].filter(Boolean).join(" / ")}</span>
+            ) : null}
           </p>
           <p className="text-sm text-muted-foreground">
             {partyName(db, r)} · {formatDate(r.date)} · {RETURN_REASON_DEFS[r.reason].label}
             {r.reasonNote ? ` — ${r.reasonNote}` : ""}
           </p>
+          {r.problem ? (
+            <p className="mt-1 text-sm">
+              {PROBLEM_DEFS[r.problem].label}
+              <span className="text-muted-foreground">
+                {" · "}
+                {r.origin ? `من ${PROBLEM_ORIGIN_LABEL[r.origin]}` : "المصدر مش مكتوب"}
+                {" · "}
+                {r.rootCause ? ROOT_CAUSE_LABEL[r.rootCause] : "الجذر لسه مش محدَّد"}
+              </span>
+            </p>
+          ) : null}
         </div>
         <div className="shrink-0 text-left">
           {r.resolution ? <Badge tone="gold">{RETURN_RESOLUTION_LABEL[r.resolution]}</Badge> : null}
@@ -310,6 +335,22 @@ function ReturnCard({ r }: { r: ReturnEntry }) {
       <div className="mt-3 flex flex-wrap gap-2">
         {r.status === "open" && editable ? <Button onClick={() => setInspectOpen(true)}>افحص</Button> : null}
         {r.status === "inspected" && editable ? <Button onClick={() => setSettleOpen(true)}>خُد قرار</Button> : null}
+        <Button variant="outline" onClick={() => setCaseOpen(true)}>
+          التكلفة والإثبات
+          {r.costs.length || r.attachments.length ? (
+            <span className="tabular">
+              {" "}
+              ({qty(r.costs.length + r.attachments.length, 0)})
+            </span>
+          ) : null}
+        </Button>
+        {reps.length ? (
+          <Button variant="ghost" asChild>
+            <Link to="/repairs">
+              {qty(reps.length, 0)} أمر إصلاح
+            </Link>
+          </Button>
+        ) : null}
         {r.deliveryId ? (
           <Button variant="outline" asChild>
             <Link to="/collections">التوريد المربوط</Link>
@@ -337,6 +378,7 @@ function ReturnCard({ r }: { r: ReturnEntry }) {
 
       <InspectPanel r={r} open={inspectOpen} onClose={() => setInspectOpen(false)} />
       <SettlePanel r={r} open={settleOpen} onClose={() => setSettleOpen(false)} />
+      <CasePanel r={r} open={caseOpen} onClose={() => setCaseOpen(false)} />
     </Card>
   );
 }
@@ -867,6 +909,325 @@ function SettlePanel({ r, open, onClose }: { r: ReturnEntry; open: boolean; onCl
         وفين بالظبط، مش رقم واحد مجمّع.
       </p>
       <Field label="ملاحظات القرار">
+        <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+      </Field>
+    </Panel>
+  );
+}
+
+/* ── تكلفة الحالة وإثباتها ────────────────────────────────────── */
+
+/**
+ * الشاشة اللي بتحوّل «رجع ١٠٠ قطعة» لـ«المشكلة دي كلّفت المصنع كام».
+ *
+ * والتكلفة هنا **سطور**: شحن رجوع، فحص، هالك، مصاريف إدارية. وسطرين
+ * منهم — أجر الإصلاح وخاماته — مقفولين للكتابة لما يبقى فيه أمر إصلاح،
+ * لأنهم بيتحسبوا منه؛ والرقم اللي بيتعدّ مرتين أخطر من الرقم الناقص.
+ */
+function CasePanel({ r, open, onClose }: { r: ReturnEntry; open: boolean; onClose: () => void }) {
+  const { db, can, addReturnCost, removeReturnCost, addAttachment, removeAttachment, openRepair } = useFactory();
+  const [kind, setKind] = useState<ReturnCostKind>("shipping_in");
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [phase, setPhase] = useState<AttachmentPhase>("before");
+  const [busy, setBusy] = useState(false);
+  const [repairOpen, setRepairOpen] = useState(false);
+
+  const editable = can.do(RETURN_MODULE[r.source], "edit");
+  const breakdown = useMemo(() => costBreakdown(db, r), [db, r]);
+  const reps = useMemo(() => repairsOf(db, r.id), [db, r.id]);
+  const repairedQty = reps.filter((x) => x.status !== "cancelled").reduce((s, x) => s + x.qty, 0);
+
+  const addCost = () => {
+    try {
+      addReturnCost(r.id, { kind, amount: Number(amount) || 0, note });
+      setAmount("");
+      setNote("");
+      toast.success("البند اتسجّل.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "مش قادر أسجّل البند.");
+    }
+  };
+
+  const pickImage = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const dataUrl = await imageToThumb(file);
+      addAttachment(r.id, { name: file.name, phase, dataUrl, note: "" });
+      toast.success(phase === "before" ? "صورة قبل الإصلاح اتسجّلت." : "صورة بعد الإصلاح اتسجّلت.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "مش قادر أضيف الصورة.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Panel open={open} title={`تكلفة الحالة وإثباتها — ${r.code}`} onClose={onClose}>
+      <div className="mb-4 rounded-md border border-border bg-muted/40 p-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="text-sm text-muted-foreground">إجمالي تكلفة الحالة</span>
+          <span className="text-lg">
+            <Money value={breakdown.total} />
+          </span>
+        </div>
+        {breakdown.lines.length ? (
+          <ul className="mt-2 space-y-1.5 border-t border-border pt-2 text-sm">
+            {breakdown.lines.map((l, i) => (
+              <li key={`${l.kind}-${i}`} className="flex items-baseline justify-between gap-3">
+                <span className="min-w-0">
+                  {l.label}
+                  {l.note ? <span className="text-muted-foreground"> — {l.note}</span> : null}
+                  {l.fromRepair ? <span className="text-xs text-muted-foreground"> (من أمر الإصلاح)</span> : null}
+                </span>
+                <span className="shrink-0 tabular">{money(l.amount)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-xs text-muted-foreground">
+            مافيش بنود لسه. التكلفة الحقيقية للمرتجع مش قيمة البضاعة بس — الشحن والفحص والإصلاح والهالك كلهم فلوس خرجت.
+          </p>
+        )}
+      </div>
+
+      {editable ? (
+        <div className="mb-5 space-y-3 border-b border-border pb-5">
+          <Field label="بند تكلفة جديد">
+            <select className={selectClass} value={kind} onChange={(e) => setKind(e.target.value as ReturnCostKind)}>
+              {RETURN_COST_KINDS.map((k) => (
+                <option key={k} value={k} disabled={REPAIR_DERIVED_COSTS.includes(k) && reps.length > 0}>
+                  {RETURN_COST_LABEL[k]}
+                  {REPAIR_DERIVED_COSTS.includes(k) && reps.length > 0 ? " — من أمر الإصلاح" : ""}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="المبلغ">
+              <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" />
+            </Field>
+            <Field label="البيان">
+              <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="شحن من المنصورة" />
+            </Field>
+          </div>
+          <Button variant="outline" className="w-full" onClick={addCost}>
+            ضيف البند
+          </Button>
+          {r.costs.length ? (
+            <ul className="space-y-1 text-sm">
+              {r.costs.map((c) => (
+                <li key={c.id} className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate">
+                    {RETURN_COST_LABEL[c.kind]} · {money(c.amount)}
+                    {c.note ? ` — ${c.note}` : ""}
+                  </span>
+                  <Button variant="dangerGhost" onClick={() => removeReturnCost(r.id, c.id)}>
+                    شيل
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+
+      <p className="mb-2 text-sm">إثبات المشكلة</p>
+      <p className="mb-3 text-xs text-muted-foreground">
+        الصورة هي اللي بتخلّي المطالبة على المورّد أو الرد على العميل قابل للإثبات بعد شهرين. وصورة «بعد» هي اللي بتخلّي
+        «اتصلحت» جملة عليها دليل.
+      </p>
+      {r.attachments.length ? (
+        <div className="mb-3 grid grid-cols-3 gap-2">
+          {r.attachments.map((a) => (
+            <div key={a.id} className="min-w-0">
+              <img src={a.dataUrl} alt={a.name} className="h-24 w-full rounded-md border border-border object-cover" />
+              <p className="mt-1 truncate text-xs text-muted-foreground">
+                {a.phase === "before" ? "قبل" : "بعد"} · {formatDate(a.at.slice(0, 10))}
+              </p>
+              {editable ? (
+                <Button variant="dangerGhost" onClick={() => removeAttachment(r.id, a.id)}>
+                  شيل
+                </Button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {editable ? (
+        <>
+          <Field label="الصورة دي قبل الإصلاح ولا بعده">
+            <select className={selectClass} value={phase} onChange={(e) => setPhase(e.target.value as AttachmentPhase)}>
+              <option value="before">قبل الإصلاح</option>
+              <option value="after">بعد الإصلاح</option>
+            </select>
+          </Field>
+          <Field label="ضيف صورة">
+            <Input
+              type="file"
+              accept="image/*"
+              disabled={busy || r.attachments.length >= 6}
+              onChange={(e) => void pickImage(e.target.files?.[0])}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              {r.attachments.length >= 6
+                ? "وصلت لأقصى ست صور للحالة في النسخة المحلية."
+                : "الصورة بتتصغّر قبل ما تتخزّن. الفيديو والملفات الكبيرة محتاجة تخزين على السيرفر — لسه مش متاح."}
+            </p>
+          </Field>
+        </>
+      ) : null}
+
+      <div className="mt-5 border-t border-border pt-5">
+        <p className="mb-2 text-sm">أوامر الإصلاح</p>
+        {reps.length ? (
+          <ul className="mb-3 space-y-1.5 text-sm">
+            {reps.map((x) => (
+              <li key={x.id} className="flex flex-wrap items-baseline justify-between gap-2">
+                <span>
+                  <span className="latin text-muted-foreground">{x.code}</span> · {qty(x.qty, 0)} قطعة
+                </span>
+                <span className="flex items-center gap-2">
+                  <Badge tone={x.status === "shipped" ? "ok" : x.status === "scrapped" ? "danger" : "gold"}>
+                    {REPAIR_STATUS_LABEL[x.status]}
+                  </Badge>
+                  <span className="tabular">{money(repairCost(x).total)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mb-3 text-xs text-muted-foreground">
+            الإصلاح شغل حقيقي: عامل بيقعد عليه وقت وخامات بتتصرف من المخزن. عشان كده بيتفتح له أمر بدل ما تتكتب تكلفة
+            تقديرية في خانة.
+          </p>
+        )}
+        {can.do("quality", "create") && r.status !== "open" && r.status !== "cancelled" && repairedQty < r.qty ? (
+          <Button variant="outline" className="w-full" onClick={() => setRepairOpen(true)}>
+            افتح أمر إصلاح — الباقي {qty(r.qty - repairedQty, 0)} قطعة
+          </Button>
+        ) : null}
+        {r.status === "open" ? (
+          <p className="text-xs text-muted-foreground">افحص الحالة الأول — الإصلاح بيتقرر بعد ما نعرف العيب إيه.</p>
+        ) : null}
+      </div>
+
+      <OpenRepairPanel
+        r={r}
+        remaining={r.qty - repairedQty}
+        open={repairOpen}
+        onClose={() => setRepairOpen(false)}
+        onDone={openRepair}
+      />
+    </Panel>
+  );
+}
+
+function OpenRepairPanel({
+  r,
+  remaining,
+  open,
+  onClose,
+  onDone,
+}: {
+  r: ReturnEntry;
+  remaining: number;
+  open: boolean;
+  onClose: () => void;
+  onDone: (input: RepairInput) => string;
+}) {
+  const { db } = useFactory();
+  const [amount, setAmount] = useState(String(remaining));
+  const [workerId, setWorkerId] = useState(r.workerId ?? "");
+  const [operationId, setOperationId] = useState(r.operationId ?? "");
+  const [rate, setRate] = useState("");
+  const [materialId, setMaterialId] = useState("");
+  const [matQty, setMatQty] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const save = () => {
+    try {
+      onDone({
+        returnId: r.id,
+        qty: Number(amount) || 0,
+        problem: r.problem,
+        workerId: workerId || null,
+        operationId: operationId || null,
+        rate: Number(rate) || 0,
+        materials: materialId && Number(matQty) > 0 ? [{ materialId, qty: Number(matQty) }] : [],
+        notes,
+      });
+      toast.success("أمر الإصلاح اتفتح، وخاماته خرجت من المخزن.");
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "مش قادر أفتح أمر الإصلاح.");
+    }
+  };
+
+  return (
+    <Panel
+      open={open}
+      title="أمر إصلاح جديد"
+      onClose={onClose}
+      footer={
+        <Button className="w-full" onClick={save}>
+          افتح الأمر
+        </Button>
+      }
+    >
+      <p className="mb-3 text-sm text-muted-foreground">
+        {r.problem ? `المشكلة: ${PROBLEM_DEFS[r.problem].label}. ` : ""}
+        خامات الإصلاح بتخرج من المخزن بحركة صرف حقيقية وقت فتح الأمر، والقطعة اللي بتعدّي الفحص بتدخل المخزون بتكلفتها
+        زائد تكلفة إصلاحها.
+      </p>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="عدد القطع">
+          <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" />
+        </Field>
+        <Field label="أجر إصلاح القطعة">
+          <Input value={rate} onChange={(e) => setRate(e.target.value)} inputMode="decimal" />
+        </Field>
+      </div>
+      <p className="mb-3 text-xs text-muted-foreground">الباقي من الحالة {qty(remaining, 0)} قطعة.</p>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="العامل">
+          <select className={selectClass} value={workerId} onChange={(e) => setWorkerId(e.target.value)}>
+            <option value="">مش محدد</option>
+            {db.workers.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="العملية">
+          <select className={selectClass} value={operationId} onChange={(e) => setOperationId(e.target.value)}>
+            <option value="">مش محددة</option>
+            {db.operations.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="خامة الإصلاح">
+          <select className={selectClass} value={materialId} onChange={(e) => setMaterialId(e.target.value)}>
+            <option value="">مافيش</option>
+            {db.materials.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="الكمية">
+          <Input value={matQty} onChange={(e) => setMatQty(e.target.value)} inputMode="decimal" />
+        </Field>
+      </div>
+      <Field label="ملاحظات">
         <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
       </Field>
     </Panel>
