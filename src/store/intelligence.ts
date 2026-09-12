@@ -6,12 +6,13 @@
  * 1. كل رقم هنا **محسوب** من حركات حقيقية — مفيش تقدير ولا رقم بيتخزَّن.
  * 2. كل سكور **Explainable**: بيرجّع المكوّنات والأرقام اللي بنى عليها وليه طلع كده.
  * 3. لو البيانات مش كفاية، بيقول كده صريح بدل ما يطلّع رقم يضلّل صاحب المصنع.
- * 4. المؤشر اللي بياناته لسه مش موجودة في النظام (مرتجعات، خصومات، تكلفة تسليم)
+ * 4. المؤشر اللي بياناته لسه مش موجودة في النظام (خصومات، تكلفة تسليم)
  *    بيتشال من الحساب وبيتكتب في `missing` — الأوزان تتوزّع على المؤشرات المتاحة بس.
  */
 
 import { addDays, cairoToday, daysBetween, qty } from "@/lib/utils";
 import { confirmedCollections } from "./compute";
+import { partyReturns } from "./returns";
 import type { Db, Delivery, Party } from "./types";
 
 /* ── الأوزان (قابلة للتعديل من صاحب المصنع) ──────────────────── */
@@ -203,6 +204,19 @@ export type CustomerMetrics = {
   marginPct: number | null;
   scrapRate: number | null;
   distinctProducts: number;
+  /* المرتجعات والشكاوى */
+  returnCount: number;
+  returnRatePct: number | null;
+  /** أثر مرتجعاته بالجنيه: إشعارات الخصم واللي رجع تالف ومصاريف الاسترجاع */
+  returnCost: number;
+  complaintCount: number;
+  openComplaints: number;
+  /**
+   * هل المصنع بيسجّل شكاوى أصلًا. لازم نفرّق بين «عميل مفيش عليه شكاوى» و«مصنع
+   * مابيسجّلش شكاوى» — التانية مش دليل رضا، ولو حسبناها كده كل العملاء هيطلعوا
+   * كاملين في مصنع لسه مافتحش الموديول.
+   */
+  factoryLogsComplaints: boolean;
 };
 
 export function customerMetrics(db: Db, partyId: string): CustomerMetrics {
@@ -211,6 +225,7 @@ export function customerMetrics(db: Db, partyId: string): CustomerMetrics {
     .filter((d) => d.clientId === partyId)
     .sort((a, b) => a.date.localeCompare(b.date));
   const sales = sum(dels.map((d) => d.amount));
+  const ret = partyReturns(db, partyId);
   const st = settlements(db, partyId);
   const collected = sum(
     confirmedCollections(db)
@@ -314,6 +329,13 @@ export function customerMetrics(db: Db, partyId: string): CustomerMetrics {
     marginPct: revenue > 0 ? ((revenue - cost) / revenue) * 100 : null,
     scrapRate: good + scrap > 0 ? pct(scrap, good + scrap) : null,
     distinctProducts: seen.size,
+
+    returnCount: ret.count,
+    returnRatePct: ret.ratePct,
+    returnCost: ret.impact,
+    complaintCount: ret.complaints,
+    openComplaints: ret.openComplaints,
+    factoryLogsComplaints: db.complaints.length > 0,
   };
 }
 
@@ -490,7 +512,7 @@ function frequencyBlock(m: CustomerMetrics, w: number): ScoreBlock {
 }
 
 function profitBlock(m: CustomerMetrics, w: number): ScoreBlock {
-  const missing = ["الخصومات", "المرتجعات", "تكلفة التسليم", "تكلفة التحصيل"];
+  const missing = ["الخصومات", "تكلفة التسليم", "تكلفة التحصيل"];
   if (m.marginPct === null) {
     return {
       key: "profit",
@@ -503,16 +525,33 @@ function profitBlock(m: CustomerMetrics, w: number): ScoreBlock {
       note: "الربحية بتتحسب من أوامر الإنتاج المسجّل لها سعر بيع وتكلفة قطعة.",
     };
   }
-  const score = clamp(scale(m.marginPct, 0, 40));
+  /*
+   * الهامش المسجّل على الأوامر مش هو الهامش اللي دخل الخزنة. المرتجع بياكل منه
+   * إشعار خصم وقطعة تالفة ومصاريف رجوع، فالهامش الصافي هو اللي بيتقاس عليه.
+   * والمساهمة بتتقسم على نسبة الهامش عشان نرجّع الإيراد اللي اتحسبت منه.
+   */
+  const revenue = m.contribution !== null && m.marginPct !== 0 ? (m.contribution / m.marginPct) * 100 : 0;
+  const net = m.contribution === null ? null : m.contribution - m.returnCost;
+  const netPct = revenue > 0 && net !== null ? (net / revenue) * 100 : m.marginPct;
+  const score = clamp(scale(netPct, 0, 40));
   return {
     key: "profit",
     label: SCORE_LABEL.profit,
     score,
     weight: w,
-    parts: [{ label: "هامش المساهمة", value: score, why: `متوسط هامش ${r0(m.marginPct)}٪ على أوامره` }],
+    parts: [
+      {
+        label: "هامش المساهمة بعد المرتجعات",
+        value: score,
+        why: m.returnCost
+          ? `هامش ${r0(m.marginPct)}٪ على أوامره، وبعد مرتجعات بـ${r0(m.returnCost)} ج بقى ${r0(netPct)}٪`
+          : `متوسط هامش ${r0(m.marginPct)}٪ على أوامره`,
+      },
+    ],
     metrics: [
       { label: "مساهمة العميل", value: m.contribution === null ? "—" : `${r0(m.contribution)} ج` },
-      { label: "نسبة الهامش", value: `${r0(m.marginPct)}٪` },
+      { label: "أثر المرتجعات", value: m.returnCost ? `${r0(m.returnCost)} ج` : "مفيش" },
+      { label: "نسبة الهامش بعد المرتجعات", value: `${r0(netPct)}٪` },
       { label: "أوامر الإنتاج", value: r0(m.productionOrders) },
     ],
     missing,
@@ -521,7 +560,7 @@ function profitBlock(m: CustomerMetrics, w: number): ScoreBlock {
 }
 
 function qualityBlock(m: CustomerMetrics, w: number): ScoreBlock {
-  const missing = ["المرتجعات", "تعديلات الطلب", "الرفض عند التسليم", "الطلبات المستعجلة"];
+  const missing = ["تعديلات الطلب", "الرفض عند التسليم", "الطلبات المستعجلة"];
   if (!m.productionOrders) {
     return {
       key: "quality",
@@ -537,7 +576,13 @@ function qualityBlock(m: CustomerMetrics, w: number): ScoreBlock {
   const cancelRate = pct(m.cancelledOrders, m.productionOrders);
   const noCancel = scale(cancelRate, 25, 0);
   const scrapPart = m.scrapRate === null ? null : scale(m.scrapRate, 10, 0);
-  const available = [noCancel, scrapPart].filter((v): v is number => v !== null);
+  /*
+   * نسبة الإرجاع بتتقاس على الكمية الموردة له، مش على عدد المرتجعات. عميل
+   * بياخد ٢٠ ألف قطعة ورجّع ٣ مرتجعات أحسن من عميل خد ٥٠٠ ورجّع مرتجع واحد،
+   * وعدد المرتجعات لوحده بيقول العكس.
+   */
+  const returnPart = m.returnRatePct === null ? null : scale(m.returnRatePct, 5, 0);
+  const available = [noCancel, scrapPart, returnPart].filter((v): v is number => v !== null);
   return {
     key: "quality",
     label: SCORE_LABEL.quality,
@@ -548,11 +593,24 @@ function qualityBlock(m: CustomerMetrics, w: number): ScoreBlock {
       ...(scrapPart === null
         ? []
         : [{ label: "قلة الهالك", value: scrapPart, why: `نسبة الهالك في أوامره ${qty(m.scrapRate ?? 0, 1)}٪` }]),
+      ...(returnPart === null
+        ? []
+        : [
+            {
+              label: "قلة الإرجاع",
+              value: returnPart,
+              why: `رجّع ${qty(m.returnRatePct ?? 0, 1)}٪ من كمية توريداته في ${r0(m.returnCount)} مرتجع`,
+            },
+          ]),
     ],
     metrics: [
       { label: "أوامر الإنتاج", value: r0(m.productionOrders) },
       { label: "أوامر متوقفة", value: r0(m.cancelledOrders) },
       { label: "نسبة الهالك", value: m.scrapRate === null ? "—" : `${qty(m.scrapRate, 1)}٪` },
+      {
+        label: "نسبة الإرجاع",
+        value: m.returnRatePct === null ? "مفيش توريدات يتقاس عليها" : `${qty(m.returnRatePct, 1)}٪`,
+      },
     ],
     missing,
     note: "",
@@ -576,23 +634,49 @@ function relationshipBlock(m: CustomerMetrics, w: number): ScoreBlock {
   const depth = scale(m.ordersCount, 1, 30);
   const stability = m.cycleStability ?? 50;
   const variety = scale(m.distinctProducts, 1, 5);
+  const calm = m.factoryLogsComplaints ? scale(m.complaintCount, 3, 0) : null;
+  const weights =
+    calm === null
+      ? { tenure: 0.35, depth: 0.3, stability: 0.2, variety: 0.15, calm: 0 }
+      : { tenure: 0.3, depth: 0.25, stability: 0.17, variety: 0.13, calm: 0.15 };
   return {
     key: "relationship",
     label: SCORE_LABEL.relationship,
-    score: clamp(tenure * 0.35 + depth * 0.3 + stability * 0.2 + variety * 0.15),
+    score: clamp(
+      tenure * weights.tenure +
+        depth * weights.depth +
+        stability * weights.stability +
+        variety * weights.variety +
+        (calm ?? 0) * weights.calm,
+    ),
     weight: w,
     parts: [
       { label: "مدة التعامل", value: tenure, why: `${qty(m.tenureDays / 365, 1)} سنة` },
       { label: "عمق التعامل", value: depth, why: `${r0(m.ordersCount)} توريد` },
       { label: "انتظام الطلب", value: stability, why: m.cycleDays ? `دورة ${r0(m.cycleDays)} يوم` : "دورة لسه مش واضحة" },
       { label: "تنوّع المنتجات", value: variety, why: `${r0(m.distinctProducts)} منتج مختلف` },
+      ...(calm === null
+        ? []
+        : [
+            {
+              label: "قلة الشكاوى",
+              value: calm,
+              why: m.complaintCount
+                ? `${r0(m.complaintCount)} شكوى، منهم ${r0(m.openComplaints)} لسه مفتوحة`
+                : "مفيش شكاوى مسجّلة عليه",
+            },
+          ]),
     ],
     metrics: [
       { label: "أول تعامل", value: m.firstDate ?? "—" },
       { label: "مدة التعامل", value: `${qty(m.tenureDays / 365, 1)} سنة` },
       { label: "عدد المنتجات المطلوبة", value: r0(m.distinctProducts) },
+      {
+        label: "الشكاوى",
+        value: m.factoryLogsComplaints ? r0(m.complaintCount) : "المصنع لسه مابيسجّلش شكاوى",
+      },
     ],
-    missing: ["الشكاوى", "الفروع والأقسام المتعاملة"],
+    missing: m.factoryLogsComplaints ? ["الفروع والأقسام المتعاملة"] : ["الشكاوى", "الفروع والأقسام المتعاملة"],
     note: "",
   };
 }
