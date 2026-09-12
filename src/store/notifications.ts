@@ -37,7 +37,7 @@ function categoryOf(key: string): NotifCategory {
   const head = key.split("-")[0];
   if (head === "late" || head === "stopped" || head === "loss" || head === "bottleneck") return "production";
   if (head === "mat" || head === "mrp") return "inventory";
-  if (head === "due" || head === "pending" || head === "profit") return "finance";
+  if (head === "due" || head === "pending" || head === "profit" || head === "cash") return "finance";
   if (head === "quality") return "quality";
   /* الماكينة الواقفة استثناء إنتاج: هي طاقة ناقصة على خط، مش بند نظام */
   if (head === "machine") return "production";

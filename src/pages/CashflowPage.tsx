@@ -411,7 +411,11 @@ function PayersTab() {
           <p className="mt-0.5 text-xs text-muted-foreground">بالدفع في الميعاد، مش بحجم الفلوس</p>
           <div className="mt-3 space-y-1.5">
             {rank.best.length === 0 ? (
-              <p className="text-sm text-muted-foreground">لسه مفيش عميل عنده {qty(MIN_SETTLED, 0)} توريدات مسدّدة.</p>
+              <p className="text-sm text-muted-foreground">
+                {rank.measured
+                  ? "مفيش عميل مقيس بيدفع في الميعاد دلوقتي."
+                  : `لسه مفيش عميل عنده ${qty(MIN_SETTLED, 0)} توريدات مسدّدة.`}
+              </p>
             ) : (
               rank.best.map((r) => (
                 <div key={r.clientId} className="flex items-center justify-between gap-2 text-sm">
@@ -429,7 +433,11 @@ function PayersTab() {
           <p className="mt-0.5 text-xs text-muted-foreground">بمتوسط التأخير عن الميعاد</p>
           <div className="mt-3 space-y-1.5">
             {rank.worst.length === 0 ? (
-              <p className="text-sm text-muted-foreground">لسه مفيش عميل عنده {qty(MIN_SETTLED, 0)} توريدات مسدّدة.</p>
+              <p className="text-sm text-muted-foreground">
+                {rank.measured
+                  ? "كل العملاء المقيسين بيدفعوا في الميعاد."
+                  : `لسه مفيش عميل عنده ${qty(MIN_SETTLED, 0)} توريدات مسدّدة.`}
+              </p>
             ) : (
               rank.worst.map((r) => (
                 <div key={r.clientId} className="flex items-center justify-between gap-2 text-sm">

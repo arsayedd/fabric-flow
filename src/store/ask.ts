@@ -232,7 +232,7 @@ const INTENTS: Intent[] = [
       return {
         headline: worst
           ? `أسوأ دافع: ${worst.name} — بيتأخر ${num(worst.avgDaysLate ?? 0, 0)} يوم في المتوسط.`
-          : "كل العملاء المقيسين بيدفعوا في الميعاد.",
+          : `كل العملاء المقيسين (${num(rank.measured, 0)}) بيدفعوا في الميعاد.`,
         rows: [
           ...rank.worst.map((r) => ({
             label: r.name,

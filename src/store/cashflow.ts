@@ -178,13 +178,20 @@ export function payerBehavior(db: Db): PayerRow[] {
 /**
  * الترتيب بيتعمل على **اللي عندهم سلوك مقيس بس**. والأحسن بيتحدد بالدفع في
  * الميعاد مش بحجم الفلوس: عميل كبير بيدفع متأخر مش «أفضل دافع».
+ *
+ * والقايمتين **مقسومتين بالصفر مش بالترتيب**: «أحسن» هما اللي متوسط
+ * تأخيرهم صفر، و«أسوأ» هما اللي بيتأخروا فعلًا. لو رتّبنا وقطعنا أول
+ * خمسة، مصنع عنده خمس عملاء كلهم بيتأخروا كان هيشوف أسوأهم مكتوب في
+ * خانة «أحسن دافعين» — والخانة الفاضية أصدق من ترتيب بيكذب.
  */
 export function payerRanking(db: Db, n = 5) {
   const rows = payerBehavior(db).filter((r) => r.enough);
-  const best = [...rows]
-    .sort((a, b) => (b.onTimePct ?? 0) - (a.onTimePct ?? 0) || (a.avgDaysLate ?? 0) - (b.avgDaysLate ?? 0))
+  const best = rows
+    .filter((r) => (r.avgDaysLate ?? 0) === 0)
+    .sort((a, b) => (b.onTimePct ?? 0) - (a.onTimePct ?? 0) || b.paidAmount - a.paidAmount)
     .slice(0, n);
-  const worst = [...rows]
+  const worst = rows
+    .filter((r) => (r.avgDaysLate ?? 0) > 0)
     .sort((a, b) => (b.avgDaysLate ?? 0) - (a.avgDaysLate ?? 0) || b.overdueAmount - a.overdueAmount)
     .slice(0, n);
   return { best, worst, measured: rows.length, all: payerBehavior(db).length };
