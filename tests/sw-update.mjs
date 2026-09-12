@@ -13,6 +13,16 @@
  * سيرفر محلي، وبعدها نبدّل المجلد بنسخة تانية فيها علامة، وبعدها نسيب
  * الصفحة المفتوحة زي ما هي **من غير reload** ونشوف هي بتوصل للعلامة
  * لوحدها ولا لأ.
+ *
+ * ## والنسخة «أ» هنا مقصود إنها من غير المعالجة
+ *
+ * أول حل للمشكلة كان في الصفحة: تسمع `controllerchange` وتحدّث نفسها.
+ * وعدّى الاختبار — لأن الاختبار كان بيبدأ من نسخة **فيها** الحل. بس
+ * المستخدم الواقع في المشكلة أصلًا متصفحه كاش نسخة **مافيهاش** الحل،
+ * فمفيش حاجة في صفحته هتحدّثها، وفضل محتاج Refresh باليد.
+ *
+ * فالنسخة «أ» هنا بنشيل منها المعالجة بالقصد، عشان الاختبار يقيس السؤال
+ * الصح: **هل الرفعة الجديدة بتعالج متصفح قديم مش متعاون؟**
  */
 import { createServer } from "node:http";
 import { cpSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -46,8 +56,40 @@ const TYPES = {
   ".woff2": "font/woff2",
 };
 
-/* النسخة «ب»: نفس البناء وفيه علامة في الصفحة، والـsw بيتغيّر عشان
- * المتصفح يعتبره نسخة جديدة (المتصفح بيقارن بايتات ملف الـsw) */
+const die = (msg) => {
+  console.log(`  ✗ ${msg}`);
+  console.log("\n0 نجحت · 1 فشلت");
+  process.exit(1);
+};
+
+/*
+ * النسخة «أ» = متصفح المستخدم قبل المعالجة: نفس البناء بس بـsw مالوش
+ * `sw-reload.js`. يعني صفحة مفتوحة عليها مافيش أي حاجة — لا في الصفحة
+ * ولا في الـsw — تقدر تحدّثها.
+ */
+const dirA = mkdtempSync(join(tmpdir(), "sanaa-a-"));
+cpSync(DIST, dirA, { recursive: true });
+const swSrc = readFileSync(join(dirA, "sw.js"), "utf8");
+if (!swSrc.includes('importScripts("/sw-reload.js")')) {
+  die("مالقيتش حقن sw-reload.js في الـsw — يا إن الإعداد اتشال يا إن شكله اتغيّر");
+}
+/*
+ * النسخة «أ» بتستورد **عنوان تاني** فاضي، مش نفس العنوان وهو فاضي.
+ *
+ * والفرق ده هو كل الحكاية: `importScripts` بيتخزّن في كاش التسجيل
+ * بالعنوان، ومابيتجابش تاني لما الـsw يتحدّث. فلو النسخة أ حطّت ملف
+ * فاضي على `/sw-reload.js`، النسخة ب بتستورد الفاضي من الكاش والمعالجة
+ * مابتشتغلش — وده كان بيخلّي الاختبار يفشل على حل سليم.
+ *
+ * والبناء القديم الحقيقي مابيشاورش على العنوان ده خالص، فأول ما يتحدّث
+ * بيجيبه من الشبكة. الاستيراد لعنوان تاني هو اللي بيحكي الحكاية دي.
+ */
+writeFileSync(join(dirA, "sw-noop.js"), "/* النسخة أ: من غير معالجة */\n");
+writeFileSync(join(dirA, "sw.js"), swSrc.replace('importScripts("/sw-reload.js")', 'importScripts("/sw-noop.js")'));
+
+/* النسخة «ب» = الرفعة الجديدة: البناء زي ما هو، وفيه علامة في الصفحة
+ * عشان نعرف إن الصفحة وصلتها. والـsw بيتغيّر أصلًا لأن سطر الحقن رجع،
+ * فالمتصفح بيعتبره نسخة جديدة (بيقارن بايتات الملف). */
 const MARK = "SANAA-BUILD-B";
 const dirB = mkdtempSync(join(tmpdir(), "sanaa-b-"));
 cpSync(DIST, dirB, { recursive: true });
@@ -58,16 +100,12 @@ const htmlB = readFileSync(join(dirB, "index.html"), "utf8").replace(
 writeFileSync(join(dirB, "index.html"), htmlB);
 const swB = readFileSync(join(dirB, "sw.js"), "utf8");
 const rev = swB.match(/\{url:"index\.html",revision:"([a-f0-9]+)"\}/)?.[1];
-if (!rev) {
-  console.log("  ✗ مالقيتش بصمة index.html في الـsw — شكل الملف اتغيّر");
-  console.log("\n0 نجحت · 1 فشلت");
-  process.exit(1);
-}
+if (!rev) die("مالقيتش بصمة index.html في الـsw — شكل الملف اتغيّر");
 writeFileSync(join(dirB, "sw.js"), swB.replace(rev, rev.replace(/^./, (c) => (c === "a" ? "b" : "a"))));
 
 /* السيرفر بيقدّم من المجلد اللي `serving` بيشاور عليه، وبنبدّله في النص
  * زي ما `deploy.sh` بيبدّل المجلد على السيرفر بالظبط */
-let serving = DIST;
+let serving = dirA;
 const server = createServer(async (req, res) => {
   const url = decodeURIComponent((req.url ?? "/").split("?")[0]);
   let file = join(serving, normalize(url).replace(/^(\.\.[/\\])+/, ""));
@@ -101,12 +139,16 @@ const mark = () => page.evaluate(() => document.querySelector('meta[name="sanaa-
 const controlled = () => page.evaluate(() => Boolean(navigator.serviceWorker.controller));
 
 /* ── النسخة «أ» ───────────────────────────────────────────────── */
-console.log("\n— النسخة أ —");
+console.log("\n— النسخة أ: متصفح من غير المعالجة —");
 await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
 await page.locator("#root > *").first().waitFor({ timeout: 30_000 });
 ok("النظام فتح", (await page.locator("body").innerText()).includes("صنعة"));
 await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller), null, { timeout: 30_000 });
 ok("السيرفس ووركر بقى متحكّم في الصفحة", await controlled());
+ok(
+  "والنسخة دي فعلًا مش بتشاور على المعالجة",
+  (await page.evaluate(() => fetch("/sw.js").then((r) => r.text()))).includes("sw-noop.js"),
+);
 ok("ومفيش علامة النسخة ب", (await mark()) === "");
 
 /* أول زيارة مالهاش لازمة تتحمّل مرتين — الكود اللي شغّال هو الأحدث أصلًا */

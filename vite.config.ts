@@ -29,6 +29,14 @@ export default defineConfig({
        */
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,webmanifest}"],
+        /*
+         * الكود اللي بيعيد تحميل الصفحات المفتوحة بعد كل رفعة.
+         *
+         * لازم يكون جوه السيرفس ووركر مش في الصفحة: المتصفح اللي كاش
+         * نسخة قديمة بيشغّل كود مافيهوش أي سامع للتحديث، فالحل لازم
+         * ييجي من برّه. والتفاصيل في `public/sw-reload.js`.
+         */
+        importScripts: ["/sw-reload.js"],
       },
       manifest: {
         name: "صنعة — نظام إدارة خطوط الإنتاج",

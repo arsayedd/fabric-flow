@@ -97,21 +97,41 @@ try {
     .catch(() => false);
   ok(landed, "الدخول بيفتح المصنع من غير Refresh باليد");
 
-  /* تنقّل جوّه النظام */
+  /*
+   * التنقّل **بالضغط على القائمة**، مش بـ`goto`.
+   *
+   * ودي كانت الثغرة اللي خلّت الباج يعدّي: كل الاختبارات كانت بتفتح كل
+   * شاشة بعنوانها، وده تحميل كامل للصفحة. والمستخدم مابيعملش كده — هو
+   * بيضغط على القسم، والتنقّل بيحصل في المتصفح من غير طلب شبكة. فالحالة
+   * اللي شكا منها مكانتش بتتقاس أصلًا.
+   */
+  await open(page, "/");
+  const before = loads;
   for (const [path, needle] of [
     ["/orders", /أوامر|الأوامر/],
     ["/parties", /عملاء|الأطراف|موردين/],
-    ["/quality", /جودة|الجودة/],
+    ["/materials", /خامات|الخامات|مخزون/],
   ]) {
-    await open(page, path);
+    const link = page.locator(`a[href="${path}"]`).first();
+    const visible = await link.isVisible().catch(() => false);
+    if (!visible) {
+      ok(false, `${path} مش ظاهر في القائمة`);
+      continue;
+    }
+    await link.click();
+    const arrived = await page
+      .waitForFunction((p) => location.pathname === p, path, { timeout: 15_000 })
+      .then(() => true)
+      .catch(() => false);
     const seen = await page
       .getByText(needle)
       .first()
       .waitFor({ timeout: 20_000 })
       .then(() => true)
       .catch(() => false);
-    ok(seen, `${path} بيفتح مضبوط من غير Refresh`);
+    ok(arrived && seen, `الضغط على ${path} بيفتحه من غير Refresh`, `وصل:${arrived} بان:${seen}`);
   }
+  ok(loads === before, "والتنقّل ده مااحتاجش أي تحميل جديد للصفحة", `اتحمّلت ${loads - before} مرة`);
 
   /* Refresh جوّه صفحة — المفروض يفضل مكانه مش يرجّع لشاشة الدخول */
   await page.reload({ waitUntil: "domcontentloaded" });
