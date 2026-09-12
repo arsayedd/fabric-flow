@@ -4,7 +4,7 @@ import { MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
 import { Money } from "@/components/Money";
-import { Field, Panel } from "@/components/Panel";
+import { Choice, Field, Panel } from "@/components/Panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, selectClass } from "@/components/ui/input";
@@ -233,7 +233,7 @@ export function CollectPanel({ clientId, onClose }: { clientId: string | null; o
       <Field label="المبلغ">
         <Input inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
       </Field>
-      <Field label="طريقة الدفع">
+      <Choice label="طريقة الدفع">
         <div className="flex flex-wrap gap-1.5">
           {PAY_METHODS.map((m) => (
             <button
@@ -249,7 +249,7 @@ export function CollectPanel({ clientId, onClose }: { clientId: string | null; o
             </button>
           ))}
         </div>
-      </Field>
+      </Choice>
       <Field label="الحساب">
         <select
           className={selectClass}

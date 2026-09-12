@@ -3,7 +3,7 @@ import { Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
 import { Money } from "@/components/Money";
-import { Field, Panel } from "@/components/Panel";
+import { Choice, Field, Panel } from "@/components/Panel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, selectClass } from "@/components/ui/input";
@@ -218,7 +218,7 @@ function TxPanel({
         </div>
       }
     >
-      <Field label="اتجاه">
+      <Choice label="اتجاه">
         <div className="flex gap-2">
           <Button type="button" variant={dir === "in" ? "default" : "outline"} onClick={() => setDir("in")}>
             داخل
@@ -227,7 +227,7 @@ function TxPanel({
             خارج
           </Button>
         </div>
-      </Field>
+      </Choice>
       <Field label="التاريخ">
         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </Field>

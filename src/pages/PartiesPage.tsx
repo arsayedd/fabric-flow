@@ -4,7 +4,7 @@ import { AlertTriangle, Contact, Search } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
 import { Money } from "@/components/Money";
-import { Field, Panel } from "@/components/Panel";
+import { Choice, Field, Panel } from "@/components/Panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -316,7 +316,7 @@ export function PartyForm({ open, onClose }: { open: boolean; onClose: () => voi
         </Button>
       }
     >
-      <Field label="النوع">
+      <Choice label="النوع">
         <div className="grid grid-cols-2 gap-2">
           {(["person", "company"] as const).map((k) => (
             <button
@@ -332,7 +332,7 @@ export function PartyForm({ open, onClose }: { open: boolean; onClose: () => voi
             </button>
           ))}
         </div>
-      </Field>
+      </Choice>
 
       <Field label={kind === "person" ? "اسم الشخص" : "اسم الشركة"}>
         <Input value={name} onChange={(e) => setName(e.target.value)} />
@@ -358,7 +358,7 @@ export function PartyForm({ open, onClose }: { open: boolean; onClose: () => voi
         </div>
       ) : null}
 
-      <Field label="نوع العلاقة — تقدر تختار أكتر من واحد">
+      <Choice label="نوع العلاقة — تقدر تختار أكتر من واحد">
         <div className="flex flex-wrap gap-2">
           {PARTY_ROLES.map((r) => (
             <button
@@ -374,7 +374,7 @@ export function PartyForm({ open, onClose }: { open: boolean; onClose: () => voi
             </button>
           ))}
         </div>
-      </Field>
+      </Choice>
 
       <Field label="موبايل واتساب">
         <Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder="01..." />

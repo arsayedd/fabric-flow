@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, Camera, CameraOff, CheckCircle2, ExternalLink, Play, ScanLine, Wrench } from "lucide-react";
 import { toast } from "sonner";
-import { Field, Panel } from "@/components/Panel";
+import { Choice, Field, Panel } from "@/components/Panel";
 import { ExportMenu } from "@/components/export/ExportMenu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -75,9 +75,10 @@ export function ScanPage() {
       </div>
 
       <Card className="space-y-3">
-        <Field label="الكود">
+        <Choice label="الكود">
           <div className="flex gap-2">
             <Input
+              aria-label="الكود"
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && run(text, "manual")}
@@ -89,7 +90,7 @@ export function ScanPage() {
               <ScanLine /> جيب
             </Button>
           </div>
-        </Field>
+        </Choice>
         <p className="-mt-1 text-xs text-muted-foreground">
           اكتب الرقم المطبوع تحت الكود، أو الصقه من قارئ باركود، أو افتح الكاميرا.
         </p>

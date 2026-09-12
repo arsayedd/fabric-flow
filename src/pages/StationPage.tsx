@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Boxes, CheckCircle2, Pause, Play, ScanLine, Wrench } from "lucide-react";
 import { toast } from "sonner";
-import { Field, Panel } from "@/components/Panel";
+import { Choice, Field, Panel } from "@/components/Panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -99,9 +99,10 @@ export function StationPage() {
           </Field>
         ) : null}
 
-        <Field label="رقم الباندل">
+        <Choice label="رقم الباندل">
           <div className="flex gap-2">
             <Input
+              aria-label="رقم الباندل"
               value={code}
               onChange={(e) => setCode(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && find()}
@@ -112,7 +113,7 @@ export function StationPage() {
               <ScanLine /> جيب
             </Button>
           </div>
-        </Field>
+        </Choice>
         <p className="-mt-1 text-xs text-muted-foreground">
           اكتب الرقم أو الصقه من قارئ الباركود. للقراءة بالكاميرا افتح «مسح» من الشريط العلوي.
         </p>

@@ -41,3 +41,21 @@ export function Field({ label, children }: { label: string; children: ReactNode 
     </label>
   );
 }
+
+/**
+ * نفس شكل `Field` بالحرف، بس بـ`div` مكان الـ`label`.
+ *
+ * ليه موجود: `label` المفروض يلف حاجة واحدة يتكتب فيها. لما بيلف مجموعة
+ * زراير — نوع الجهة، طريقة الدفع، الاتجاه — المتصفح بيعتبر نص العنوان بتاع
+ * الـ`label` كله، والزرار جواه بيفضل من غير اسم مقروء. النتيجة إن قارئ
+ * الشاشة بيقول «زرار» من غير ما يقول «عميل»، والاختبار الآلي مابيلاقيهوش
+ * بالاسم. فالعنوان هنا نص عادي، والزراير بتحتفظ بأسمائها.
+ */
+export function Choice({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="mb-3">
+      <span className="mb-1.5 block text-sm text-muted-foreground">{label}</span>
+      {children}
+    </div>
+  );
+}

@@ -4,7 +4,7 @@ import { Contact } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
 import { Money } from "@/components/Money";
-import { Field, Panel } from "@/components/Panel";
+import { Choice, Field, Panel } from "@/components/Panel";
 import { Badge, type Tone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, DataRow } from "@/components/ui/card";
@@ -1016,7 +1016,7 @@ function EditPanel({ open, onClose, partyId }: { open: boolean; onClose: () => v
       <Field label="الاسم التجاري">
         <Input value={form.tradeName} onChange={(e) => set("tradeName", e.target.value)} />
       </Field>
-      <Field label="نوع العلاقة">
+      <Choice label="نوع العلاقة">
         <div className="flex flex-wrap gap-2">
           {PARTY_ROLES.map((r) => (
             <button
@@ -1034,7 +1034,7 @@ function EditPanel({ open, onClose, partyId }: { open: boolean; onClose: () => v
             </button>
           ))}
         </div>
-      </Field>
+      </Choice>
       <Field label="الموبايل">
         <Input value={form.phone} onChange={(e) => set("phone", e.target.value)} inputMode="tel" />
       </Field>
@@ -1081,7 +1081,7 @@ function EditPanel({ open, onClose, partyId }: { open: boolean; onClose: () => v
           inputMode="numeric"
         />
       </Field>
-      <Field label="التاجات">
+      <Choice label="التاجات">
         <div className="mb-2 flex flex-wrap gap-1">
           {form.tags.map((t) => (
             <button key={t} onClick={() => set("tags", form.tags.filter((x) => x !== t))}>
@@ -1103,7 +1103,7 @@ function EditPanel({ open, onClose, partyId }: { open: boolean; onClose: () => v
             أضف
           </Button>
         </div>
-      </Field>
+      </Choice>
       <Field label="ملاحظات">
         <Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} />
       </Field>

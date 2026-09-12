@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ExportMenu } from "@/components/export/ExportMenu";
 import { DocumentPrint } from "@/components/docs/DocumentPrint";
-import { Field, Panel } from "@/components/Panel";
+import { Choice, Field, Panel } from "@/components/Panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -355,13 +355,14 @@ function Header() {
           </Field>
         </div>
 
-        <Field label="الشعار">
+        <Choice label="الشعار">
           <div className="flex items-center gap-3">
             {form.logo ? (
               <img src={form.logo} alt="" className="h-12 w-12 rounded border border-border object-contain" />
             ) : null}
             <input
               type="file"
+              aria-label="الشعار"
               accept="image/*"
               disabled={!editable}
               className="text-sm"
@@ -379,7 +380,7 @@ function Header() {
               </Button>
             ) : null}
           </div>
-        </Field>
+        </Choice>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="تسمية التوقيع اليمين">
