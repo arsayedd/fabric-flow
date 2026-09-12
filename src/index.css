@@ -205,3 +205,12 @@ textarea {
     break-inside: avoid;
   }
 }
+
+/*
+ * شاشة أرض المصنع لما تتفتح ملء الشاشة على تلفزيون الصالة: العنصر
+ * بيتشال من مكانه في الصفحة، فمحتاج هوامشه وتمريره بنفسه.
+ */
+.floor-board:fullscreen {
+  overflow-y: auto;
+  padding: 1.5rem;
+}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Maximize2, Pause, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,7 @@ export function FloorPage() {
   const { db, resolveIssue, can } = useFactory();
   const [tick, setTick] = useState(0);
   const [clock, setClock] = useState(() => new Date());
+  const board = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -50,10 +51,14 @@ export function FloorPage() {
   // `tick` جوه الحساب عن قصد: هو اللي بيخلي الشاشة تعيد القراءة كل شوية
   const view = useMemo(() => ({ ...floorView(db), tick }), [db, tick]);
 
+  /**
+   * ملء الشاشة بيتطلب على **الشاشة نفسها** مش على الصفحة كلها: الشاشة
+   * دي معلّقة على حيطة الصالة، والقايمة الجانبية وشريط البحث مالهمش
+   * لازمة هناك — محدش هيدوس عليهم.
+   */
   const full = () => {
-    const el = document.documentElement;
     if (document.fullscreenElement) void document.exitFullscreen();
-    else void el.requestFullscreen?.();
+    else void board.current?.requestFullscreen?.();
   };
 
   if (!view.lines.length) {
@@ -67,7 +72,8 @@ export function FloorPage() {
   }
 
   return (
-    <div className="space-y-4">
+    // `bg-background` مهم: العنصر لما يبقى ملء الشاشة بيطلع على خلفية سودا لو مالوش لون
+    <div ref={board} className="floor-board space-y-4 bg-background">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-2xl">شاشة أرض المصنع</h2>

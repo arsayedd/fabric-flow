@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Money } from "@/components/Money";
 import { Badge, STATUS } from "@/components/ui/badge";
@@ -11,6 +11,8 @@ import { useFactory } from "@/store/context";
 import { DocumentButton } from "@/components/docs/DocumentPrint";
 import { partyById } from "@/store/parties";
 import { bottleneck, orderCost, orderRequirements, orderStages, productById } from "@/store/manufacturing";
+import { orderCutSummary, orderLays } from "@/store/cutting";
+import type { Order } from "@/store/types";
 import { useSeen } from "@/store/recents";
 
 export function OrderDetailPage() {
@@ -137,6 +139,8 @@ export function OrderDetailPage() {
         ) : null}
       </section>
 
+      <CutSection order={order} />
+
       <section>
         <h3 className="mb-2 text-base">المراحل</h3>
         <div className="overflow-hidden rounded-lg border border-border bg-card">
@@ -244,6 +248,63 @@ export function OrderDetailPage() {
         </section>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * القص على الأمر: القطع اللي اتقصّت والقماش اللي راح فيها ونسبة الاستغلال.
+ * القسم بيختفي خالص لو الأمر مالوش فرشات — مش بيعرض أصفار على أمر
+ * شغّال بالتسجيل اليدوي.
+ */
+function CutSection({ order }: { order: Order }) {
+  const { db } = useFactory();
+  const lays = orderLays(db, order.id);
+  if (!lays.length) return null;
+  const s = orderCutSummary(db, order);
+  const bundles = (db.bundles ?? []).filter((b) => b.orderId === order.id);
+
+  return (
+    <section>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h3 className="text-base">القص</h3>
+        <Link to="/cutting" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
+          افتح شاشة القص
+        </Link>
+      </div>
+      <Card className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div>
+          <p className="text-sm text-muted-foreground">اتقص</p>
+          <p className="text-xl tabular">
+            {qty(s.cutPieces, 0)}
+            <span className="text-sm text-muted-foreground"> من {qty(order.quantity, 0)}</span>
+          </p>
+        </div>
+        <div>
+          <p className="text-sm text-muted-foreground">القماش</p>
+          <p className="text-xl tabular">{qty(s.fabricM, 1)} م</p>
+          {s.perPieceM !== null ? (
+            <p className="text-sm text-muted-foreground tabular">{qty(s.perPieceM, 3)} للقطعة</p>
+          ) : null}
+        </div>
+        <div>
+          <p className="text-sm text-muted-foreground">الاستغلال</p>
+          {s.utilizationPct === null ? (
+            <p className="text-sm text-muted-foreground">مفيش معياري نقارن بيه</p>
+          ) : (
+            <p className={`text-xl tabular ${s.utilizationPct >= 98 ? "text-ok" : s.utilizationPct >= 92 ? "text-warn" : "text-danger"}`}>
+              {qty(s.utilizationPct, 1)}٪
+            </p>
+          )}
+        </div>
+        <div>
+          <p className="text-sm text-muted-foreground">الباندلات</p>
+          <p className="text-xl tabular">{qty(bundles.length, 0)}</p>
+          {s.plannedPieces > 0 ? (
+            <p className="text-sm text-muted-foreground tabular">{qty(s.plannedPieces, 0)} قطعة مخططة لسه ماتقصّتش</p>
+          ) : null}
+        </div>
+      </Card>
+    </section>
   );
 }
 
