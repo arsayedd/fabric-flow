@@ -94,7 +94,16 @@ export type SupplyLineView = {
   remaining: number;
   /** موجب لو وصل أكتر من المطلوب */
   over: number;
-  /** رجع للمورّد فعلًا — من دفتر المرتجعات */
+  /**
+   * رجع للمورّد فعلًا — من دفتر المرتجعات.
+   *
+   * والرقم ده **على مستوى المورّد والبند**، مش على الأمر ده بالذات:
+   * المرتجع في الدفتر مالوش عمود بيقول رجع من أنهي أمر توريد. فبنعدّ
+   * مرتجعات نفس المورّد لنفس البند من تاريخ الأمر وبعده — ولو المورّد
+   * ده جابلنا نفس الخامة على أكتر من أمر في نفس الفترة، الرقم بيتكرر
+   * عليهم. وعشان كده الشاشة بتكتبه **«رجع للمورّد ده»** مش «رجع من
+   * الأمر ده»: التسمية الدقيقة أرخص من رقم بيدّعي دقة مش عنده.
+   */
   returned: number;
   /** قيمة المقبول بالسعر المتفق عليه */
   acceptedValue: number;
@@ -111,7 +120,8 @@ function receiptLinesOf(db: Db, supplyOrderLineId: string): SupplyReceiptLine[] 
   return (db.supplyReceiptLines ?? []).filter((r) => r.supplyOrderLineId === supplyOrderLineId);
 }
 
-export function supplyLineView(db: Db, line: SupplyOrderLine, orderClosed: boolean): SupplyLineView {
+export function supplyLineView(db: Db, order: SupplyOrder, line: SupplyOrderLine): SupplyLineView {
+  const orderClosed = order.status === "closed";
   const rows = receiptLinesOf(db, line.id);
   const accepted = rows.reduce((s, r) => s + r.qtyAccepted, 0);
   const rejected = rows.reduce((s, r) => s + r.qtyRejected, 0);
@@ -121,7 +131,7 @@ export function supplyLineView(db: Db, line: SupplyOrderLine, orderClosed: boole
   const gap = line.qtyOrdered - received;
 
   // المرتجع للمورّد بيتقرا من دفتر المرتجعات على نفس البند ونفس المورّد
-  const returned = supplierReturnsOf(db, line).reduce((s, r) => s + r.qty, 0);
+  const returned = supplierReturnsOf(db, order, line).reduce((s, r) => s + r.qty, 0);
 
   const shortfall = orderClosed ? Math.max(0, gap) : 0;
   return {
@@ -142,14 +152,23 @@ export function supplyLineView(db: Db, line: SupplyOrderLine, orderClosed: boole
   };
 }
 
-/** مرتجعات المورّد المرتبطة بالبند ده من نفس الأمر */
-function supplierReturnsOf(db: Db, line: SupplyOrderLine): ReturnEntry[] {
+/**
+ * مرتجعات المورّد على نفس البند من تاريخ الأمر وبعده.
+ *
+ * التقييد بالمورّد وبالتاريخ مش تزويد شروط: من غيره، مرتجع خامة رجع
+ * لمورّد تاني كان بيتحسب على الأمر ده — فأمر مااستلمناش منه حاجة أصلًا
+ * كان بيبان وكأن رجع منه بضاعة. والربط الدقيق محتاج عمود على المرتجع
+ * بيقول رجع من أنهي استلام، وده لسه مش موجود.
+ */
+function supplierReturnsOf(db: Db, order: SupplyOrder, line: SupplyOrderLine): ReturnEntry[] {
   return (db.returns ?? []).filter(
     (r) =>
       r.source === "supplier" &&
       r.status !== "cancelled" &&
+      r.partyId === order.partyId &&
       r.itemType === line.itemType &&
-      r.itemId === line.itemId,
+      r.itemId === line.itemId &&
+      r.date >= order.date,
   );
 }
 
@@ -177,8 +196,7 @@ export type SupplyView = {
 };
 
 export function supplyView(db: Db, order: SupplyOrder): SupplyView {
-  const closed = order.status === "closed";
-  const lines = linesOfOrder(db, order.id).map((l) => supplyLineView(db, l, closed));
+  const lines = linesOfOrder(db, order.id).map((l) => supplyLineView(db, order, l));
   const receipts = (db.supplyReceipts ?? []).filter((r) => r.supplyOrderId === order.id);
   const dates = receipts.map((r) => r.date).sort();
   const lastReceiptDate = dates.length ? dates[dates.length - 1] : null;

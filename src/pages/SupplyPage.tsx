@@ -325,7 +325,8 @@ function LineRow({ l, closed }: { l: SupplyLineView; closed: boolean }) {
   if (l.damaged > 0) parts.push(`تالف ${qty(l.damaged, 2)}`);
   if (l.missingDoc > 0) parts.push(`ناقص في ورقة المورّد ${qty(l.missingDoc, 2)}`);
   if (l.over > 0) parts.push(`زيادة ${qty(l.over, 2)}`);
-  if (l.returned > 0) parts.push(`رجع للمورّد ${qty(l.returned, 2)}`);
+  // «للمورّد ده» مش «من الأمر ده»: الرقم على مستوى المورّد والبند
+  if (l.returned > 0) parts.push(`رجع للمورّد ده ${qty(l.returned, 2)}`);
 
   return (
     <li>
