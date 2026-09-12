@@ -39,6 +39,17 @@ const ok = (label, cond, extra = "") => {
   }
 };
 
+/* لو حاجة رمت استثناء في نص الطريق، لازم العدّاد يطلع برضه — وإلا السويت
+ * بتقول FAIL من غير رقم ومن غير سطر مفهوم لأي حد بيقرا النتيجة */
+const bail = (e) => {
+  fail++;
+  console.log(`  ✗ الاختبار اتقطع — ${String(e).split("\n")[0]}`);
+  console.log(`\n${pass} نجحت · ${fail} فشلت`);
+  process.exit(1);
+};
+process.on("unhandledRejection", bail);
+process.on("uncaughtException", bail);
+
 /* ── الطبقة اللي تحت المتصفح: هيدرز وكاش ──────────────────────── */
 const head = async (path) => {
   const r = await fetch(`${BASE}${path}`, { redirect: "manual" });
@@ -105,15 +116,37 @@ const errors = [];
 page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
 page.on("pageerror", (e) => errors.push(String(e)));
 
-await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+/**
+ * الفتح بيستنى محتوى فعلي على الشاشة، مش سكون الشبكة.
+ *
+ * `networkidle` مايصلحش هنا: صنعة PWA، والسيرفس ووركر بيفضل شغّال بعد
+ * تحميل الصفحة، فالشبكة ممكن ماتسكنش خلاص والانتظار يوقع الاختبار على
+ * موقع سليم — وده اللي حصل فعلًا أول مرة اتشغّل جوه السويت.
+ */
+const open = async (p, path) => {
+  await p.goto(`${BASE}${path}`, { waitUntil: "domcontentloaded" });
+  await p.locator("#root > *").first().waitFor({ timeout: 30_000 });
+};
+
+await open(page, "/");
 const body = await page.textContent("body");
 ok("الصفحة بتعرض عربي مش شاشة بيضا", (body ?? "").includes("صنعة"), (body ?? "").slice(0, 80));
 
-/* الخط لازم يكون اتحمّل فعلًا بوزن ٥٠٠ — العناوين كلها عليه */
-const fonts = await page.evaluate(() => ({
-  w500: document.fonts.check('500 16px "IBM Plex Sans Arabic"'),
-  w400: document.fonts.check('400 16px "IBM Plex Sans Arabic"'),
-}));
+/* الخط لازم يكون اتحمّل فعلًا بوزن ٥٠٠ — العناوين كلها عليه.
+ *
+ * `check()` لوحده بيقيس اللحظة: لو الخط لسه بيتحمّل بيرجع false وإحنا
+ * نقول «الخط مش موجود» على خط موجود. فبنستنى المتصفح يخلص تحميل، وبعدين
+ * نطلب الوزنين بالاسم — ولو الملف مش مرفوع فعلًا، الطلب ده هو اللي
+ * بيفضح إنه ناقص. */
+const fonts = await page.evaluate(async () => {
+  await document.fonts.ready;
+  const want = ['400 16px "IBM Plex Sans Arabic"', '500 16px "IBM Plex Sans Arabic"'];
+  await Promise.all(want.map((f) => document.fonts.load(f, "صنعة")));
+  return {
+    w400: document.fonts.check(want[0]),
+    w500: document.fonts.check(want[1]),
+  };
+});
 ok("الخط اتحمّل بوزن ٤٠٠", fonts.w400);
 ok("والعناوين بوزن ٥٠٠", fonts.w500);
 
@@ -127,11 +160,16 @@ ok("الدخول التجريبي بيفتح المصنع", after.includes("مص
 ok("وشريط الديمو بيبان", after.includes("مساحة تجريبية"));
 
 /* Refresh جوه شاشة: ده اللي بيكسر لو try_files ناقص */
-await page.goto(`${BASE}/orders`, { waitUntil: "networkidle" });
+await open(page, "/orders");
 ok("فتح /orders مباشرة بيشتغل", new URL(page.url()).pathname === "/orders", page.url());
-await page.reload({ waitUntil: "networkidle" });
-await page.waitForTimeout(1200);
+await page.reload({ waitUntil: "domcontentloaded" });
+await page.locator("#root > *").first().waitFor({ timeout: 30_000 });
 ok("وRefresh جوّه بيفضل في نفس الشاشة", new URL(page.url()).pathname === "/orders", page.url());
+await page
+  .getByText(/SN-/)
+  .first()
+  .waitFor({ timeout: 20_000 })
+  .catch(() => {});
 const orders = await page.locator("body").innerText();
 ok("والأوامر بتتعرض", /أمر|SN-/.test(orders));
 
@@ -144,7 +182,7 @@ ok("سيرفس ووركر اتسجّل", swState !== "none", swState);
 
 /* الدخول بالإيميل وكلمة السر — الطريق التاني اللي معروض على شاشة الدخول */
 const fresh = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-await fresh.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+await open(fresh, "/login");
 const loginTxt = await fresh.locator("body").innerText();
 ok("شاشة الدخول بتعرض الحساب التجريبي", loginTxt.includes(DEMO.email), DEMO.email);
 ok("وبتعرض كلمة السر معاه", loginTxt.includes(DEMO.password));
@@ -154,13 +192,13 @@ await fresh.getByText("مصنع النور").first().waitFor({ timeout: 20_000 }
 ok("والدخول بالإيميل وكلمة السر بيفتح المصنع", true);
 await fresh.close();
 
-await page.goto(`${BASE}/health`, { waitUntil: "networkidle" });
+await open(page, "/health");
 const health = await page.textContent("body");
 ok("صفحة سلامة النظام بتفتح", (health ?? "").length > 200);
 
 /* موبايل: أرض المصنع بتتفتح من التليفون */
 const mob = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-await mob.goto(`${BASE}/`, { waitUntil: "networkidle" });
+await open(mob, "/");
 const mobBody = await mob.textContent("body");
 ok("الصفحة بتفتح على موبايل", (mobBody ?? "").includes("صنعة"));
 const overflow = await mob.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
