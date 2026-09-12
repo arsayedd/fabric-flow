@@ -5,12 +5,13 @@ import { profitRanking } from "./costing";
 import { LAY_STATUS_LABEL, layMath } from "./cutting";
 import { bundleState, defectPareto, opMinutes, wip as wipRows, workerEfficiency } from "./floor";
 import { SUB_STATUS_LABEL, subViews } from "./outsourcing";
+import { describe } from "./codes";
 import { activeBom, bomLines, materialById, materialStock, operationById, orderStages, productById, stockQty, unitName } from "./manufacturing";
 import { customerStats, partyById, partyCredit } from "./parties";
 import { mrp, openOrders, orderLoad, schedule } from "./planning";
 import { DOC_DEFS, DOC_STATUS_LABEL } from "./documents";
 import type { PermModule } from "./permissions";
-import { METHOD_LABEL, ORDER_STATUS_LABEL, PAY_TYPE_LABEL, ROLE_LABEL, STOCK_KIND_LABEL, type Db } from "./types";
+import { KIND_LABEL, METHOD_LABEL, ORDER_STATUS_LABEL, PAY_TYPE_LABEL, ROLE_LABEL, SCAN_ACTION_LABEL, STOCK_KIND_LABEL, type Db } from "./types";
 
 /**
  * سجل البيانات القابلة للتصدير.
@@ -1155,6 +1156,49 @@ export const DATASETS: DatasetDef[] = [
     cols: [text("name", "الاسم", 22), text("email", "البريد", 26), text("role", "الدور", 16)],
     rows: (db) =>
       db.members.map((m) => ({ id: m.id, name: m.name, email: m.email, role: ROLE_LABEL[m.role] })),
+  },
+  {
+    key: "scans",
+    title: "سجل المسح",
+    about: "كل كود اتمسح: مين مسحه وإمتى وإزاي جه الكود وإيه اللي اتعمل.",
+    area: "admin",
+    module: "audit",
+    screen: "/scan",
+    groupBy: "kind",
+    cols: [
+      text("at", "الوقت", 20),
+      text("actor", "اللي مسح", 18),
+      text("kind", "النوع", 16),
+      code("code", "الكود"),
+      text("item", "السجل", 22),
+      text("action", "الإجراء", 16),
+      text("source", "إزاي"),
+      count("qty", "الكمية"),
+      text("from", "من", 16),
+      text("to", "لحد", 16),
+      text("note", "ملاحظة", 24),
+    ],
+    rows: (db) => {
+      const SOURCE = { camera: "كاميرا", manual: "مكتوب بالإيد", link: "رابط" };
+      return (db.scans ?? []).map((s) => ({
+        id: s.id,
+        at: new Date(s.at).toLocaleString("ar-EG", { timeZone: "Africa/Cairo" }),
+        actor: s.actorName,
+        kind: KIND_LABEL[s.kind],
+        code: s.code,
+        item: describe(db, s.kind, s.refId)?.label ?? "—",
+        action: SCAN_ACTION_LABEL[s.action],
+        source: SOURCE[s.source],
+        qty: s.qty,
+        from: s.from,
+        to: s.to,
+        note: s.note,
+      }));
+    },
+    notes: [
+      "«إزاي» بتقول الكود جه من الكاميرا ولا اتكتب بالإيد — موديل الجهاز والموقع مش متسجّلين.",
+      "السجل اللي الكود شاور عليه ممكن يكون اتغيّر بعد المسح؛ الكود المحفوظ هو اللي اتقرا وقتها.",
+    ],
   },
   {
     key: "audit",

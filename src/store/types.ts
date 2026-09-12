@@ -590,6 +590,103 @@ export type FloorIssue = {
   resolvedBy: string | null;
 };
 
+/* ── الترميز والمسح ────────────────────────────────────────────
+ *
+ * الأنواع اللي ليها كود يتطبع ويتمسح. القايمة دي مقصورة على اللي **ليه
+ * سجل في الدفتر** — الكود اللي بيفتح على لا شيء أسوأ من إنه مايتطبعش.
+ * وبناء الكود وقراءته في `codes.ts`.
+ */
+
+export const CODE_KINDS = [
+  "material",
+  "product",
+  "warehouse",
+  "order",
+  "lay",
+  "bundle",
+  "subcontract",
+  "party",
+  "worker",
+  "operation",
+  "document",
+] as const;
+
+export type CodeKind = (typeof CODE_KINDS)[number];
+
+/** البادئة اللي بتتكتب جوه الكود وتحت الـQR على الليبل */
+export const KIND_TAG: Record<CodeKind, string> = {
+  material: "MAT",
+  product: "PRD",
+  warehouse: "WHS",
+  order: "ORD",
+  lay: "LAY",
+  bundle: "BND",
+  subcontract: "SUB",
+  party: "PTY",
+  worker: "WRK",
+  operation: "OPR",
+  document: "DOC",
+};
+
+export const KIND_LABEL: Record<CodeKind, string> = {
+  material: "خامة",
+  product: "موديل",
+  warehouse: "مخزن",
+  order: "أمر إنتاج",
+  lay: "فرشة قص",
+  bundle: "باندل",
+  subcontract: "إذن تشغيل خارجي",
+  party: "جهة تعامل",
+  worker: "عامل",
+  operation: "عملية",
+  document: "مستند",
+};
+
+/** الإجراءات اللي المسح بيوصّل لها — كل واحدة مربوطة بميوتيشن موجودة */
+export const SCAN_ACTIONS = ["open", "start", "finish", "issue", "receive", "report", "verify"] as const;
+export type ScanAction = (typeof SCAN_ACTIONS)[number];
+
+export const SCAN_ACTION_LABEL: Record<ScanAction, string> = {
+  open: "فتح السجل",
+  start: "بدء عملية",
+  finish: "تسليم عملية",
+  issue: "صرف خامة",
+  receive: "استلام خامة",
+  report: "بلاغ",
+  verify: "تحقق من مستند",
+};
+
+/**
+ * حركة مسح واحدة.
+ *
+ * ودي **دفتر** مش لوج شكلي: كل مسح بيتسجّل بمين ومتى وإزاي جه الكود
+ * وإيه اللي اتعمل، عشان أي باندل أو خامة تقدر ترجع لتاريخها كامل.
+ *
+ * اللي **مش** متسجّل وبنقوله بالصريح: موديل الجهاز والموقع الجغرافي.
+ * المتصفح مابيدّي الأول بشكل يعتمد عليه، والتاني عايز إذن من العامل —
+ * فبنسجّل `source` (كاميرا / مكتوب بالإيد / رابط) وده اللي نعرفه فعلًا.
+ */
+export type ScanEvent = {
+  id: string;
+  factoryId: string;
+  at: string;
+  actorId: string;
+  actorName: string;
+  kind: CodeKind;
+  /** معرّف السجل اللي الكود شاور عليه */
+  refId: string;
+  /** الكود زي ما اتقرا — بيفضل محفوظ حتى لو السجل اتغيّر بعدها */
+  code: string;
+  action: ScanAction;
+  source: "camera" | "manual" | "link";
+  /** الكمية لو الإجراء كان عليه كمية */
+  qty: number | null;
+  /** منين ولحد فين: مخزن، خط، ورشة — اسم مقروء وقت المسح */
+  from: string;
+  to: string;
+  note: string;
+};
+
 /* ── الورش الخارجية ────────────────────────────────────────────
  *
  * الورشة **جهة تعامل** بدور `workshop` — مش جدول تاني. اللي جديد هنا هو
@@ -790,6 +887,7 @@ export type Db = {
   bundles: Bundle[];
   bundleOps: BundleOp[];
   floorIssues: FloorIssue[];
+  scans: ScanEvent[];
   subcontracts: Subcontract[];
   subReceipts: SubReceipt[];
   subPayments: SubPayment[];

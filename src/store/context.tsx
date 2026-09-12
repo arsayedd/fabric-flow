@@ -60,6 +60,7 @@ import {
 } from "./manufacturing";
 import { bundleCode, layMath, nextBundleSeq, orderCutSummary, planBundles } from "./cutting";
 import { bundleState } from "./floor";
+import { KIND_MODULE } from "./codes";
 import { subMovement, subView } from "./outsourcing";
 import { buildDoc, canTransition, DOC_DEFS, findDoc, type IssueInput } from "./documents";
 import { demoDb, emptyDb, templateData } from "./seed";
@@ -71,6 +72,7 @@ import type {
   BomItem,
   Bundle,
   BundleOp,
+  CodeKind,
   CutLay,
   CutLayLine,
   FloorIssue,
@@ -80,6 +82,8 @@ import type {
   SubReceipt,
   Industry,
   Material,
+  ScanAction,
+  ScanEvent,
   Operation,
   Product,
   RoutingStep,
@@ -162,6 +166,7 @@ function migrate(db: Db): Db {
     bundles: db.bundles ?? [],
     bundleOps: db.bundleOps ?? [],
     floorIssues: db.floorIssues ?? [],
+    scans: db.scans ?? [],
     subcontracts: db.subcontracts ?? [],
     subReceipts: db.subReceipts ?? [],
     subPayments: db.subPayments ?? [],
@@ -486,6 +491,18 @@ type FactoryApi = {
   finishBundleOp: (id: string, input: { qtyGood: number; qtyRework: number; qtyScrap: number; defect: string }) => void;
   reportIssue: (input: { kind: FloorIssueKind; line: string; orderId: string | null; bundleId: string | null; workerId: string | null; note: string }) => void;
   resolveIssue: (id: string) => void;
+  /* ── المسح ── */
+  recordScan: (input: {
+    kind: CodeKind;
+    refId: string;
+    code: string;
+    action: ScanAction;
+    source: ScanEvent["source"];
+    qty?: number | null;
+    from?: string;
+    to?: string;
+    note?: string;
+  }) => void;
   /* ── الورش الخارجية ── */
   addSubcontract: (input: SubcontractInput) => string;
   sendSubMaterials: (subcontractId: string, rows: { materialId: string; qty: number }[]) => void;
@@ -1885,6 +1902,43 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         );
       },
 
+      /* ── المسح ────────────────────────────────────────────────── */
+
+      /**
+       * بيسجّل حركة مسح واحدة.
+       *
+       * الصلاحية بتتقاس على **موديول السجل اللي الكود فتحه**، مش على
+       * «صلاحية مسح» عامة — يعني الكاميرا مش طريق يشوف بيه حد حاجة
+       * الشاشة كانت هتمنعه منها.
+       *
+       * والدفتر ده **مابيتعدّلش ولا بيتمسح**: حركة المسح واقعة حصلت،
+       * ولو اتعملت بالغلط بيتسجّل غيرها بالصح. عشان كده مفيش
+       * `updateScan` ولا `deleteScan`.
+       */
+      recordScan: (input) => {
+        need(KIND_MODULE[input.kind], "view");
+        const row: ScanEvent = {
+          id: nid(),
+          factoryId: fid(db),
+          at: new Date().toISOString(),
+          actorId: session?.memberId ?? "",
+          actorName: session?.name ?? "النظام",
+          kind: input.kind,
+          refId: input.refId,
+          code: input.code,
+          action: input.action,
+          source: input.source,
+          qty: input.qty ?? null,
+          from: input.from ?? "",
+          to: input.to ?? "",
+          note: input.note ?? "",
+        };
+        mutate(
+          { scans: [row, ...db.scans] },
+          { action: "create", table: "scans", recordId: row.id, before: null, after: row },
+        );
+      },
+
       /* ── الورش الخارجية ───────────────────────────────────────── */
 
       addSubcontract: (input) => {
@@ -2196,6 +2250,7 @@ function emptyShell(): Db {
     bundles: [],
     bundleOps: [],
     floorIssues: [],
+    scans: [],
     subcontracts: [],
     subReceipts: [],
     subPayments: [],

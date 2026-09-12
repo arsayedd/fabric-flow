@@ -14,6 +14,7 @@ import {
   type Material,
   type Member,
   type Operation,
+  type ScanEvent,
   type Unit,
   type Warehouse,
 } from "./types";
@@ -283,6 +284,7 @@ export function emptyDb(factoryName: string, industry: Industry = "custom"): Db 
     bundles: [],
     bundleOps: [],
     floorIssues: [],
+    scans: [],
     subcontracts: [],
     subReceipts: [],
     subPayments: [],
@@ -836,6 +838,53 @@ export function demoDb(): Db {
   ];
 
   /**
+   * تاريخ المسح لباندلات الفستان.
+   *
+   * السطور دي **مش تزويق**: هي اللي بتخلّي «تتبّع الباندل» في وضع العرض
+   * يوري سلسلة حقيقية — الباندل اتقص، بعدها اتمسح على الخياطة وبدأ،
+   * وسلّم، وبعدها المكوى، وبعدها التعبئة. والأوقات مظبوطة على أوقات
+   * العمليات في `bundleOps` عشان السلسلة تقرا صح مش متضاربة.
+   */
+  const scan = (
+    id: string,
+    kind: ScanEvent["kind"],
+    refId: string,
+    code: string,
+    action: ScanEvent["action"],
+    when: string,
+    actor: "m-sup" | "m-owner",
+    source: ScanEvent["source"] = "camera",
+    extra: Partial<ScanEvent> = {},
+  ): ScanEvent => ({
+    id,
+    factoryId: FID,
+    at: when,
+    actorId: actor,
+    actorName: actor === "m-sup" ? "حسام المشرف" : "صاحب المصنع",
+    kind,
+    refId,
+    code,
+    action,
+    source,
+    qty: null,
+    from: "",
+    to: "",
+    note: "",
+    ...extra,
+  });
+
+  const scans: ScanEvent[] = [
+    scan("sc-1", "lay", "lay-1", "SANAA://LAY/lay-1", "open", at(addDays(today, -5), "11:18"), "m-sup"),
+    scan("sc-2", "bundle", "bn-1", "SN-1043-B001", "start", at(addDays(today, -3), "08:00"), "m-sup", "camera", { qty: 20, from: "القص", to: "الخط الثاني", note: "خياطة" }),
+    scan("sc-3", "bundle", "bn-1", "SN-1043-B001", "finish", at(addDays(today, -3), "18:30"), "m-sup", "camera", { qty: 20, from: "الخط الثاني", to: "الخط الثاني", note: "خياطة — ٢٠ سليم" }),
+    scan("sc-4", "bundle", "bn-2", "SN-1043-B002", "start", at(addDays(today, -2), "08:15"), "m-sup", "camera", { qty: 20, from: "القص", to: "الخط الثاني", note: "خياطة" }),
+    scan("sc-5", "bundle", "bn-1", "SN-1043-B001", "start", at(today, "09:00"), "m-sup", "camera", { qty: 20, from: "الخط الثاني", to: "المكوى", note: "مكوى" }),
+    scan("sc-6", "material", mat("قماش قطن"), tpl.materials.find((m) => m.name === "قماش قطن")!.sku, "open", at(today, "10:04"), "m-sup", "manual", { note: "مراجعة رصيد قبل الفرشة" }),
+    scan("sc-7", "bundle", "bn-1", "SN-1043-B001", "finish", at(today, "11:15"), "m-sup", "camera", { qty: 16, from: "التعبئة", to: "مخزن الإنتاج التام", note: "تعبئة — ٤ للإصلاح" }),
+    scan("sc-8", "bundle", "bn-2", "SN-1043-B002", "start", at(today, "11:30"), "m-sup", "camera", { qty: 20, from: "الخط الثاني", to: "المكوى", note: "مكوى" }),
+  ];
+
+  /**
    * إذن تشغيل خارجي: ٣٠٠ قطعة خياطة برّه بأجر ٣٠ج، رجع منها ٢٤٠ سليم و١٢
    * تالف، و٤٠ لسه عند الورشة بعد الميعاد — عشان الشاشة تبان عليها حالة
    * «متأخر» الحقيقية بدل ما كل الأعمال تطلع مظبوطة.
@@ -916,6 +965,7 @@ export function demoDb(): Db {
     bundles,
     bundleOps,
     floorIssues,
+    scans,
     subcontracts,
     subReceipts,
     subPayments,
