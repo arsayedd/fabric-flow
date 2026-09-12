@@ -151,6 +151,17 @@ const stockOf = (db, itemId) =>
 | الأكواد والمستندات | `scan-*` · `docs` · `barcode-check` · `xlsx-check` · `datasets-check` | المسح والمستندات والتصدير |
 | الأدوار والفراغ | `*-roles` · `empty-states` · `floor-empty` · `scan-empty` | الصلاحيات، والشاشة وهي فاضية |
 | الذكاء | `ai-flow` · `insights-*` · `intel` · `command` · `tower-check` | الأسئلة والقواعد واللوحة |
+| نسخة الإنتاج | `prod-serve` · `live-site` | الناتج المبني، وبعدها الدومين الحقيقي |
+| قاعدة البيانات | `rls-check` · `perm-parity` | العزل بين المصانع، وتطابق الصلاحيات بين التطبيق والقاعدة |
+
+آخر تلات هارنسات محتاجين حاجة زيادة:
+
+- `rls-check` و`perm-parity` محتاجين Postgres محلي — بيبنوا قاعدة نضيفة من
+  الصفر ويشغّلوا كل الـmigrations عليها. لو الكلاستر واقف بيحاولوا يشغّلوه
+  مرة قبل ما يستسلموا: `sudo apt-get install -y postgresql`.
+- `live-site` محتاج `SANAA_URL`، ومن غيره بيتخطّى نفسه عشان السويت مايفشلش
+  على جهاز مش مربوط بدومين:
+  `SANAA_URL=https://sanaa.cloud node tests/live-site.mjs`
 
 كل ملف في `tests/` اختبار بيتشغّل. سكربتات الصور والمعاينة والاستكشاف بتفضل
 برّا المجلد ده لأنها أدوات مؤقتة مش اختبارات: مالهاش تأكيدات، ونتيجتها صورة أو

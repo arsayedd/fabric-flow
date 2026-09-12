@@ -47,7 +47,14 @@ const asked = [];
 for (const q of chips) {
   await go("/ai");
   await page.getByRole("button", { name: q, exact: true }).first().click();
-  await page.waitForTimeout(500);
+  /* الجواب بيتحسب من الدفتر وبعدين بيترسم. انتظار بوقت ثابت كان بيفشل
+   * على جهاز مضغوط — والسؤال نفسه سليم — فبنستنى سطر الأساس يظهر.
+   * والـcatch مقصود: لو مظهرش خلاص، التأكيد تحت هو اللي يفشل. */
+  await page
+    .getByText("الرقم ده جه منين")
+    .first()
+    .waitFor({ timeout: 15_000 })
+    .catch(() => {});
   const t = await main();
   const understood = !t.includes("مش فاهم السؤال");
   const hasBasis = t.includes("الرقم ده جه منين");
