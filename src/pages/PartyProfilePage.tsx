@@ -42,14 +42,17 @@ import {
   type PartyRole,
 } from "@/store/types";
 import { CustomerIntelligence, ScoreSummary } from "@/components/Intelligence";
+import { ClientOpsTab, ClientProductsTab } from "@/components/ClientAnalytics";
 import { CollectPanel } from "./CollectionsPage";
 import { useSeen } from "@/store/recents";
 
-const TABS = ["overview", "intelligence", "account", "timeline", "comms", "info"] as const;
+const TABS = ["overview", "products", "ops", "intelligence", "account", "timeline", "comms", "info"] as const;
 type Tab = (typeof TABS)[number];
 
 const TAB_LABEL: Record<Tab, string> = {
   overview: "نظرة عامة",
+  products: "الموديلات والربح",
+  ops: "التسليم والمرتجعات",
   intelligence: "الذكاء",
   account: "كشف الحساب",
   timeline: "الخط الزمني",
@@ -161,6 +164,7 @@ export function PartyProfilePage() {
         {TABS.map((t) => {
           if (t === "account" && !isCustomer && !isSupplier) return null;
           if (t === "intelligence" && !isCustomer) return null;
+          if ((t === "products" || t === "ops") && !isCustomer) return null;
           return (
             <button
               key={t}
@@ -185,6 +189,8 @@ export function PartyProfilePage() {
           onOpenIntelligence={() => setTab("intelligence")}
         />
       ) : null}
+      {tab === "products" ? <ClientProductsTab partyId={party.id} /> : null}
+      {tab === "ops" ? <ClientOpsTab partyId={party.id} /> : null}
       {tab === "intelligence" ? <CustomerIntelligence partyId={party.id} /> : null}
       {tab === "account" ? <AccountTab partyId={party.id} statement={party.statement} isCustomer={isCustomer} /> : null}
       {tab === "timeline" ? <Timeline partyId={party.id} /> : null}

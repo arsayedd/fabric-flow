@@ -8,7 +8,8 @@ import { SUB_STATUS_LABEL, subViews } from "./outsourcing";
 import { describe } from "./codes";
 import { itemName, partyName, returnImpact, unitCostOf } from "./returns";
 import { activeBom, bomLines, materialById, materialStock, operationById, orderStages, productById, stockQty, unitName } from "./manufacturing";
-import { customerStats, partyById, partyCredit } from "./parties";
+import { customerStats, partiesWithRole, partyById, partyCredit } from "./parties";
+import { clientOrderCash, clientProducts } from "./clients";
 import { mrp, openOrders, orderLoad, schedule } from "./planning";
 import { DOC_DEFS, DOC_STATUS_LABEL } from "./documents";
 import { availability, batchList, supplyList } from "./supply";
@@ -1486,6 +1487,108 @@ export const DATASETS: DatasetDef[] = [
     notes: [
       "المحجوز محسوب مش مخزّن: احتياج الأوامر الشغّالة اللي لسه مااتصرفتش خاماتها.",
       "المتاح ممكن يطلع بالسالب — ومعناه إن أمر إنتاج مش هيلاقي خامته، مش إن الجرد غلط.",
+    ],
+  },
+  {
+    key: "clientProducts",
+    title: "موديلات العملاء",
+    about: "كل عميل × كل موديل: المتسلّم والإيراد والمرتجع والتكلفة والربح.",
+    area: "sales",
+    module: "parties",
+    screen: "/parties",
+    groupBy: "client",
+    cols: [
+      text("client", "العميل", 22),
+      text("model", "الموديل", 22),
+      code("sku", "SKU"),
+      text("link", "الربط", 16),
+      count("deliveries", "توريدات"),
+      count("delivered", "متسلّم"),
+      count("produced", "اتنتج"),
+      cash("revenue", "الإيراد"),
+      count("returned", "راجع"),
+      pct("returnRate", "نسبة الرجوع"),
+      cash("unitCost", "تكلفة القطعة", "none"),
+      cash("cost", "التكلفة"),
+      cash("profit", "الربح"),
+      pct("margin", "الهامش"),
+      text("colors", "ألوان", 18),
+      text("sizes", "مقاسات", 18),
+    ],
+    rows: (db) =>
+      partiesWithRole(db, "customer").flatMap((p) =>
+        clientProducts(db, p.id).rows.map((r) => ({
+          id: `${p.id}-${r.productId ?? r.name}`,
+          partyId: p.id,
+          client: p.name,
+          model: r.name,
+          sku: r.sku ?? "",
+          link: r.productId ? (r.exact ? "أمر إنتاج" : "مطابقة اسم") : "مش في الكتالوج",
+          deliveries: r.deliveries,
+          delivered: r.deliveredQty,
+          produced: r.producedQty,
+          revenue: r.revenue,
+          returned: r.returnedQty,
+          returnRate: r.returnRatePct ?? "",
+          unitCost: r.unitCost ?? "",
+          cost: r.cost ?? "",
+          profit: r.profit ?? "",
+          margin: r.marginPct ?? "",
+          colors: r.colors.join("، "),
+          sizes: r.sizes.join("، "),
+        })),
+      ),
+    notes: [
+      "«الربط» بيقول الموديل اتحدد إزاي: من أمر إنتاج بالمعرّف، ولا بمطابقة اسم الموديل المكتوب في التوريد.",
+      "التكلفة من ورقة تكلفة الموديل × المتسلّم. الموديل اللي مالوش قائمة خامات بيطلع بتكلفة فاضية مش صفر.",
+      "«تكلفة القطعة» مش مجموعة: مجموع تكاليف موديلات مختلفة رقم بلا معنى.",
+      "الألوان والمقاسات من الباندلات والمرتجعات — مش من كتالوج متغيرات، لأنه لسه مش موجود.",
+    ],
+  },
+  {
+    key: "orderCash",
+    title: "من الأمر للتحصيل",
+    about: "كل أمر: اتنتج كام، اتسلّم كام، اتفوتر بكام، اتحصّل كام، وباقي إمتى.",
+    area: "sales",
+    module: "parties",
+    screen: "/parties",
+    cols: [
+      code("code", "رقم الأمر"),
+      text("client", "العميل", 22),
+      text("model", "الموديل", 22),
+      count("ordered", "المطلوب"),
+      count("produced", "اتنتج"),
+      count("delivered", "اتسلّم"),
+      count("remainingQty", "باقي قطع"),
+      cash("invoiced", "المفوتر"),
+      cash("collected", "المحصّل"),
+      cash("remaining", "الباقي"),
+      day("due", "ميعاد السداد"),
+      count("overdueDays", "أيام التأخير", "none"),
+    ],
+    rows: (db) =>
+      partiesWithRole(db, "customer").flatMap((p) =>
+        clientOrderCash(db, p.id).map((o) => ({
+          id: o.order.id,
+          partyId: p.id,
+          code: o.order.code,
+          client: p.name,
+          model: o.productName ?? o.order.model,
+          ordered: o.order.quantity,
+          produced: o.produced,
+          delivered: o.delivered,
+          remainingQty: o.remainingQty,
+          invoiced: o.invoiced,
+          collected: o.collected,
+          remaining: o.remaining,
+          due: o.dueDate ?? "",
+          overdueDays: o.overdueDays ?? 0,
+        })),
+      ),
+    notes: [
+      "«المفوتر» قيمة التوريدات المربوطة بالأمر بالمعرّف. التوريد اللي مش مربوط بأمر مش بيتحسب هنا.",
+      "«المحصّل» من نفس توزيع التحصيل بالأقدمية المستخدم في كشف الحساب — مش نسبة مقسومة على الأمر.",
+      "أيام التأخير مش مجموعة: مجموع التأخير على أوامر مختلفة رقم بلا معنى.",
     ],
   },
   {
