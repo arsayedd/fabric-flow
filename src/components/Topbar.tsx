@@ -8,6 +8,7 @@ import {
   LogOut,
   Menu,
   Plus,
+  ScanLine,
   Search,
   UserRound,
 } from "lucide-react";
@@ -30,9 +31,14 @@ import { ROLE_LABEL } from "@/store/types";
 /**
  * الشريط العلوي.
  *
- * أربع حاجات بس، وكل واحدة بتجاوب على سؤال بيتكرر كل يوم:
- * البحث (ألاقي حاجة)، «+ إضافة» (أعمل حاجة)، الجرس (إيه اللي محتاج اهتمامي)،
- * والحساب (أنا مين وبأي صلاحية). أي حاجة غير كده مكانها جوه الصفحة.
+ * خمس حاجات بس، وكل واحدة بتجاوب على سؤال بيتكرر كل يوم:
+ * البحث (ألاقي حاجة)، «مسح» (الحاجة اللي في إيدي دي إيه)، «+ إضافة»
+ * (أعمل حاجة)، الجرس (إيه اللي محتاج اهتمامي)، والحساب (أنا مين وبأي
+ * صلاحية). أي حاجة غير كده مكانها جوه الصفحة.
+ *
+ * و«مسح» ثابت هنا **عن قصد**: اللي ماسك باندل أو رول قماش مش المفروض
+ * يدور على الشاشة الصح — الزر في وشه في أي صفحة، والكود هو اللي بيقول
+ * إحنا رايحين فين.
  */
 export function Topbar({ onMenu, onSearch }: { onMenu: () => void; onSearch: () => void }) {
   const { db } = useFactory();
@@ -52,6 +58,14 @@ export function Topbar({ onMenu, onSearch }: { onMenu: () => void; onSearch: () 
       </button>
 
       <div className="ms-auto flex shrink-0 items-center gap-1">
+        <Link
+          to="/scan"
+          className="flex h-9 items-center gap-1.5 rounded-md border border-gold/50 px-2.5 text-sm text-gold hover:bg-gold/10"
+          aria-label="مسح كود"
+        >
+          <ScanLine className="h-4 w-4" />
+          <span className="hidden sm:inline">مسح</span>
+        </Link>
         <QuickCreate />
         {/* المفتاح هو المصنع: تبديل المصنع بيبني الجرس من أول وجديد بدل ما يفضل شايل حالة مصنع تاني */}
         <NotificationsBell key={db.factory?.id ?? "none"} />

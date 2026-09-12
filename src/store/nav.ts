@@ -196,6 +196,8 @@ export const NAV: NavSection[] = [
       // مفتوحين للكل: الصلاحية جوه الصفحة على كل جدول ومستند لوحده
       item("/documents", "دفتر المستندات", "production", null),
       item("/exports", "مركز التصدير", "production", null),
+      item("/labels", "مركز الطباعة والليبلات", "production", null),
+      item("/scan", "مسح كود", "production", null),
     ],
   },
   {
@@ -243,6 +245,9 @@ export const ROUTE_LABEL: Record<string, string> = {
   "/cutting": "القص والفرشات",
   "/production": "متابعة العمليات",
   "/floor": "شاشة أرض المصنع",
+  "/scan": "مسح كود",
+  "/labels": "مركز الطباعة والليبلات",
+  "/trace": "سلسلة التتبع",
   "/station": "محطة العامل",
   "/outsourcing": "الورش الخارجية",
   "/planning": "التخطيط والطاقة",

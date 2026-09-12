@@ -24,6 +24,9 @@ import { CuttingPage } from "@/pages/CuttingPage";
 import { ProductionPage } from "@/pages/ProductionPage";
 import { FloorPage } from "@/pages/FloorPage";
 import { StationPage } from "@/pages/StationPage";
+import { ScanPage } from "@/pages/ScanPage";
+import { LabelsPage } from "@/pages/LabelsPage";
+import { TracePage } from "@/pages/TracePage";
 import { OutsourcingPage } from "@/pages/OutsourcingPage";
 import { CostingPage } from "@/pages/CostingPage";
 import { CommandPage } from "@/pages/CommandPage";
@@ -121,6 +124,14 @@ function appRoutes() {
         */}
         <Route path="/documents" element={<DocumentsPage />} />
         <Route path="/exports" element={<ExportsPage />} />
+        {/*
+          المسح والطباعة والتتبع مفتوحين لنفس السبب: الكود اللي في إيد
+          العامل ممكن يكون لأي حاجة، والشاشة هي اللي بتقيس صلاحية النوع
+          اللي طلع منه — قفلها على موديول واحد كان هيمنع نص المصنع.
+        */}
+        <Route path="/scan" element={<ScanPage />} />
+        <Route path="/labels" element={<LabelsPage />} />
+        <Route path="/trace/:kind/:id" element={<TracePage />} />
         {guarded("/staff", "staff", <StaffPage />)}
         {guarded("/audit", "audit", <AuditPage />)}
         <Route path="/settings" element={<SettingsPage />} />
