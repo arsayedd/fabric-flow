@@ -163,6 +163,8 @@ export const NAV: NavSection[] = [
     icon: ShoppingCart,
     items: [
       item("/deliveries", "التوريدات", "sales", "sales", false),
+      // مفتوح: كل مصدر مرتجع بياخد صلاحيته لوحده جوه الشاشة
+      item("/returns", "المرتجعات والشكاوى", "sales", null),
       item("/invoices", "الفواتير", "sales", "sales", false),
     ],
   },
@@ -208,6 +210,7 @@ export const NAV: NavSection[] = [
       // غرفة التحكم مفتوحة للكل: كل قسم جواها بيتشال لوحده لو الصلاحية ناقصة
       item("/dashboard", "غرفة التحكم", "production", "reports"),
       item("/intelligence", "ذكاء العملاء", "parties", "parties"),
+      item("/insights", "استنتاجات صنعة", "reports", null),
       item("/reports", "بانِي التقارير", "reports", "reports", false),
     ],
   },
@@ -241,6 +244,8 @@ export const ROUTE_LABEL: Record<string, string> = {
   "/alerts": "ما يحتاج اهتمامك",
   "/dashboard": "غرفة التحكم",
   "/intelligence": "ذكاء العملاء",
+  "/insights": "استنتاجات صنعة",
+  "/returns": "المرتجعات والشكاوى",
   "/orders": "أوامر الإنتاج",
   "/cutting": "القص والفرشات",
   "/production": "متابعة العمليات",

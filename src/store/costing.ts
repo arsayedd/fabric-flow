@@ -23,6 +23,8 @@ import {
   routingLines,
   stockQty,
 } from "./manufacturing";
+import { deliveriesOfModel } from "./compute";
+import { modelReturns } from "./returns";
 import type { Db, Order, Product } from "./types";
 
 /* ── قرار الهامش المستهدف ────────────────────────────────────── */
@@ -216,8 +218,7 @@ export function modelVolume(db: Db, productId: string): ModelVolume {
     scrap += stages.reduce((s, x) => s + x.scrap, 0);
     rework += stages.reduce((s, x) => s + x.rework, 0);
   }
-  const name = product?.name?.trim() ?? "";
-  const matched = name ? db.deliveries.filter((d) => d.model.trim() === name) : [];
+  const matched = deliveriesOfModel(db, product?.name ?? "");
   const soldQty = matched.reduce((s, d) => s + (d.quantity ?? 0), 0);
 
   return {
@@ -664,8 +665,31 @@ export function profitScore(db: Db, productId: string): ProfitScore {
     blocks.push(missingBlock("speed", sheet.minutes > 0 ? "موديلات تانية للمقارنة" : "زمن معياري في مسار العمليات"));
   }
 
-  // ٦) المرتجعات: مفيش تسجيل مرتجعات في النظام لسه
-  blocks.push(missingBlock("returns", "تسجيل المرتجعات (موديول البيع والتسليم)"));
+  /*
+   * ٦) المرتجعات.
+   *
+   * والقياس هنا **نسبة** مش كمية: موديل باع ٥٠٠٠ ورجع منه ٥٠ أحسن من موديل
+   * باع ٢٠٠ ورجع منه ٢٠، والكمية لوحدها بتقول العكس. وعشان كده لو مافيش
+   * كمية بيع نقارن عليها، البند بيتشال من الحساب بدل ما ياخد صفر ويحكم
+   * على الموديل بحاجة مش معروفة.
+   */
+  const ret = modelReturns(db, productId);
+  if (ret.ratePct !== null) {
+    blocks.push({
+      key: "returns",
+      label: PROFIT_LABEL.returns,
+      weight: PROFIT_WEIGHTS.returns,
+      // ٢٪ إرجاع أو أقل تمام، و١٠٪ يبقى البند اتصفّر
+      value: clamp(100 - Math.max(0, ret.ratePct - 2) * 12.5),
+      why:
+        ret.qty > 0
+          ? `رجع ${round(ret.qty)} من ${round(ret.soldQty)} متسلّمة (${round(ret.ratePct)}٪)${ret.topReason ? ` — أشهر سبب: ${ret.topReason.label}` : ""}`
+          : `مرجّعش ولا قطعة من ${round(ret.soldQty)} متسلّمة`,
+      missing: null,
+    });
+  } else {
+    blocks.push(missingBlock("returns", "كميات متسلّمة للموديل ده نقيس نسبة الإرجاع عليها"));
+  }
 
   const scored = blocks.filter((b) => b.value !== null);
   const weight = scored.reduce((s, b) => s + b.weight, 0);

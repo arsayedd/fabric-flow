@@ -28,6 +28,8 @@ import { ScanPage } from "@/pages/ScanPage";
 import { LabelsPage } from "@/pages/LabelsPage";
 import { TracePage } from "@/pages/TracePage";
 import { OutsourcingPage } from "@/pages/OutsourcingPage";
+import { ReturnsPage } from "@/pages/ReturnsPage";
+import { InsightsPage } from "@/pages/InsightsPage";
 import { CostingPage } from "@/pages/CostingPage";
 import { CommandPage } from "@/pages/CommandPage";
 import { ProductsPage, ProductDetailPage } from "@/pages/ProductsPage";
@@ -102,6 +104,14 @@ function appRoutes() {
         {guarded("/floor", "production", <FloorPage />)}
         {guarded("/station", "production", <StationPage />)}
         {guarded("/outsourcing", "purchasing", <OutsourcingPage />)}
+        {/*
+          المرتجعات والاستنتاجات مفتوحين على مستوى المسار عشان الاتنين
+          بيمسّوا أكتر من موديول: المرتجع بياخد صلاحية الطرف اللي جه منه،
+          والاستنتاج بياخد صلاحية الدفتر اللي اتبنى عليه. ولو قفلناهم على
+          موديول واحد، اللي شغله على مرتجعات الموردين مكانش هيوصل لها.
+        */}
+        <Route path="/returns" element={<ReturnsPage />} />
+        <Route path="/insights" element={<InsightsPage />} />
         {guarded("/planning", "planning", <PlanningPage />)}
         {guarded("/products", "sales", <ProductsPage />)}
         {guarded("/products/:id", "sales", <ProductDetailPage />)}

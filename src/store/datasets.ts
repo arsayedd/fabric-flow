@@ -6,12 +6,29 @@ import { LAY_STATUS_LABEL, layMath } from "./cutting";
 import { bundleState, defectPareto, opMinutes, wip as wipRows, workerEfficiency } from "./floor";
 import { SUB_STATUS_LABEL, subViews } from "./outsourcing";
 import { describe } from "./codes";
+import { itemName, partyName, returnImpact } from "./returns";
 import { activeBom, bomLines, materialById, materialStock, operationById, orderStages, productById, stockQty, unitName } from "./manufacturing";
 import { customerStats, partyById, partyCredit } from "./parties";
 import { mrp, openOrders, orderLoad, schedule } from "./planning";
 import { DOC_DEFS, DOC_STATUS_LABEL } from "./documents";
 import type { PermModule } from "./permissions";
-import { KIND_LABEL, METHOD_LABEL, ORDER_STATUS_LABEL, PAY_TYPE_LABEL, ROLE_LABEL, SCAN_ACTION_LABEL, STOCK_KIND_LABEL, type Db } from "./types";
+import {
+  COMPLAINT_KIND_LABEL,
+  COMPLAINT_STATUS_LABEL,
+  KIND_LABEL,
+  METHOD_LABEL,
+  ORDER_STATUS_LABEL,
+  PAY_TYPE_LABEL,
+  RETURN_CONDITION_LABEL,
+  RETURN_REASON_DEFS,
+  RETURN_RESOLUTION_LABEL,
+  RETURN_SOURCE_LABEL,
+  RETURN_STATUS_LABEL,
+  ROLE_LABEL,
+  SCAN_ACTION_LABEL,
+  STOCK_KIND_LABEL,
+  type Db,
+} from "./types";
 
 /**
  * سجل البيانات القابلة للتصدير.
@@ -1205,6 +1222,105 @@ export const DATASETS: DatasetDef[] = [
       "الكميات مش مجموعة: نفس القطع بتتمسح على كل عملية، فالجمع كان بيعدّها أكتر من مرة.",
       "السجل اللي الكود شاور عليه ممكن يكون اتغيّر بعد المسح؛ الكود المحفوظ هو اللي اتقرا وقتها.",
     ],
+  },
+  {
+    key: "returns",
+    title: "المرتجعات",
+    about: "رجع إيه ومن مين وليه، وإيه القرار، وأثره على الربح.",
+    area: "sales",
+    module: "sales",
+    screen: "/returns",
+    groupBy: "source",
+    cols: [
+      code("code", "رقم المرتجع"),
+      text("source", "رجع من", 14),
+      day("date", "التاريخ"),
+      text("party", "الجهة", 22),
+      text("item", "الصنف", 22),
+      count("qty", "الكمية"),
+      text("condition", "الحالة"),
+      text("reason", "السبب", 16),
+      text("reasonNote", "تفاصيل السبب", 26),
+      text("status", "الموقف"),
+      text("resolution", "القرار", 16),
+      cash("unitValue", "قيمة الوحدة", "none"),
+      cash("settleAmount", "المبلغ المتسوّى"),
+      cash("extraCost", "مصاريف المرتجع"),
+      cash("impact", "أثره على الربح"),
+      text("delivery", "التوريد", 18),
+      text("order", "الأمر", 14),
+    ],
+    rows: (db) =>
+      db.returns.map((r) => {
+        const del = r.deliveryId ? db.deliveries.find((d) => d.id === r.deliveryId) : null;
+        return {
+          id: r.id,
+          code: r.code,
+          source: RETURN_SOURCE_LABEL[r.source],
+          date: r.date,
+          party: partyName(db, r),
+          item: itemName(db, r),
+          qty: r.qty,
+          condition: RETURN_CONDITION_LABEL[r.condition],
+          reason: RETURN_REASON_DEFS[r.reason].label,
+          reasonNote: r.reasonNote,
+          status: RETURN_STATUS_LABEL[r.status],
+          resolution: r.resolution ? RETURN_RESOLUTION_LABEL[r.resolution] : "لسه",
+          unitValue: r.unitValue,
+          settleAmount: r.settleAmount,
+          extraCost: r.extraCost,
+          impact: returnImpact(db, r).total,
+          delivery: del ? `${del.model} ${formatDate(del.date)}` : "",
+          order: r.orderId ? db.orders.find((o) => o.id === r.orderId)?.code ?? "" : "",
+        };
+      }),
+    notes: [
+      "«أثره على الربح» بيتحسب بعد القرار بس — المرتجع اللي لسه مستني فحص أثره صفر مش مجهول.",
+      "مرتجع العميل السليم اللي رجع المخزن أثره الهامش بس، لأن تكلفة القطعة اترجعت. والتالف أثره الفاتورة كلها.",
+      "«قيمة الوحدة» مش مجموعة: هي سعر القطعة وقت المرتجع، ومجموع الأسعار مالوش معنى.",
+    ],
+  },
+  {
+    key: "complaints",
+    title: "الشكاوى",
+    about: "مين اشتكى وعلى إيه ومين مسؤولها وإمتى اتحلّت.",
+    area: "sales",
+    module: "parties",
+    screen: "/returns?tab=complaints",
+    groupBy: "kind",
+    cols: [
+      code("code", "رقم الشكوى"),
+      day("date", "التاريخ"),
+      text("party", "الجهة", 22),
+      text("kind", "النوع", 14),
+      text("severity", "الخطورة"),
+      text("subject", "الموضوع", 30),
+      text("owner", "مسؤولها", 18),
+      day("dueDate", "ميعاد الرد"),
+      text("status", "الموقف"),
+      cash("claimAmount", "مطالبة مالية"),
+      count("days", "أيام للحل", "avg"),
+      text("resolution", "اللي اتعمل", 34),
+    ],
+    rows: (db) => {
+      const SEV: Record<string, string> = { low: "بسيطة", medium: "متوسطة", high: "خطيرة" };
+      return db.complaints.map((c) => ({
+        id: c.id,
+        code: c.code,
+        date: c.date,
+        party: partyById(db, c.partyId)?.name ?? "جهة محذوفة",
+        kind: COMPLAINT_KIND_LABEL[c.kind],
+        severity: SEV[c.severity] ?? c.severity,
+        subject: c.subject,
+        owner: db.members.find((m) => m.id === c.ownerId)?.name ?? "",
+        dueDate: c.dueDate ?? "",
+        status: COMPLAINT_STATUS_LABEL[c.status],
+        claimAmount: c.claimAmount,
+        days: c.resolvedAt ? Math.max(0, Math.round((new Date(c.resolvedAt.slice(0, 10)).getTime() - new Date(c.date).getTime()) / 86400000)) : null,
+        resolution: c.resolution,
+      }));
+    },
+    notes: ["«أيام للحل» فاضية للشكوى اللي لسه مفتوحة — الصفر كان هيقول إنها اتحلّت في نفس اليوم."],
   },
   {
     key: "audit",
