@@ -50,7 +50,7 @@ ok("compare offered", body.includes("الفترة اللي قبلها") && body.
 
 const revenueOf = async () => {
   const t = await page.locator("main").innerText();
-  const m = t.match(/المؤشرات[\s\S]{0,120}?الإيراد\s+[^\d٠-٩]*([٠-٩٬\.]+)\s*ج/);
+  const m = t.match(/المؤشرات[\s\S]{0,120}?الإيراد\s+[^\d٠-٩]*([٠-٩٬.]+)\s*ج/);
   return m ? arabic(m[1]) : null;
 };
 const monthRevenue = await revenueOf();

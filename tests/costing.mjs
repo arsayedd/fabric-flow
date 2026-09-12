@@ -56,7 +56,6 @@ await page.waitForTimeout(300);
 ok("customer level renders", (await page.locator("main").innerText()).includes("العميل"));
 
 /* ── هامش الهدف يغيّر الأرقام ──────────────────── */
-const marginOf = (t) => arabic((t.match(/متوسط الهامش\s*\n?([^\n]+)/) ?? [])[1] ?? "0");
 const targetOf = (t) => arabic((t.match(/الهدف ([\d٠-٩]+)٪/) ?? [])[1] ?? "0");
 dash = await page.locator("main").innerText();
 const targetBefore = targetOf(dash);

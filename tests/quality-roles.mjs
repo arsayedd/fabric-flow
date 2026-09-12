@@ -24,7 +24,6 @@ for (const role of ["صاحب المصنع", "محاسب", "مشرف"]) {
     await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
     await page.waitForTimeout(600);
     const url = page.url().replace(BASE, "") || "/";
-    const txt = await page.locator("main").innerText();
     console.log(`  ${path} → ${url === path ? "مفتوح" : `محوّل لـ${url}`}`);
     if (url !== path) continue;
     if (path === "/quality") {
