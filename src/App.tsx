@@ -39,6 +39,7 @@ import { MachineProfilePage } from "@/pages/MachineProfilePage";
 import { InsightsPage } from "@/pages/InsightsPage";
 import { CostingPage } from "@/pages/CostingPage";
 import { CommandPage } from "@/pages/CommandPage";
+import { AiPage } from "@/pages/AiPage";
 import { ProductsPage, ProductDetailPage } from "@/pages/ProductsPage";
 import { MaterialsPage, MaterialDetailPage } from "@/pages/MaterialsPage";
 import { AuditPage, SettingsPage, StaffPage } from "@/pages/StaffPage";
@@ -129,6 +130,15 @@ function appRoutes() {
         {guarded("/machines", "machines", <MachinesPage />)}
         {guarded("/machines/tickets", "machines", <MachinesPage initialTab="tickets" />)}
         {guarded("/machines/:id", "machines", <MachineProfilePage />)}
+        {/*
+          «اسأل صنعة» مفتوحة زي غرفة التحكم: **كل سؤال عليه صلاحيته**،
+          والمحرّك نفسه بيرفض السؤال اللي موديوله مقفول على اللي سائل.
+          لو قفلناها على موديول واحد، المشرف اللي بيسأل «أنهي خامة قربت
+          تخلص» مكانش هيوصل لسؤال هو أصلًا بيشوف شاشته. وقواعد التنبيه
+          جوه الشاشة محكومة بصلاحية الإعدادات.
+        */}
+        <Route path="/ai" element={<AiPage />} />
+        <Route path="/ai/rules" element={<AiPage initialTab="rules" />} />
         {guarded("/quality", "quality", <QualityPage />)}
         {guarded("/repairs", "quality", <RepairsPage />)}
         {guarded("/planning", "planning", <PlanningPage />)}

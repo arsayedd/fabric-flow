@@ -680,9 +680,11 @@ function ModulesStep({
   setPicked: (next: ModuleKey[]) => void;
   onNext: () => void;
 }) {
+  // الـ١٨ قسم كلهم مبنيين، فمفيش خانة مطفية في الشاشة دي. القايمة
+  // بتتقرا من `MODULE_READY` بدل ما تتكتب بالإيد عشان أي قسم جديد
+  // يتضاف لسه مابنيناهوش مايظهرش هنا كوعد
   const ready = MODULE_KEYS.filter((k) => MODULE_READY[k]);
   const all = ready.every((k) => picked.includes(k));
-  const soon = MODULE_KEYS.filter((k) => !MODULE_READY[k]);
 
   return (
     <div className="space-y-4">
@@ -709,40 +711,30 @@ function ModulesStep({
         <div key={g.label}>
           <p className="text-[13px] text-muted-foreground">{g.label}</p>
           <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
-            {g.keys.map((k) => {
+            {g.keys.filter((k) => MODULE_READY[k]).map((k) => {
               const on = picked.includes(k);
-              const built = MODULE_READY[k];
               return (
                 <button
                   key={k}
                   type="button"
-                  disabled={!built}
                   onClick={() => setPicked(on ? picked.filter((x) => x !== k) : [...picked, k])}
                   className={cn(
                     "flex items-start justify-between gap-2 rounded-md border px-4 py-3 text-right text-sm transition-colors",
-                    !built
-                      ? "cursor-not-allowed border-border bg-muted/40 text-muted-foreground"
-                      : on
-                        ? "border-accent bg-accent-soft"
-                        : "border-border bg-card hover:border-accent/50",
+                    on ? "border-accent bg-accent-soft" : "border-border bg-card hover:border-accent/50",
                   )}
                 >
                   <span className="min-w-0">
                     {MODULE_LABEL[k]}
                     <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{MODULE_ABOUT[k]}</span>
                   </span>
-                  {built ? (
-                    <span
-                      className={cn(
-                        "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
-                        on ? "border-accent bg-accent text-accent-foreground" : "border-border",
-                      )}
-                    >
-                      {on ? <Check className="h-3 w-3" /> : null}
-                    </span>
-                  ) : (
-                    <span className="mt-0.5 shrink-0 text-[11px]">قريب</span>
-                  )}
+                  <span
+                    className={cn(
+                      "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
+                      on ? "border-accent bg-accent text-accent-foreground" : "border-border",
+                    )}
+                  >
+                    {on ? <Check className="h-3 w-3" /> : null}
+                  </span>
                 </button>
               );
             })}
@@ -751,8 +743,8 @@ function ModulesStep({
       ))}
 
       <p className="text-xs leading-6 text-muted-foreground">
-        {soon.map((k) => MODULE_LABEL[k]).join(" و")} لسه مش مبنيين، فمش بنخليك تختارهم عشان ما نوعدك بشاشة مش
-        موجودة. والمسح والبحث والإشعارات والإعدادات مش في القايمة دي أصلًا: دي مداخل بتفضل شغّالة دايمًا.
+        الـ{qty(ready.length, 0)} قسم كلهم شغّالين من أول يوم — مفيش قسم هنا «قريبًا». والمسح والبحث والإشعارات
+        والإعدادات والمساعدة مش في القايمة دي أصلًا: دي مداخل بتفضل شغّالة دايمًا مهما اخترت.
       </p>
       <Nav
         onBack={null}

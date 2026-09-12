@@ -4,6 +4,7 @@ import { costSheet, profitAlerts, profitDashboard } from "./costing";
 import { customerScore, riskScore } from "./intelligence";
 import { orderStages, routingLines, materialStock, productById } from "./manufacturing";
 import { machineSummary, machinesDownNow } from "./machines";
+import { rulesOf } from "./rules";
 import { capacityBase, isWorkDay, mrp, openOrders, schedule, workDaysBetween } from "./planning";
 import type { Db } from "./types";
 import { MACHINE_STATE_LABEL } from "./types";
@@ -463,6 +464,9 @@ export function exceptions(db: Db): Exception[] {
   const today = cairoToday();
   const out: Exception[] = [];
   const plan = schedule(db);
+  // حساسية التنبيهات قرار مصنع مش ثابت في الكود — والافتراضي هو نفس
+  // الأرقام اللي كانت مكتوبة هنا بالحرف
+  const rules = rulesOf(db);
 
   /* أوامر متأخرة أو مش هتلحق */
   for (const row of plan.rows) {
@@ -470,7 +474,7 @@ export function exceptions(db: Db): Exception[] {
     const order = db.orders.find((o) => o.id === row.id);
     out.push({
       key: `late-${row.id}`,
-      tone: row.lateDays >= 3 ? "danger" : "warn",
+      tone: row.lateDays >= rules.lateOrderDangerDays ? "danger" : "warn",
       title: `أمر ${row.code} مش هيلحق ميعاده بـ${num(row.lateDays, 0)} يوم`,
       why: `الباقي فيه شغل ${num(Math.round(row.minutes), 0)} دقيقة، وبالترتيب الحالي هيخلص ${formatDate(row.finish)} والميعاد ${formatDate(row.dueDate)}${
         row.afterCode ? ` — واقف بعد ${row.afterCode}` : ""
@@ -497,7 +501,7 @@ export function exceptions(db: Db): Exception[] {
   /* خامات على وشك تخلص */
   for (const m of materialStock(db)) {
     if (m.perDay <= 0 || m.daysOfCover === null) continue;
-    if (m.daysOfCover > m.leadTimeDays + 3) continue;
+    if (m.daysOfCover > m.leadTimeDays + rules.stockBufferDays) continue;
     out.push({
       key: `mat-${m.id}`,
       tone: m.daysOfCover <= m.leadTimeDays ? "danger" : "warn",
@@ -541,7 +545,7 @@ export function exceptions(db: Db): Exception[] {
   for (const c of [...byClient.values()].sort((a, b) => b.amount - a.amount).slice(0, 5)) {
     out.push({
       key: `due-${c.id}`,
-      tone: c.days >= 7 ? "danger" : "warn",
+      tone: c.days >= rules.overdueDangerDays ? "danger" : "warn",
       title: `${c.name} عليه ${moneyPlain(c.amount)} ج متأخرة`,
       why: `أقدم توريد فات ميعاده بـ${num(c.days, 0)} يوم`,
       action: "ابعت تذكير واتساب أو كلّمه",
@@ -557,7 +561,7 @@ export function exceptions(db: Db): Exception[] {
     const name = db.parties.find((p) => p.id === col.clientId)?.name ?? "عميل";
     out.push({
       key: `pending-${col.id}`,
-      tone: days >= 5 ? "danger" : "warn",
+      tone: days >= rules.pendingCollectDays ? "danger" : "warn",
       title: `تحصيل ${moneyPlain(col.amount)} ج من ${name} مستني تأكيد من ${num(days, 0)} يوم`,
       why: "التحصيل مش داخل في الرصيد لحد ما تتأكد إن الفلوس وصلت الحساب",
       action: "أكّد وصول الفلوس أو ألغِ التحصيل",
@@ -700,7 +704,7 @@ export function exceptions(db: Db): Exception[] {
     const hours = d.downMinutes / 60;
     out.push({
       key: `machine-${d.machine.id}`,
-      tone: hours >= 4 ? "danger" : "warn",
+      tone: hours >= rules.machineDownDangerHours ? "danger" : "warn",
       title: `${d.machine.name} واقفة ${num(hours, 1)} ساعة`,
       why: d.ticket
         ? `${d.ticket.cause || "من غير سبب مكتوب"}${d.machine.line ? ` — ${d.machine.line}` : ""} · تذكرة ${d.ticket.code}`

@@ -14,6 +14,7 @@ import { ExportMenu } from "@/components/export/ExportMenu";
 import { cairoToday, formatDate, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
 import { datasetOf } from "@/store/datasets";
+import { rulesOf } from "@/store/rules";
 import { downtimeByLine, downtimeCauses, machineList, machineSummary, serviceDue, ticketList, workDaysIn, defaultRange } from "@/store/machines";
 import { partiesWithRole } from "@/store/parties";
 import {
@@ -472,14 +473,21 @@ function Downtime() {
 
 function Plan() {
   const { db, can } = useFactory();
-  const due = useMemo(() => serviceDue(db, 30), [db]);
+  // مدى «الجاية» من قواعد التنبيه، مش رقم مكتوب في الشاشة
+  const window = rulesOf(db).serviceWindowDays;
+  const due = useMemo(() => serviceDue(db, window), [db, window]);
   const noPlan = useMemo(() => machineList(db).filter((r) => !r.nextServiceOn && r.machine.state !== "retired"), [db]);
   const [ticketFor, setTicketFor] = useState<string | null>(null);
 
   return (
     <div className="space-y-3">
       <Card>
-        <p className="mb-2 text-sm">صيانة مستحقة أو جاية في ٣٠ يوم</p>
+        <p className="mb-2 text-sm">
+          صيانة مستحقة أو جاية في {qty(window, 0)} يوم
+          <Link to="/ai/rules" className="ms-2 text-xs text-accent underline-offset-4 hover:underline">
+            غيّر المدة
+          </Link>
+        </p>
         {due.length ? (
           <ul className="space-y-2">
             {due.map((d) => (

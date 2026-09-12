@@ -15,6 +15,7 @@ import {
 } from "./compute";
 import type { ScoreWeights } from "./intelligence";
 import type { CapacitySettings } from "./planning";
+import { RULE_DEFS, RULE_KEYS, type AlertRules } from "./rules";
 import {
   LEGACY_DB_KEY,
   accessibleWorkspaces,
@@ -484,6 +485,7 @@ type FactoryApi = {
   setScoreWeights: (weights: ScoreWeights) => void;
   setCapacity: (capacity: CapacitySettings) => void;
   setTargetMargin: (value: number) => void;
+  setRules: (rules: AlertRules) => void;
   addMaterial: (input: Omit<Material, "id" | "factoryId">) => void;
   updateMaterial: (id: string, patch: Partial<Material>) => void;
   addProduct: (input: Omit<Product, "id" | "factoryId">) => void;
@@ -1280,6 +1282,24 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         mutate(
           { settings: { ...db.settings, targetMarginPct: value } },
           { action: "update", table: "settings", recordId: "target_margin", before: db.settings?.targetMarginPct ?? null, after: value },
+        );
+      },
+      /**
+       * حساسية التنبيهات: مش قرار مالي، لكنه بيغيّر اللي كل الفريق
+       * بيشوفه كخطر — فمحتاج صلاحية إعدادات وبيتسجّل في الدفتر.
+       */
+      setRules: (rules) => {
+        need("settings", "edit");
+        for (const k of RULE_KEYS) {
+          const def = RULE_DEFS[k];
+          const v = rules[k];
+          if (!Number.isFinite(v) || v < def.min || v > def.max) {
+            throw new Error(`${def.label}: الرقم لازم يكون بين ${def.min} و${def.max} ${def.unit}.`);
+          }
+        }
+        mutate(
+          { settings: { ...db.settings, rules } },
+          { action: "update", table: "settings", recordId: "alert_rules", before: db.settings?.rules ?? null, after: rules },
         );
       },
       /** قرار الطاقة: بيغيّر جدول المصنع كله، فمحتاج صلاحية تعديل وبيتسجل */

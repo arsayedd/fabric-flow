@@ -9,8 +9,10 @@
  *   ٣. البحث الشامل ولوحة الأوامر (نفس العناوين، مصدر واحد)
  *   ٤. الاختصار «+ إضافة» (الأفعال المتاحة حسب الصلاحية)
  *
- * العناصر اللي `ready: false` بتتعرض مطفية ومكتوب عليها «قريب» — بنقول مش
- * مبني بدل ما نوعد بلينك بيوصّل لصفحة فاضية.
+ * و`ready` بقى `true` على كل عنصر: القائمة مافيهاش حاجة مطفية مكتوب
+ * عليها «قريب». الحقل نفسه باقي عشان أي عنصر جديد يتضاف لسه مابنيناهوش
+ * يتقال عنه الصدق ده بدل ما يبان شغّال — لكن العنصر اللي شغله بيتعمل
+ * في شاشة تانية بقى **بيوصّل للشاشة دي بالاسم** بدل ما يبان قسم مقفول.
  */
 
 import {
@@ -29,7 +31,6 @@ import {
   ScrollText,
   Settings,
   ShieldCheck,
-  ShoppingCart,
   Truck,
   Undo2,
   UserRound,
@@ -37,7 +38,6 @@ import {
   UsersRound,
   PackageSearch,
   Wallet,
-  Warehouse,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
@@ -94,8 +94,6 @@ export const NAV: NavSection[] = [
     icon: Package,
     items: [
       item("/products", "الموديلات", "sales", "sales"),
-      item("/samples", "العينات", "sales", "sales", false),
-      item("/techpack", "الملف الفني", "sales", "sales", false),
     ],
   },
   {
@@ -103,8 +101,8 @@ export const NAV: NavSection[] = [
     label: "الخامات",
     icon: Boxes,
     items: [
-      item("/materials", "الخامات والأرصدة", "inventory", "inventory"),
-      item("/waste", "الهالك", "inventory", "inventory", false),
+      // الهالك والجرد حركات مخزون جوه نفس الشاشة، مش شاشتين تانيتين
+      item("/materials", "الخامات والأرصدة والهالك والجرد", "inventory", "inventory"),
     ],
   },
   {
@@ -121,21 +119,11 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    key: "stock",
-    label: "المخزون",
-    icon: Warehouse,
-    items: [
-      item("/stock", "مخزن الإنتاج التام", "inventory", "inventory", false),
-      item("/count", "الجرد", "inventory", "inventory", false),
-    ],
-  },
-  {
     key: "workers",
     label: "العمال",
     icon: UsersRound,
     items: [
       item("/workers", "العمال والحضور", "workers", "workers"),
-      item("/shifts", "الورديات", "workers", "workers", false),
     ],
   },
   {
@@ -157,15 +145,6 @@ export const NAV: NavSection[] = [
       item("/supply", "التوريد والدفعات", "purchasing", "supply"),
       item("/costs", "فواتير المشتريات", "purchasing", "purchasing"),
       item("/outsourcing", "الورش الخارجية", "purchasing", "purchasing"),
-    ],
-  },
-  {
-    key: "sales",
-    label: "المبيعات",
-    icon: ShoppingCart,
-    items: [
-      item("/deliveries", "التوريدات", "sales", "sales", false),
-      item("/invoices", "الفواتير", "sales", "sales", false),
     ],
   },
   {
@@ -223,14 +202,17 @@ export const NAV: NavSection[] = [
       item("/dashboard", "غرفة التحكم", "production", "reports"),
       item("/intelligence", "ذكاء العملاء", "parties", "parties"),
       item("/insights", "استنتاجات صنعة", "reports", null),
-      item("/reports", "بانِي التقارير", "reports", "reports", false),
     ],
   },
   {
     key: "ai",
     label: "مساعد صنعة",
     icon: Brain,
-    items: [item("/ai", "اسأل صنعة", "reports", "automation", false)],
+    items: [
+      // مفتوحة للكل زي غرفة التحكم: الصلاحية على كل سؤال لوحده جوه المحرّك
+      item("/ai", "اسأل صنعة", "production", "automation"),
+      item("/ai/rules", "قواعد التنبيه", "settings", "automation"),
+    ],
   },
   {
     key: "settings",
@@ -274,6 +256,7 @@ export const ROUTE_LABEL: Record<string, string> = {
   // القسم اسمه «الماكينات والصيانة»، فالشاشة اسمها «الماكينات» — غير كده
   // خط المسار بيكرّر نفس الجملة مرتين ورا بعضها
   "/machines": "الماكينات",
+  "/ai": "اسأل صنعة",
   "/products": "الموديلات",
   "/materials": "الخامات",
   "/workers": "العمال",

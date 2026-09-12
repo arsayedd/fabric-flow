@@ -341,6 +341,14 @@ export type Settings = {
   permissions?: Partial<Record<Role, PermMatrix>>;
   /** ترويسة المستندات وقواعد الترقيم — كلها اختيارية، والغايب بياخد افتراضي */
   docs?: DocSettings;
+  /**
+   * حساسية التنبيهات. الغايب بياخد الافتراضي من `rules.ts`، فمصنع
+   * مافتحش الشاشة دي بيشوف نفس تنبيهاته بالحرف.
+   */
+  rules?: Partial<Record<
+    "stockBufferDays" | "overdueDangerDays" | "pendingCollectDays" | "lateOrderDangerDays" | "machineDownDangerHours" | "serviceWindowDays",
+    number
+  >>;
   /** قرار الطاقة: أساس الجدولة كلها */
   capacity?: {
     hoursPerDay: number;
