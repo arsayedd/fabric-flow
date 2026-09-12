@@ -9,7 +9,7 @@ import { Input, selectClass } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
-import { DEFECT_REASONS, bundleByCode, bundleState, myActiveOps, opMinutes, pausedMinutesNow } from "@/store/floor";
+import { DEFECT_REASONS, bundleByCode, bundleState, myActiveOps, opAllowance, opMinutes, pausedMinutesNow } from "@/store/floor";
 import { operationById } from "@/store/manufacturing";
 import { FLOOR_ISSUE_LABEL, FLOOR_ISSUE_KINDS, type Bundle, type BundleOp, type FloorIssueKind } from "@/store/types";
 
@@ -224,8 +224,10 @@ function FinishPanel({ op, onClose }: { op: BundleOp | null; onClose: () => void
   const { db, finishBundleOp } = useFactory();
   const bundle = op ? (db.bundles ?? []).find((b) => b.id === op.bundleId) : null;
   // الحالة الغالبة إن الباندل بيخلص كامل، فالخانة بتيجي مليانة والعامل
-  // بيقلّلها لو حصل عيب — أسرع من إنه يكتب الرقم في كل باندل
-  const [good, setGood] = useState(String(bundle?.qty ?? ""));
+  // بيقلّلها لو حصل عيب — أسرع من إنه يكتب الرقم في كل باندل. والسقف
+  // هو المتاح فعلًا مش كمية الباندل: المرحلة اللي قبلها ممكن سلّمت أقل
+  const allow = op ? opAllowance(db, op) : null;
+  const [good, setGood] = useState(String(allow?.max ?? bundle?.qty ?? ""));
   const [rework, setRework] = useState("0");
   const [scrap, setScrap] = useState("0");
   const [defect, setDefect] = useState("");
@@ -265,6 +267,11 @@ function FinishPanel({ op, onClose }: { op: BundleOp | null; onClose: () => void
               {operationById(db, op.operationId)?.name ?? "عملية"} · {qty(bundle.qty, 0)} قطعة · ماشية{" "}
               {qty(opMinutes(op), 0)} دقيقة
             </p>
+            {allow && bundle && allow.max < bundle.qty ? (
+              <p className="text-warn">
+                المتاح {qty(allow.max, 0)} بس — {allow.why}.
+              </p>
+            ) : null}
             {op.stdMinutes > 0 ? (
               <p className="text-muted-foreground">
                 الزمن المعياري {qty(op.stdMinutes * bundle.qty, 0)} دقيقة للباندل كله
@@ -275,7 +282,7 @@ function FinishPanel({ op, onClose }: { op: BundleOp | null; onClose: () => void
           </div>
 
           <Field label="سليم">
-            <Input value={good} onChange={(e) => setGood(e.target.value)} inputMode="numeric" placeholder={String(bundle.qty)} />
+            <Input value={good} onChange={(e) => setGood(e.target.value)} inputMode="numeric" placeholder={String(allow?.max ?? bundle.qty)} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="محتاج إعادة">

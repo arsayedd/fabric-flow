@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { AlertTriangle, Camera, CameraOff, CheckCircle2, ExternalLink, Play, ScanLine, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { Field, Panel } from "@/components/Panel";
+import { ExportMenu } from "@/components/export/ExportMenu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -10,8 +11,9 @@ import { Input, selectClass } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cairoToday, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
+import { datasetOf } from "@/store/datasets";
 import { isHit, KIND_MODULE, resolveCode, type Hit, type Scanned } from "@/store/codes";
-import { DEFECT_REASONS } from "@/store/floor";
+import { DEFECT_REASONS, bundleState, opAllowance } from "@/store/floor";
 import { operationById } from "@/store/manufacturing";
 import { KIND_LABEL, SCAN_ACTION_LABEL, STOCK_KIND_LABEL, type Bundle, type StockKind } from "@/store/types";
 
@@ -118,7 +120,11 @@ export function ScanPage() {
       {result ? isHit(result) ? <HitCard hit={result} /> : <MissCard miss={result} /> : null}
 
       <Card>
-        <h3 className="mb-2 text-base">آخر عمليات المسح</h3>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h3 className="text-base">آخر عمليات المسح</h3>
+          {/* مفيش قائمة بلا تصدير: الظاهر هنا آخر تمانية، والتصدير بيطلّع الدفتر كله */}
+          <ExportMenu module="audit" dataset={() => datasetOf(db, "scans")} compact />
+        </div>
         {recent.length ? (
           <div className="space-y-2">
             {recent.map((s) => (
@@ -226,6 +232,12 @@ function HitCard({ hit }: { hit: Hit }) {
   const [move, setMove] = useState(false);
 
   const bundle = hit.kind === "bundle" ? (db.bundles ?? []).find((b) => b.id === hit.id) ?? null : null;
+  /*
+    حالة الباندل من نفس الحاسبة اللي الشاشات التانية بتستعملها: باندل
+    خلّص كل عمليات المسار مايبانش عليه زر «ابدأ» — الميوتيشن بترفض
+    برضو، بس زر بيرفض لما تدوسه مش أحسن من زر مش موجود.
+  */
+  const st = bundle ? bundleState(db, bundle) : null;
   const op = bundle ? (db.bundleOps ?? []).find((o) => o.bundleId === bundle.id && o.state !== "done") ?? null : null;
   const material = hit.kind === "material" ? db.materials.find((m) => m.id === hit.id) ?? null : null;
   const doc = hit.kind === "document" ? db.documents.find((d) => d.id === hit.id) ?? null : null;
@@ -250,7 +262,10 @@ function HitCard({ hit }: { hit: Hit }) {
             <p className="text-base">{hit.label}</p>
             <p className="text-sm text-muted-foreground">{hit.sub}</p>
           </div>
-          <Badge tone="gold">{KIND_LABEL[hit.kind]}</Badge>
+          <div className="flex flex-wrap gap-1.5">
+            <Badge tone="gold">{KIND_LABEL[hit.kind]}</Badge>
+            {st ? <Badge tone={st.done ? "ok" : op?.state === "paused" ? "warn" : op ? "gold" : "muted"}>{st.label}</Badge> : null}
+          </div>
         </div>
 
         {hit.via === "text" ? (
@@ -270,9 +285,9 @@ function HitCard({ hit }: { hit: Hit }) {
 
         {bundle ? (
           <div className="grid gap-2 sm:grid-cols-3">
-            {!op && can.do("production", "create") ? (
+            {!op && !st?.done && can.do("production", "create") ? (
               <Button onClick={start}>
-                <Play /> ابدأ العملية
+                <Play /> ابدأ {st?.nextOperationName ?? "العملية"}
               </Button>
             ) : null}
             {op && can.do("production", "edit") ? (
@@ -284,6 +299,11 @@ function HitCard({ hit }: { hit: Hit }) {
               <Button variant="outline" onClick={() => setIssue(bundle)}>
                 <Wrench /> بلّغ مشكلة
               </Button>
+            ) : null}
+            {st?.done ? (
+              <p className="col-span-full text-sm text-muted-foreground">
+                الباندل ده خلّص كل عمليات المسار. اللي بعده تغليف وتسليم، ودول لسه مش بيتسجّلوا على الباندل.
+              </p>
             ) : null}
           </div>
         ) : null}
@@ -320,7 +340,9 @@ function HitCard({ hit }: { hit: Hit }) {
 function FinishPanel({ bundle, onClose }: { bundle: Bundle | null; onClose: () => void }) {
   const { db, finishBundleOp, recordScan } = useFactory();
   const op = bundle ? (db.bundleOps ?? []).find((o) => o.bundleId === bundle.id && o.state !== "done") ?? null : null;
-  const [good, setGood] = useState(String(bundle?.qty ?? ""));
+  // المتاح مش كمية الباندل بالضرورة: المرحلة اللي قبلها ممكن تكون سلّمت أقل
+  const allow = op ? opAllowance(db, op) : null;
+  const [good, setGood] = useState(String(allow?.max ?? bundle?.qty ?? ""));
   const [rework, setRework] = useState("0");
   const [scrap, setScrap] = useState("0");
   const [defect, setDefect] = useState("");
@@ -365,6 +387,11 @@ function FinishPanel({ bundle, onClose }: { bundle: Bundle | null; onClose: () =
             <p className="text-muted-foreground">
               {operationById(db, op.operationId)?.name ?? "عملية"} · {qty(bundle.qty, 0)} قطعة
             </p>
+            {allow && allow.max < bundle.qty ? (
+              <p className="text-warn">
+                المتاح {qty(allow.max, 0)} بس — {allow.why}.
+              </p>
+            ) : null}
           </div>
           <Field label="سليم">
             <Input value={good} onChange={(e) => setGood(e.target.value)} inputMode="numeric" />

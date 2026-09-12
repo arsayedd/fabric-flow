@@ -156,6 +156,43 @@ export function bundleByCode(db: Db, code: string): Bundle | undefined {
   return (db.bundles ?? []).find((b) => b.code.toUpperCase() === clean);
 }
 
+/**
+ * أقصى كمية العملية دي تقدر تسجّلها دلوقتي، والسبب.
+ *
+ * الحارس اللي في الميوتيشن بيرفض التسجيل اللي بيعدّي كمية الأمر أو
+ * بيعدّي المرحلة اللي قبلها. بس **الرفض بعد ما العامل يكتب أسوأ من
+ * رقم مكتوب قدامه من الأول**: الباندل ٢٠ قطعة والخياطة سلّمت ١٦ بس،
+ * فالمكوى مالهاش غير ١٦. الدالة دي بترجّع الرقم ده عشان الفورم
+ * تبدأ بيه والشاشة تقول سببه.
+ */
+export function opAllowance(db: Db, op: BundleOp): { max: number; why: string } {
+  const bundle = (db.bundles ?? []).find((b) => b.id === op.bundleId);
+  const order = db.orders.find((o) => o.id === op.orderId);
+  if (!bundle || !order) return { max: 0, why: "" };
+
+  let max = bundle.qty;
+  let why = "";
+
+  const stages = orderStages(db, order);
+  const idx = stages.findIndex((s) => s.operationId === op.operationId);
+  const here = stages[idx];
+  const done = (here?.good ?? 0) + (here?.scrap ?? 0);
+
+  const byOrder = order.quantity - done;
+  if (byOrder < max) {
+    max = byOrder;
+    why = `كمية الأمر ${order.quantity} والمرحلة دي سجّلت ${done}`;
+  }
+  if (idx > 0) {
+    const byPrev = stages[idx - 1].good - done;
+    if (byPrev < max) {
+      max = byPrev;
+      why = `مرحلة ${stages[idx - 1].name} سلّمت ${stages[idx - 1].good} بس`;
+    }
+  }
+  return { max: Math.max(0, max), why };
+}
+
 /* ── الشغل الجاري بين العمليات (WIP) ─────────────────────────── */
 
 export type WipRow = {
