@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { money, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
-import { findings, rankGaps, supplierRealCosts, type CostFactor } from "@/store/realcost";
+import { findings, rankGaps, supplierRealCosts, untracedVendors, type CostFactor } from "@/store/realcost";
 
 /**
  * طبقة الذكاء: الاستنتاجات.
@@ -27,6 +27,7 @@ export function InsightsPage() {
   const { db, can } = useFactory();
   const rows = useMemo(() => findings(db), [db]);
   const suppliers = useMemo(() => supplierRealCosts(db), [db]);
+  const untraced = useMemo(() => untracedVendors(db), [db]);
   const gaps = useMemo(() => rankGaps(db), [db]);
 
   const seeSuppliers = can.do("purchasing", "view");
@@ -48,7 +49,7 @@ export function InsightsPage() {
       <div>
         <h2 className="text-2xl">استنتاجات صنعة</h2>
         <p className="text-sm text-muted-foreground">
-          مش شاشة أرقام. الحاجة الوحيدة اللي هنا هي اللي **مفيش شاشة لوحدها تقدر تقولها** — ناتج جمع دفترين أو تلاتة.
+          مش شاشة أرقام. الحاجة الوحيدة اللي هنا هي اللي مفيش شاشة لوحدها تقدر تقولها — ناتج جمع دفترين أو تلاتة.
         </p>
       </div>
 
@@ -87,7 +88,7 @@ export function InsightsPage() {
         </div>
       )}
 
-      {seeSuppliers ? <Suppliers rows={suppliers} /> : null}
+      {seeSuppliers ? <Suppliers rows={suppliers} untraced={untraced} /> : null}
       {seeModels ? <Ranks rows={gaps} /> : null}
     </div>
   );
@@ -109,8 +110,8 @@ function Factor({ f }: { f: CostFactor }) {
   );
 }
 
-function Suppliers({ rows }: { rows: ReturnType<typeof supplierRealCosts> }) {
-  if (!rows.length) return null;
+function Suppliers({ rows, untraced }: { rows: ReturnType<typeof supplierRealCosts>; untraced: ReturnType<typeof untracedVendors> }) {
+  if (!rows.length && !untraced.length) return null;
   return (
     <section className="space-y-3">
       <div>
@@ -119,6 +120,14 @@ function Suppliers({ rows }: { rows: ReturnType<typeof supplierRealCosts> }) {
           سعر المتر بيقول حاجة، والفلوس اللي خرجت فعلًا بتقول حاجة تانية. الفرق بينهم هو الهالك والمرتجعات.
         </p>
       </div>
+      {!rows.length ? (
+        <Card>
+          <p className="text-sm text-muted-foreground">
+            مافيش مورّد مربوطة فواتيره بخامات في دفتر المخزون، فمفيش تكلفة حقيقية تتحسب. الربط بيحصل لما الشراء
+            يتسجّل على الخامة نفسها مش على بند مصروف بس.
+          </p>
+        </Card>
+      ) : null}
       {rows.map((s) => (
         <Card key={s.partyId} className={s.flipped ? "border-danger/40" : ""}>
           <div className="flex flex-wrap items-start justify-between gap-2">
@@ -159,6 +168,23 @@ function Suppliers({ rows }: { rows: ReturnType<typeof supplierRealCosts> }) {
           </div>
         </Card>
       ))}
+      {untraced.length ? (
+        <Card>
+          <p className="text-sm">
+            {qty(untraced.length, 0)} جهة بنشتري منها مش داخلة في الحساب ده
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {untraced
+              .slice(0, 6)
+              .map((v) => `${v.name} (${money(v.value)})`)
+              .join(" · ")}
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            فواتيرها مش مربوطة بخامة في دفتر المخزون — فمفيش هالك ولا مرتجع يتحسب عليها. والخدمات زي الكهرباء
+            والإيجار مالهاش تكلفة حقيقية بالمعنى ده أصلًا.
+          </p>
+        </Card>
+      ) : null}
     </section>
   );
 }

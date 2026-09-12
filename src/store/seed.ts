@@ -112,11 +112,17 @@ type CustomerPlan = {
   stoppedSince?: number;
 };
 
+/*
+ * أسعار الوحدة هنا لازم تكون **متسقة مع أسعار المنتجات**، لأن ورقة
+ * التكلفة بتحسب الهامش على السعر المعلن وطبقة الاستنتاجات بتقارنه
+ * باللي اتحصّل فعلًا. لو التاريخ باع التيشيرت بـ٦٠ ج وتكلفته ١١٤ ج،
+ * كل شاشة ربحية في النظام بتطلع أرقام مرعبة سببها البذرة مش المصنع.
+ */
 const PLANS: CustomerPlan[] = [
-  { clientId: "cl-1", monthsBack: 18, cycle: 14, base: 24000, growth: 0.34, term: 15, payLag: 12, unitPrice: 210, models: ["قميص رجالي", "بنطلون قماش", "قميص قطني"], method: "cash" },
+  { clientId: "cl-1", monthsBack: 18, cycle: 14, base: 24000, growth: 0.34, term: 15, payLag: 12, unitPrice: 250, models: ["قميص رجالي", "بنطلون قماش", "قميص قطني"], method: "cash" },
   { clientId: "cl-2", monthsBack: 20, cycle: 21, base: 46000, growth: 0.12, term: 30, payLag: 48, unitPrice: 1400, models: ["بدلة مكتبية", "قميص قطن"], method: "bank" },
-  { clientId: "cl-3", monthsBack: 12, cycle: 10, base: 7200, growth: 0.06, term: 14, payLag: 4, unitPrice: 60, models: ["تيشيرت مطبوع"], method: "cash" },
-  { clientId: "cl-4", monthsBack: 15, cycle: 24, base: 17000, growth: -0.22, term: 20, payLag: 19, unitPrice: 380, models: ["فستان صيفي", "بلوزة"], method: "instapay", stoppedSince: 125 },
+  { clientId: "cl-3", monthsBack: 12, cycle: 10, base: 7200, growth: 0.06, term: 14, payLag: 4, unitPrice: 150, models: ["تيشيرت مطبوع"], method: "cash" },
+  { clientId: "cl-4", monthsBack: 15, cycle: 24, base: 17000, growth: -0.22, term: 20, payLag: 19, unitPrice: 470, models: ["فستان صيفي", "بلوزة"], method: "instapay", stoppedSince: 125 },
   { clientId: "cl-5", monthsBack: 22, cycle: 30, base: 118000, growth: 0.26, term: 30, payLag: 54, unitPrice: 360, models: ["طقم تصدير"], method: "bank" },
 ];
 
@@ -436,8 +442,14 @@ export function demoDb(): Db {
     ...purchases.map(([name, qty, price, ago]) =>
       name === "قماش قطن"
         ? mv("material", mat(name), whMat, "purchase", qty, price, addDays(today, -ago), "cost_entry", "ce1", "أقمشة قمصان")
-        : mv("material", mat(name), whMat, "purchase", qty, price, addDays(today, -ago)),
+        : name === "قماش كتان"
+          ? mv("material", mat(name), whMat, "purchase", qty, price, addDays(today, -ago), "cost_entry", "ce6", "قماش كتان")
+          : mv("material", mat(name), whMat, "purchase", qty, price, addDays(today, -ago)),
     ),
+    // شراء من المورّد التاني بسعر أقل — منه بيتحسب فرق السعر عن الوسيط
+    mv("material", mat("قماش قطن"), whMat, "purchase", 400, 82, addDays(today, -13), "cost_entry", "ce5", "قماش قطن — أقمشة الدلتا"),
+    // هالك الكتان: المصبغة هي مورّده الوحيد، فالهالك ده يتحمّل عليها
+    mv("material", mat("قماش كتان"), whMat, "waste", -12, 120, addDays(today, -4), "lay", "lay-1", "هالك فرشة الفستان"),
     // صرف خامات أمر SN-1042
     mv("material", mat("قماش قطن"), whMat, "issue", -518.4, costAtIssue("قماش قطن"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
     mv("material", mat("خيط بوليستر"), whMat, "issue", -15, costAtIssue("خيط بوليستر"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
@@ -553,6 +565,20 @@ export function demoDb(): Db {
       tags: ["أقمشة"],
     }),
     party("sup-2", "مكتبة الإكسسوار", ["supplier"], { phone: "01233334444", governorate: "القاهرة", city: "الموسكي" }),
+    /*
+     * مورّد قماش تاني وسعره أقل — وده مقصود.
+     *
+     * من غير مورّد تاني لنفس الخامة، «سعره أعلى من الوسيط» رقم بيتقارن
+     * بنفسه. وده اللي بيخلّي طبقة الاستنتاجات تقدر تقول الجملة اللي
+     * مافيش شاشة تانية بتقولها: أرخص في السعر، وأغلى في التكلفة الحقيقية.
+     */
+    party("sup-5", "أقمشة الدلتا", ["supplier"], {
+      phone: "01266667777",
+      notes: "عرض سعره أقل من المصبغة — وجودته أقل",
+      governorate: "الغربية",
+      city: "طنطا",
+      tags: ["أقمشة"],
+    }),
     party("sup-3", "شركة الكهرباء", ["service"], {}),
     party("sup-4", "المالك", ["service"], { kind: "person", notes: "إيجار المصنع" }),
     party("ws-1", "ورشة عم شريف للخياطة", ["workshop", "supplier"], {
@@ -609,9 +635,9 @@ export function demoDb(): Db {
     { id: "d1", factoryId: FID, clientId: "cl-1", date: addDays(today, -25), dueDate: addDays(today, -10), amount: 42000, model: "قميص رجالي", quantity: 200, notes: "" },
     { id: "d2", factoryId: FID, clientId: "cl-1", date: addDays(today, -8), dueDate: today, amount: 18500, model: "بنطلون قماش", quantity: 80, notes: "" },
     { id: "d3", factoryId: FID, clientId: "cl-2", date: addDays(today, -20), dueDate: addDays(today, -5), amount: 61000, model: "بدلة مكتبية", quantity: 40, notes: "" },
-    { id: "d4", factoryId: FID, clientId: "cl-2", date: addDays(today, -4), dueDate: addDays(today, 3), amount: 24000, model: "قميص قطني", quantity: 120, notes: "" },
-    { id: "d5", factoryId: FID, clientId: "cl-3", date: addDays(today, -2), dueDate: addDays(today, 12), amount: 9600, model: "تيشيرت", quantity: 160, notes: "" },
-    { id: "d6", factoryId: FID, clientId: "cl-4", date: addDays(today, -96), dueDate: addDays(today, -76), amount: 15200, model: "فستان صيفي", quantity: 40, notes: "آخر طلب قبل ما يتوقف" },
+    { id: "d4", factoryId: FID, clientId: "cl-2", date: addDays(today, -4), dueDate: addDays(today, 3), amount: 30000, model: "قميص قطني", quantity: 120, notes: "" },
+    { id: "d5", factoryId: FID, clientId: "cl-3", date: addDays(today, -2), dueDate: addDays(today, 12), amount: 24000, model: "تيشيرت مطبوع", quantity: 160, notes: "" },
+    { id: "d6", factoryId: FID, clientId: "cl-4", date: addDays(today, -96), dueDate: addDays(today, -76), amount: 18800, model: "فستان صيفي", quantity: 40, notes: "آخر طلب قبل ما يتوقف" },
     { id: "d7", factoryId: FID, clientId: "cl-5", date: addDays(today, -40), dueDate: addDays(today, -12), amount: 180000, model: "طقم تصدير", quantity: 500, notes: "دفعة أولى اتجمعت" },
     { id: "d8", factoryId: FID, clientId: "cl-5", date: addDays(today, -6), dueDate: addDays(today, 20), amount: 95000, model: "طقم تصدير", quantity: 250, notes: "" },
   ];
@@ -657,6 +683,8 @@ export function demoDb(): Db {
     { id: "ce1", factoryId: FID, costItemId: "ci-1", date: addDays(today, -14), vendor: "مصبغة السلام", partyId: "sup-1", quantity: 850, amount: 38250, notes: "أقمشة قمصان" },
     { id: "ce2", factoryId: FID, costItemId: "ci-14", date: addDays(today, -9), vendor: "المالك", partyId: "sup-4", quantity: 1, amount: 18000, notes: "إيجار سبتمبر" },
     { id: "ce3", factoryId: FID, costItemId: "ci-4", date: addDays(today, -5), vendor: "مكتبة الإكسسوار", partyId: "sup-2", quantity: 2000, amount: 4200, notes: "" },
+    { id: "ce5", factoryId: FID, costItemId: "ci-1", date: addDays(today, -13), vendor: "أقمشة الدلتا", partyId: "sup-5", quantity: 400, amount: 32800, notes: "قماش قطن — عرض أرخص" },
+    { id: "ce6", factoryId: FID, costItemId: "ci-1", date: addDays(today, -20), vendor: "مصبغة السلام", partyId: "sup-1", quantity: 200, amount: 24000, notes: "قماش كتان للفساتين" },
     { id: "ce4", factoryId: FID, costItemId: "ci-15", date: addDays(today, -3), vendor: "شركة الكهرباء", partyId: "sup-3", quantity: 1, amount: 3100, notes: "" },
     // شغل الورشة الخارجية مابقاش فاتورة مشتريات: بقى إذن تشغيل SUB-0001
     // وحسابه بيتحسب من الاستلامات (شوف `subcontracts` تحت). لو سجّلناه في
@@ -999,8 +1027,8 @@ export function demoDb(): Db {
       bundleId: "bn-1",
       status: "settled",
       resolution: "credit",
-      unitValue: 200,
-      settleAmount: 1600,
+      unitValue: 250,
+      settleAmount: 2000,
       extraCost: 150,
       extraNote: "شحن الرجوع",
       inspectedAt: at(addDays(today, -3), "13:00"),
@@ -1022,7 +1050,7 @@ export function demoDb(): Db {
       deliveryId: "d6",
       status: "settled",
       resolution: "replacement",
-      unitValue: 380,
+      unitValue: 470,
       replacementQty: 6,
       restock: true,
       warehouseId: whFg,
@@ -1042,7 +1070,7 @@ export function demoDb(): Db {
       reason: "damaged_transit",
       reasonNote: "الكرتونة اتبلّت في النقل",
       status: "inspected",
-      unitValue: 200,
+      unitValue: 250,
       inspectedAt: at(today, "09:10"),
       inspectedBy: "m-sup",
       notes: "مستني قرار: خصم ولا بديل",
@@ -1060,7 +1088,7 @@ export function demoDb(): Db {
       costEntryId: "ce1",
       status: "settled",
       resolution: "credit",
-      unitValue: 45,
+      unitValue: 88,
       settleAmount: 1800,
       inspectedAt: at(addDays(today, -11), "11:00"),
       inspectedBy: "m-sup",
@@ -1088,6 +1116,29 @@ export function demoDb(): Db {
       settledAt: at(addDays(today, -4), "16:20"),
       settledBy: "m-sup",
     }),
+    ret("ret-7", rcode(7), {
+      source: "supplier",
+      date: addDays(today, -8),
+      partyId: "sup-5",
+      itemType: "material",
+      itemId: mat("قماش قطن"),
+      qty: 40,
+      condition: "defective",
+      reason: "spec_mismatch",
+      reasonNote: "اللون غير متجانس في نص الرول",
+      costEntryId: "ce5",
+      status: "settled",
+      resolution: "credit",
+      unitValue: 82,
+      settleAmount: 800,
+      extraCost: 300,
+      extraNote: "شحن رجوع الرولات",
+      inspectedAt: at(addDays(today, -8), "10:00"),
+      inspectedBy: "m-sup",
+      settledAt: at(addDays(today, -7), "13:00"),
+      settledBy: "m-owner",
+      notes: "الدلتا رفضت تغطي أكتر من ٨٠٠ ج",
+    }),
     ret("ret-6", rcode(6), {
       source: "customer",
       date: today,
@@ -1099,7 +1150,7 @@ export function demoDb(): Db {
       reason: "quality",
       reasonNote: "الطبعة بتقشّر بعد أول غسلة",
       status: "open",
-      unitValue: 60,
+      unitValue: 150,
       notes: "وصل الصبح — لسه مافتحناش الكراتين",
     }),
   ];

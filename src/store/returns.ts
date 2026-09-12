@@ -297,16 +297,26 @@ export function reasonPareto(db: Db, source: ReturnSource | "all" = "all"): Reas
 
 /* ── الملخص ────────────────────────────────────────────────────── */
 
+/**
+ * الملخص.
+ *
+ * وفيه قرار مهم: **الكميات مابتتجمعش غير لما تكون نفس الوحدة.** المرتجع
+ * فيه قمصان بالقطعة وقماش بالمتر، فلو جمعناهم في رقم واحد كان ٤٠ متر
+ * قماش بيتحسبوا ٤٠ قطعة ويطلع رقم شكله كبير ومعناه مافيش. فالقطع
+ * بتتجمع من مرتجعات المنتجات بس، والباقي بيتعدّ بعدد المرتجعات.
+ */
 export type ReturnsSummary = {
   open: number;
   inspected: number;
-  settledQty: number;
-  qty30: number;
+  /** عدد المرتجعات في ٣٠ يوم — كل المصادر */
+  count30: number;
+  /** قطع منتجات رجعت في ٣٠ يوم — الخامات مش داخلة لأن وحدتها مختلفة */
+  pieces30: number;
   impact30: number;
   impactAll: number;
   /** نسبة الإرجاع على مستوى المصنع في آخر ٩٠ يوم */
   ratePct: number | null;
-  bySource: { source: ReturnSource; count: number; qty: number; impact: number }[];
+  bySource: { source: ReturnSource; count: number; impact: number }[];
   /** مرتجعات قاعدة أكتر من ٣ أيام بدون قرار */
   stale: ReturnEntry[];
 };
@@ -321,8 +331,9 @@ export function returnsSummary(db: Db): ReturnsSummary {
   const sold90 = db.deliveries
     .filter((d) => d.date >= from90)
     .reduce((s, d) => s + (d.quantity ?? 0), 0);
+  // القطع مقابل القطع: مرتجع خامة من عميل (لو حصل) مالوش مقام يتقسم عليه
   const returned90 = live
-    .filter((r) => r.source === "customer" && r.date >= from90)
+    .filter((r) => r.source === "customer" && r.itemType === "product" && r.date >= from90)
     .reduce((s, r) => s + r.qty, 0);
 
   const sources: ReturnSource[] = ["customer", "supplier", "production"];
@@ -330,8 +341,8 @@ export function returnsSummary(db: Db): ReturnsSummary {
   return {
     open: live.filter((r) => r.status === "open").length,
     inspected: live.filter((r) => r.status === "inspected").length,
-    settledQty: live.filter((r) => r.status === "settled").reduce((s, r) => s + r.qty, 0),
-    qty30: recent.reduce((s, r) => s + r.qty, 0),
+    count30: recent.length,
+    pieces30: recent.filter((r) => r.itemType === "product").reduce((s, r) => s + r.qty, 0),
     impact30: recent.reduce((s, r) => s + returnImpact(db, r).total, 0),
     impactAll: live.reduce((s, r) => s + returnImpact(db, r).total, 0),
     ratePct: sold90 > 0 ? (returned90 / sold90) * 100 : null,
@@ -340,7 +351,6 @@ export function returnsSummary(db: Db): ReturnsSummary {
       return {
         source,
         count: rows.length,
-        qty: rows.reduce((s, r) => s + r.qty, 0),
         impact: rows.reduce((s, r) => s + returnImpact(db, r).total, 0),
       };
     }),
@@ -374,7 +384,10 @@ export function partyReturns(db: Db, partyId: string): PartyReturns {
     impact: rows.reduce((s, r) => s + returnImpact(db, r).total, 0),
     credits: customerCredits(db).filter((c) => c.partyId === partyId).reduce((s, c) => s + c.amount, 0),
     refunds: customerRefunds(db).filter((c) => c.partyId === partyId).reduce((s, c) => s + c.amount, 0),
-    ratePct: delivered > 0 ? (rows.filter((r) => r.source === "customer").reduce((s, r) => s + r.qty, 0) / delivered) * 100 : null,
+    ratePct:
+      delivered > 0
+        ? (rows.filter((r) => r.source === "customer" && r.itemType === "product").reduce((s, r) => s + r.qty, 0) / delivered) * 100
+        : null,
     complaints: complaints.length,
     openComplaints: complaints.filter((c) => c.status === "open" || c.status === "investigating").length,
     rows,

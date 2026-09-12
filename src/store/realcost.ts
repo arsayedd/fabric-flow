@@ -20,14 +20,21 @@
  *    على بيانات كاملة ولا على نص الصورة.
  */
 
-import { addDays, cairoToday } from "@/lib/utils";
+import { addDays, cairoToday, moneyPlain, qty as num } from "@/lib/utils";
 import { entryCredit, isEffective } from "./compute";
 import { costSheet, modelVolume, profitScore } from "./costing";
 import { activeBom, bomLines } from "./manufacturing";
+import { returnImpact } from "./returns";
 import type { Db, Party } from "./types";
 
 const sum = (xs: number[]) => xs.reduce((s, x) => s + x, 0);
-const round = (n: number) => Math.round(n * 10) / 10;
+/* الأرقام في الجُمل بتتكتب بالأرقام العربية زي باقي النظام، مش 6.8 */
+const pctText = (n: number) => `${num(Math.round(Math.abs(n) * 10) / 10, 1)}٪`;
+const cash = (n: number) => `${moneyPlain(Math.round(n))} ج`;
+const count = (n: number) => num(Math.round(n), 0);
+/* «١ خامة» مش عربي. الواحد والاتنين لهم صيغتهم، وبعدها الرقم */
+const items = (n: number, one: string, two: string, many: string) =>
+  n === 1 ? one : n === 2 ? two : `${count(n)} ${many}`;
 
 function median(xs: number[]): number {
   const s = [...xs].sort((a, b) => a - b);
@@ -143,9 +150,17 @@ export function supplierRealCost(db: Db, partyId: string): SupplierRealCost {
 
   const factors: CostFactor[] = [];
 
-  /* ١) السعر: سعر وحدة المورّد مقابل وسيط المصنع لنفس الخامة */
+  /*
+   * ١) السعر: سعر وحدة المورّد مقابل وسيط المصنع لنفس الخامة.
+   *
+   * والشرط إن الخامة يكون لها **أكتر من مورّد**. من غير الشرط ده، المورّد
+   * الوحيد للخامة بيتقارن بنفسه: الوسيط بيطلع من مشترياته هو، وأي فاتورة
+   * أرخص من فواتيره التانية تخلّيه «أرخص من السوق» — وده رقم بيطمّن صاحب
+   * المصنع على حاجة محدش قاسها.
+   */
   const priceGaps: { gap: number; weight: number; name: string }[] = [];
   for (const [materialId, v] of supplied) {
+    if (sourcesOf(db, materialId).size < 2) continue;
     const all = db.stockMovements
       .filter((m) => m.itemType === "material" && m.itemId === materialId && m.kind === "purchase" && m.unitCost > 0)
       .map((m) => m.unitCost);
@@ -165,8 +180,8 @@ export function supplierRealCost(db: Db, partyId: string): SupplierRealCost {
       pct,
       why:
         pct < 0
-          ? `أرخص من وسيط المصنع بـ${round(Math.abs(pct))}٪ على ${priceGaps.length} خامة`
-          : `أعلى من وسيط المصنع بـ${round(pct)}٪ على ${priceGaps.length} خامة`,
+          ? `أرخص من وسيط المصنع بـ${pctText(pct)} على ${items(priceGaps.length, "خامة واحدة", "خامتين", "خامات")}`
+          : `أعلى من وسيط المصنع بـ${pctText(pct)} على ${items(priceGaps.length, "خامة واحدة", "خامتين", "خامات")}`,
       missing: null,
     });
   } else {
@@ -199,7 +214,7 @@ export function supplierRealCost(db: Db, partyId: string): SupplierRealCost {
       key: "waste",
       label: "الهالك",
       pct: extra,
-      why: `${worst.name}: هالك فعلي ${round(worst.actual)}٪ والمخطط ${round(worst.planned)}٪`,
+      why: `${worst.name}: هالك فعلي ${pctText(worst.actual)} والمخطط ${pctText(worst.planned)}`,
       missing: null,
     });
   } else {
@@ -231,8 +246,8 @@ export function supplierRealCost(db: Db, partyId: string): SupplierRealCost {
       pct: (uncovered / linkedValue) * 100,
       why:
         uncovered > 0
-          ? `رجّعنا له ${rows.length} مرتجع بقيمة ${Math.round(value)} ج وغطّى ${Math.round(covered)} ج`
-          : `رجّعنا له ${rows.length} مرتجع وغطّاهم بالكامل`,
+          ? `رجّعنا له ${items(rows.length, "مرتجع واحد", "مرتجعين", "مرتجعات")} بقيمة ${cash(value)} وغطّى ${cash(covered)}`
+          : `رجّعنا له ${items(rows.length, "مرتجع واحد", "مرتجعين", "مرتجعات")} وغطّاهم بالكامل`,
       missing: null,
     });
   } else {
@@ -250,15 +265,21 @@ export function supplierRealCost(db: Db, partyId: string): SupplierRealCost {
   const realPct = known.length ? sum(known.map((f) => f.pct as number)) : null;
   const coverage = (known.length / factors.length) * 100;
 
-  const flipped = pricePct !== null && realPct !== null && pricePct < -0.5 && realPct > 0.5;
+  /*
+   * الانقلاب لازم يكون **ملحوظ** في الاتجاهين: ميزة سعر حقيقية (٢٪ على
+   * الأقل) وتكلفة حقيقية أغلى فعلًا (١٪ على الأقل). من غير الحدّين، أي
+   * تذبذب نص في المية بيطلع «مورّد بيغشّك» وصاحب المصنع يبطّل يقرا
+   * الشاشة بعد تالت مرة.
+   */
+  const flipped = pricePct !== null && realPct !== null && pricePct <= -2 && realPct >= 1;
   let verdict: string | null = null;
   if (realPct !== null && pricePct !== null) {
     if (flipped) {
-      verdict = `${party?.name ?? "المورّد"} أرخص ${round(Math.abs(pricePct))}٪ في السعر، وأغلى ${round(realPct)}٪ في التكلفة الحقيقية.`;
+      verdict = `${party?.name ?? "المورّد"} أرخص ${pctText(pricePct)} في السعر، وأغلى ${pctText(realPct)} في التكلفة الحقيقية.`;
     } else if (realPct > 0.5) {
-      verdict = `${party?.name ?? "المورّد"} أغلى ${round(realPct)}٪ في التكلفة الحقيقية.`;
+      verdict = `${party?.name ?? "المورّد"} أغلى ${pctText(realPct)} في التكلفة الحقيقية.`;
     } else if (realPct < -0.5) {
-      verdict = `${party?.name ?? "المورّد"} أرخص ${round(Math.abs(realPct))}٪ في التكلفة الحقيقية.`;
+      verdict = `${party?.name ?? "المورّد"} أرخص ${pctText(realPct)} في التكلفة الحقيقية.`;
     } else {
       verdict = `${party?.name ?? "المورّد"} تكلفته الحقيقية زي وسيط المصنع.`;
     }
@@ -280,12 +301,30 @@ export function supplierRealCost(db: Db, partyId: string): SupplierRealCost {
 }
 
 /** كل الموردين اللي عندهم مشتريات، مرتبين بالأغلى تكلفة حقيقية */
+/**
+ * الموردين اللي ينفع نتكلم عن تكلفتهم الحقيقية.
+ *
+ * والشرط إن يكون فيه **خامة مربوطة** بمشترياتهم. الكهرباء والإيجار
+ * فواتير مصروف من جهات، بس مافيش خامة ولا هالك ولا مرتجع يتحسب عليهم —
+ * فظهورهم في الشاشة دي بـ«مش محسوبة» بيمدّ القايمة بصفوف مالهاش إجابة.
+ * وعددهم بيتقال في `untracedVendors` بدل ما يختفوا بالسكات.
+ */
 export function supplierRealCosts(db: Db): SupplierRealCost[] {
   const ids = [...new Set(db.costEntries.map((e) => e.partyId).filter((x): x is string => !!x))];
   return ids
     .map((id) => supplierRealCost(db, id))
-    .filter((r) => r.totalValue > 0)
+    .filter((r) => r.linkedValue > 0)
     .sort((a, b) => (b.realPct ?? -Infinity) - (a.realPct ?? -Infinity));
+}
+
+/** جهات بنشتري منها ومفيش خامة مربوطة بفواتيرها — فمش داخلة في الحساب */
+export function untracedVendors(db: Db): { id: string; name: string; value: number }[] {
+  const ids = [...new Set(db.costEntries.map((e) => e.partyId).filter((x): x is string => !!x))];
+  return ids
+    .map((id) => supplierRealCost(db, id))
+    .filter((r) => r.linkedValue <= 0 && r.totalValue > 0)
+    .map((r) => ({ id: r.partyId, name: r.name, value: r.totalValue }))
+    .sort((a, b) => b.value - a.value);
 }
 
 /* ── الموديل: ترتيبه في البيع مقابل ترتيبه في الربح ──────────── */
@@ -301,8 +340,13 @@ export type RankGap = {
   soldQty: number;
   soldRevenue: number;
   unitProfit: number | null;
+  /** أثر المرتجعات المخصوم من الربح */
+  returnLoss: number;
+  /** ربح المتسلّم بعد المرتجعات */
   totalProfit: number;
   score: number | null;
+  /** متوسط السعر اللي اتحصّل فعلًا للقطعة */
+  realisedPrice: number | null;
   /** الفرق كبير لدرجة إنها محتاجة قرار */
   flagged: boolean;
   verdict: string;
@@ -325,12 +369,26 @@ export function rankGaps(db: Db): RankGap[] {
     const vol = modelVolume(db, product.id);
     const sheet = costSheet(db, product.id);
     const score = profitScore(db, product.id);
+    const unitProfit = sheet.priceKnown && sheet.hasBom ? sheet.profit : null;
+    /*
+     * المرتجعات بتتخصم من ربح الموديل.
+     *
+     * ده الفرق بين «ربح على الورق» و«ربح فضل في إيدك»: موديل بيكسب ٣٨ ج
+     * في القطعة ورجع منه ٨ قطع كلّفوا ١٧٥٠ ج، يبقى فقد ربح ٤٦ قطعة
+     * باعها. ومن غير الخصم ده، ترتيب الربحية بيبقى ترتيب هامش نظري.
+     */
+    const returnLoss = sum(
+      db.returns
+        .filter((r) => r.source === "customer" && r.itemType === "product" && r.itemId === product.id && r.status !== "cancelled")
+        .map((r) => returnImpact(db, r).total),
+    );
     return {
       product,
       soldQty: vol.soldQty,
       soldRevenue: vol.soldRevenue,
-      unitProfit: sheet.priceKnown && sheet.hasBom ? sheet.profit : null,
-      totalProfit: (sheet.priceKnown && sheet.hasBom ? sheet.profit : 0) * vol.soldQty,
+      unitProfit,
+      returnLoss,
+      totalProfit: (unitProfit ?? 0) * vol.soldQty - returnLoss,
       score: score.total,
     };
   });
@@ -347,13 +405,18 @@ export function rankGaps(db: Db): RankGap[] {
       const pr = profitRank.get(r.product.id) as number;
       const gap = pr - sr;
       const why: string[] = [];
-      if (r.soldQty > 0) why.push(`اتسلّم منه ${Math.round(r.soldQty)} قطعة بـ${Math.round(r.soldRevenue)} ج`);
-      if (r.unitProfit !== null) why.push(`ربح القطعة ${Math.round(r.unitProfit)} ج`);
+      if (r.soldQty > 0) why.push(`اتسلّم منه ${count(r.soldQty)} قطعة بـ${cash(r.soldRevenue)}`);
+      if (r.unitProfit !== null) why.push(`ربح القطعة ${cash(r.unitProfit)}`);
       else why.push("ربح القطعة مش محسوب — ناقص سعر بيع أو قائمة خامات");
       const ret = db.returns.filter(
         (x) => x.source === "customer" && x.itemType === "product" && x.itemId === r.product.id && x.status !== "cancelled",
       );
-      if (ret.length) why.push(`رجع منه ${sum(ret.map((x) => x.qty))} قطعة في ${ret.length} مرتجع`);
+      if (ret.length) {
+        why.push(`رجع منه ${count(sum(ret.map((x) => x.qty)))} قطعة في ${items(ret.length, "مرتجع واحد", "مرتجعين", "مرتجعات")}`);
+        if (r.returnLoss !== 0) why.push(`المرتجعات خصمت ${cash(r.returnLoss)} من ربحه`);
+      }
+      /* السعر المعلن مقابل اللي اتحصّل فعلًا — الفرق ده بياكل الهامش بدون ما يبان */
+      const realised = r.soldQty > 0 ? r.soldRevenue / r.soldQty : null;
 
       /*
        * الفرق بيبقى محتاج قرار لما الموديل يكون في **النص الأعلى** في
@@ -372,10 +435,12 @@ export function rankGaps(db: Db): RankGap[] {
         soldQty: r.soldQty,
         soldRevenue: r.soldRevenue,
         unitProfit: r.unitProfit,
+        returnLoss: r.returnLoss,
         totalProfit: r.totalProfit,
+        realisedPrice: realised,
         score: r.score,
         flagged,
-        verdict: `رقم ${sr} في البيع، ورقم ${pr} في الربحية من ${n} موديل.`,
+        verdict: `رقم ${count(sr)} في البيع، ورقم ${count(pr)} في الربحية من ${count(n)} موديل.`,
         why,
       };
     })
@@ -435,6 +500,37 @@ export function findings(db: Db): Finding[] {
   }
 
   /*
+   * السعر المعلن مقابل السعر المحصَّل.
+   *
+   * ودي من دفترين كمان: قائمة المنتجات فيها سعر البيع، ودفتر التوريدات
+   * فيه المبلغ اللي اتفوتر فعلًا. والفرق بينهم خصومات وتسويات بتتعمل
+   * واحدة واحدة ومحدش بيجمعها — فورقة التكلفة تقول الهامش ٢٠٪ والحقيقة
+   * أقل، لأن الهامش محسوب على سعر مامحدش دفعه.
+   */
+  for (const g of rankGaps(db)) {
+    const sheet = costSheet(db, g.productId);
+    if (!sheet.priceKnown || g.realisedPrice === null || g.soldQty <= 0) continue;
+    const gapPct = ((sheet.sellPrice - g.realisedPrice) / sheet.sellPrice) * 100;
+    if (gapPct < 8) continue;
+    out.push({
+      key: `price-gap-${g.productId}`,
+      tone: gapPct >= 20 ? "danger" : "warn",
+      headline: `${g.name}: السعر المعلن ${cash(sheet.sellPrice)} وبيتباع فعليًا بـ${cash(g.realisedPrice)}`,
+      why: [
+        `فرق ${pctText(gapPct)} على ${count(g.soldQty)} قطعة اتسلّمت`,
+        `الهامش في ورقة التكلفة محسوب على ${cash(sheet.sellPrice)}`,
+        sheet.total > 0 ? `تكلفة القطعة ${cash(sheet.total)}` : "",
+      ].filter(Boolean),
+      action:
+        sheet.total > 0 && g.realisedPrice < sheet.total
+          ? "الموديل ده بيتباع تحت تكلفته — راجع السعر أو وقّف الخصومات عليه"
+          : "عدّل السعر المعلن أو راجع الخصومات — الهامش الحقيقي أقل من اللي في الورقة",
+      to: `/costing/${g.productId}`,
+      coverage: null,
+    });
+  }
+
+  /*
    * الموديل اللي نسبة إرجاعه عالية: ده استنتاج من دفترين — التسليم
    * والمرتجعات — ومابيطلعش إلا لو الاتنين فيهم أرقام.
    */
@@ -455,8 +551,8 @@ export function findings(db: Db): Finding[] {
     out.push({
       key: `return-rate-${product.id}`,
       tone: pct >= 10 ? "danger" : "warn",
-      headline: `${product.name}: نسبة الإرجاع ${round(pct)}٪ في آخر ٩٠ يوم`,
-      why: [`رجع ${Math.round(qty)} من ${Math.round(vol.soldQty)} قطعة متسلّمة`, top ? `أكبر سبب: ${top[0]}` : ""].filter(Boolean),
+      headline: `${product.name}: نسبة الإرجاع ${pctText(pct)} في آخر ٩٠ يوم`,
+      why: [`رجع ${count(qty)} من ${count(vol.soldQty)} قطعة متسلّمة`, top ? `أكبر سبب: ${top[0]}` : ""].filter(Boolean),
       action: "راجع الموديل على الخط قبل الشحنة الجاية — النسبة دي بتاكل الهامش كله",
       to: `/returns?product=${product.id}`,
       coverage: null,

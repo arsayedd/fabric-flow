@@ -148,8 +148,9 @@ export function ReturnsPage() {
           </Card>
           <Card>
             <p className="text-sm text-muted-foreground">رجع في ٣٠ يوم</p>
-            <p className="mt-1 text-2xl tabular">{qty(s.qty30, 0)}</p>
+            <p className="mt-1 text-2xl tabular">{qty(s.count30, 0)} مرتجع</p>
             <p className="text-xs text-muted-foreground">
+              {qty(s.pieces30, 0)} قطعة منتجات ·{" "}
               {s.ratePct === null ? "مافيش كميات تسليم نقارن عليها" : `نسبة الإرجاع ${qty(s.ratePct, 1)}٪ في ٩٠ يوم`}
             </p>
           </Card>
@@ -517,7 +518,7 @@ function NewReturnPanel({ open, onClose }: { open: boolean; onClose: () => void 
         <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
       </Field>
       <p className="text-sm text-muted-foreground">
-        التسجيل ده **مابيحركش** فلوس ولا مخزون. الفحص بيحدد الحالة، والقرار بعده هو اللي بيخصم أو يرجّع للمخزن.
+        التسجيل ده مابيحركش فلوس ولا مخزون. الفحص بيحدد الحالة، والقرار بعده هو اللي بيخصم أو يرجّع للمخزن.
       </p>
     </Panel>
   );
@@ -680,7 +681,7 @@ function SettlePanel({ r, open, onClose }: { r: ReturnEntry; open: boolean; onCl
         <Field label="كمية البديل">
           <Input value={replacementQty} onChange={(e) => setReplacementQty(e.target.value)} inputMode="decimal" />
           <p className="mt-1 text-xs text-muted-foreground">
-            البديل بيتسجّل هنا كالتزام، بس **مابيفتحش أمر إنتاج لوحده** — لسه محتاج تخطّطه في أمر.
+            البديل بيتسجّل هنا كالتزام، بس مابيفتحش أمر إنتاج لوحده — لسه محتاج تخطّطه في أمر.
           </p>
         </Field>
       ) : null}
@@ -722,7 +723,7 @@ function Models({ scoped }: { scoped: Db }) {
     return (
       <Card>
         <p className="text-sm text-muted-foreground">
-          مافيش مرتجعات على منتجات لسه. التحليل ده بيرتّب الموديلات **بنسبة** الإرجاع مش بالكمية، لأن موديل باع ٥٠٠٠
+          مافيش مرتجعات على منتجات لسه. التحليل ده بيرتّب الموديلات بنسبة الإرجاع مش بالكمية، لأن موديل باع ٥٠٠٠
           ورجع منه ٥٠ أحسن من موديل باع ٢٠٠ ورجع منه ٢٠.
         </p>
       </Card>
