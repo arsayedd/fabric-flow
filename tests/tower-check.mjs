@@ -1,0 +1,16 @@
+import { chromium } from "playwright-core";
+const B="http://127.0.0.1:43127";
+const b=await chromium.launch({executablePath:"/usr/local/bin/google-chrome",args:["--no-sandbox"]});
+const p=await b.newPage({viewport:{width:1340,height:1600},deviceScaleFactor:2});
+await p.goto(B,{waitUntil:"networkidle"});
+await p.evaluate(()=>localStorage.clear());
+await p.reload({waitUntil:"networkidle"});
+await p.getByRole("button",{name:/صاحب المصنع/}).first().click();
+await p.waitForTimeout(1000);await p.goto(`${B}/dashboard`,{waitUntil:"networkidle"});await p.waitForTimeout(1500);
+const t=await p.locator("main").innerText();
+const want=["الإنتاج","المخزون","الجودة","المالية","التسليم","الربح","الصيانة","الراكد"];
+for(const w of want) console.log(w, t.includes(w));
+await p.screenshot({path:"/opt/cursor/artifacts/screenshots/control_tower_command_center.png"});
+console.log("--- الفتحات المعلنة ---");
+for(const l of t.split("\n").filter(x=>/مش مسجّل|لسه مش|ماكينة|راكد/.test(x)).slice(0,8)) console.log("  ",l);
+await b.close();

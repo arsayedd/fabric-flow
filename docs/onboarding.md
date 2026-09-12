@@ -299,7 +299,7 @@ alnoor.sanaa.app  →  subdomain = "alnoor"  →  factory_id = 20cdce2f…  → 
 
 ## التحقق
 
-`agent-tools/onboarding.mjs` — ٦٨ تأكيد على المتصفح، و`agent-tools/onboard-probe.mjs`
+`tests/onboarding.mjs` — ٦٨ تأكيد على المتصفح، و`agent-tools/onboard-probe.mjs`
 تلاتاشر تأكيد على مساعد التجهيز وتبديل الأقسام. منهم:
 
 | اللي اتأكد | النتيجة |
