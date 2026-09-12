@@ -15,7 +15,7 @@ const main = () => page.locator("main").innerText();
 const body = () => page.locator("body").innerText();
 const ledger = () =>
   page.evaluate(() => {
-    const k = Object.keys(localStorage).find((x) => x.startsWith("factory-ledger"));
+    const k = Object.keys(localStorage).find((x) => x.startsWith("factory-ledger.v1:"));
     return JSON.parse(localStorage.getItem(k));
   });
 

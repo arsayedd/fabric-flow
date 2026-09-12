@@ -56,9 +56,13 @@ const tap = async (name) => {
   await page.waitForTimeout(700);
 };
 
+/* المفتاح لازم يبقى `factory-ledger.v1:` بالظبط: الجلسة متخزّنة في
+   `factory-ledger.session`، فالبحث بالبادئة الناقصة بيرجّع الجلسة أحيانًا
+   حسب ترتيب المفاتيح في المتصفح — ودفتر بلا `orders` بيفشّل التأكيدات
+   ويبان كأنه عيب في التطبيق */
 const ledger = () =>
   page.evaluate(() => {
-    const k = Object.keys(localStorage).find((x) => x.startsWith("factory-ledger"));
+    const k = Object.keys(localStorage).find((x) => x.startsWith("factory-ledger.v1:"));
     return JSON.parse(localStorage.getItem(k) ?? "{}");
   });
 /* رصيد الخامة محسوب من الحركات نفسها — مش من أي دالة في التطبيق */

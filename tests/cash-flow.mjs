@@ -146,7 +146,7 @@ ok("مفيش تنبيه ضيق وهو مش موجود", !calm.includes("الخز
  * الرقم بيمشي لحد التنبيه.
  */
 await go("/cashflow");
-const key = await page.evaluate(() => Object.keys(localStorage).find((k) => k.startsWith("factory-ledger")));
+const key = await page.evaluate(() => Object.keys(localStorage).find((k) => k.startsWith("factory-ledger.v1:")));
 await page.evaluate((k) => {
   const db = JSON.parse(localStorage.getItem(k));
   const today = new Date().toISOString().slice(0, 10);

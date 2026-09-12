@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { AuthShell, Field, PasswordInput } from "@/components/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DEMO_LOGIN } from "@/store/account";
 import { useFactory } from "@/store/context";
 
 export function LoginPage() {
@@ -82,6 +83,46 @@ export function LoginPage() {
           الدخول بالإيميل وكلمة السر هو الأساس. الدخول بجوجل أو فيسبوك ممكن يتضاف بعد كده، ومحتاج سيرفر.
         </p>
       </form>
+
+      {/*
+        الحساب التجريبي معروض بكلمة سره. ده مش تسريب: المساحة اللي بيفتحها
+        داتا مولّدة على نفس الجهاز، ومعلّمة تجريبية في كل شاشة. والزرار
+        بيعبّي الخانتين بدل ما المستخدم ينقل بإيده — وبيسيبه يضغط «دخول»
+        هو، عشان اللي جاي يشوف شاشة الدخول يشوفها فعلًا.
+      */}
+      <div className="mt-6 rounded-md border border-accent/30 bg-accent-soft/40 p-4">
+        <p className="text-sm">عايز تشوف النظام بسرعة؟ خُد حساب تجريبي</p>
+        <dl className="mt-2 space-y-1 text-xs leading-6 text-muted-foreground">
+          <div className="flex gap-2">
+            <dt>الإيميل</dt>
+            <dd className="latin text-left text-foreground">{DEMO_LOGIN.email}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt>كلمة السر</dt>
+            <dd className="latin text-left text-foreground">{DEMO_LOGIN.password}</dd>
+          </div>
+        </dl>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-3"
+          onClick={() => {
+            setEmail(DEMO_LOGIN.email);
+            setPassword(DEMO_LOGIN.password);
+          }}
+        >
+          عبّي البيانات التجريبية
+        </Button>
+        <p className="mt-2 text-xs leading-6 text-muted-foreground">
+          بيفتح مصنع النور التجريبي بداتا جاهزة. لو عايز تدخل بدور معيّن من غير حساب،
+          فيه{" "}
+          <Link to="/" className="text-foreground underline underline-offset-4">
+            دخول تجريبي بزرار واحد
+          </Link>{" "}
+          في الصفحة الرئيسية.
+        </p>
+      </div>
 
       {account.workspaces.some((w) => !w.ownerId) ? (
         <div className="mt-6 rounded-md border border-border bg-card p-4">

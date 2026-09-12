@@ -16,7 +16,7 @@ await page.waitForTimeout(800);
 /* مصنع شغّال بس مافيهوش سجلات ولا مسح — أول يوم بالظبط */
 await page.evaluate(() => {
   for (const k of Object.keys(localStorage)) {
-    if (!k.startsWith("factory-ledger")) continue;
+    if (!k.startsWith("factory-ledger.v1:")) continue;
     const db = JSON.parse(localStorage.getItem(k));
     for (const arr of [
       "scans", "cutLays", "cutLayLines", "bundles", "bundleOps", "subcontracts",

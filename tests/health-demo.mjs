@@ -64,7 +64,7 @@ ok("كل الفحوص طلعت سليمة", brokenBadges === 0, `${brokenBadges}
 ok("فحص العزل بين المصانع موجود ونتيجته سليمة", t.includes("سجلات من مصنع تاني"), "");
 
 /* ── الفحص بيكشف كسر حقيقي ────────────────────────────────────── */
-const key = await page.evaluate(() => Object.keys(localStorage).find((k) => k.startsWith("factory-ledger")));
+const key = await page.evaluate(() => Object.keys(localStorage).find((k) => k.startsWith("factory-ledger.v1:")));
 await page.evaluate((k) => {
   const db = JSON.parse(localStorage.getItem(k));
   /* توريد بعميل مش موجود + كود أمر مكرر: كسرين مختلفين في نفس الوقت */

@@ -15,7 +15,7 @@ await page.waitForTimeout(900);
 
 const ledger = () =>
   page.evaluate(() => {
-    const k = Object.keys(localStorage).find((x) => x.startsWith("factory-ledger"));
+    const k = Object.keys(localStorage).find((x) => x.startsWith("factory-ledger.v1:"));
     return JSON.parse(localStorage.getItem(k));
   });
 const panel = () => page.locator("div.fixed.inset-0.z-50");

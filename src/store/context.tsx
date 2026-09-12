@@ -22,6 +22,8 @@ import {
   blankWorkspace,
   checkPassword,
   dbKeyOf,
+  DEMO_LOGIN,
+  ensureDemoLogin,
   freeSlug,
   hashPassword,
   industryOf,
@@ -68,7 +70,7 @@ import { RETURN_MODULE, nextComplaintCode, nextRepairCode, nextReturnCode, repai
 import { repairCostOf } from "./compute";
 import { allocateFifo, issuableQty, nextSerial, supplyView } from "./supply";
 import { buildDoc, canTransition, DOC_DEFS, findDoc, type IssueInput } from "./documents";
-import { demoDb, emptyDb, templateData } from "./seed";
+import { DEMO_FACTORY, FID, demoDb, emptyDb, templateData } from "./seed";
 import { PRODUCTION_LINES, REPAIR_DERIVED_COSTS, RETURN_SOURCE_LABEL } from "./types";
 import type {
   BatchStatus,
@@ -965,11 +967,18 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
   const user = accounts.find((a) => a.id === current.userId) ?? null;
   const workspace = workspaces.find((w) => w.factoryId === current.factoryId) ?? null;
 
-  /** فتح مصنع: بنقرأ دفتره من مفتاحه، وبنبني الجلسة من عضويّة الحساب فيه */
-  const enterWorkspace = (factoryId: string, account: UserAccount | null) => {
-    const ws = workspaces.find((w) => w.factoryId === factoryId);
+  /**
+   * فتح مصنع: بنقرأ دفتره من مفتاحه، وبنبني الجلسة من عضويّة الحساب فيه.
+   *
+   * `rows` بتتمرّر لما المساحات اتغيّرت في نفس الحدث — `setWorkspaces` مابيبانش
+   * في نفس الدورة، فلو قرينا من الحالة هنقول «المصنع ده مش موجود» عن مصنع
+   * إحنا لسه عاملينه.
+   */
+  const enterWorkspace = (factoryId: string, account: UserAccount | null, rows: Workspace[] = workspaces) => {
+    const ws = rows.find((w) => w.factoryId === factoryId);
     if (!ws) throw new Error("المصنع ده مش موجود على الجهاز.");
-    const data = readDb(ws.dbKey);
+    /* المساحة التجريبية دفترها بيتولّد أول مرة حد يدخلها فعلًا */
+    const data = readDb(ws.dbKey) ?? (factoryId === FID ? demoDb() : null);
     if (!data?.factory) throw new Error("بيانات المصنع ده مش موجودة على الجهاز.");
     const role = account ? roleIn(ws, account.id) : "owner";
     const member =
@@ -979,7 +988,7 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
     setBook({ key: ws.dbKey, data });
     setMissing(null);
     persistCurrent({ userId: account?.id ?? current.userId, factoryId, remember: current.remember });
-    persistWorkspaces(workspaces.map((w) => (w.factoryId === factoryId ? { ...w, lastAccessAt: new Date().toISOString() } : w)));
+    persistWorkspaces(rows.map((w) => (w.factoryId === factoryId ? { ...w, lastAccessAt: new Date().toISOString() } : w)));
     if (member) login(member);
   };
 
@@ -1121,15 +1130,30 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
       },
       signIn: async (email, password, remember) => {
         const clean = email.trim().toLowerCase();
-        const account = accounts.find((a) => a.email === clean);
+        /*
+         * الحساب التجريبي بيتعمل عند أول دخول بيه، مش عند فتح الصفحة.
+         * يعني اللي جاي يعمل مصنعه الحقيقي مابنكتبش في متصفحه حساب ولا
+         * مساحة ولا داتا تجريبية هو ماطلبهاش — والشرط الأول بيمنع إننا
+         * نكتب فوق حساب حقيقي بنفس الإيميل لو حد سجّل بيه.
+         */
+        let rows = accounts;
+        let spaces = workspaces;
+        if (clean === DEMO_LOGIN.email && !accounts.some((a) => a.email === clean)) {
+          const seeded = ensureDemoLogin(accounts, workspaces, FID, dbKeyOf(FID), DEMO_FACTORY);
+          rows = seeded.accounts;
+          spaces = seeded.workspaces;
+          setAccounts(rows);
+          setWorkspaces(spaces);
+        }
+        const account = rows.find((a) => a.email === clean);
         // نفس الرسالة للإيميل الغلط والباسورد الغلط — مش بنقول لحد إن الإيميل مسجّل
         const fail = new Error("الإيميل أو كلمة السر غلط.");
         if (!account) throw fail;
         if (!(await verifyPassword(password, account))) throw fail;
-        const mine = accessibleWorkspaces(workspaces, account.id);
+        const mine = accessibleWorkspaces(spaces, account.id);
         persistCurrent({ userId: account.id, factoryId: mine.length === 1 ? mine[0].factoryId : null, remember });
         setSession(null);
-        if (mine.length === 1) enterWorkspace(mine[0].factoryId, account);
+        if (mine.length === 1) enterWorkspace(mine[0].factoryId, account, spaces);
         return mine;
       },
       signOut: () => {

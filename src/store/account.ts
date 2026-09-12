@@ -438,6 +438,102 @@ export function sixDigitCode(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
+/* ── الحساب التجريبي ───────────────────────────────────────── */
+
+/**
+ * حساب جاهز للدخول التجريبي من شاشة تسجيل الدخول.
+ *
+ * التجربة الأساسية بزرار الدور من الصفحة الرئيسية، والحساب ده موجود
+ * لسبب واحد: إن شاشة تسجيل الدخول نفسها تبقى قابلة للتجربة. اللي عايز
+ * يشوف النظام مش لازم يعمل حساب.
+ *
+ * **الباسورد معروض في الواجهة، وده مقصود.** هو مفتاح لمساحة تجريبية
+ * على نفس الجهاز مش أكتر: الداتا مولّدة، والمساحة معلّمة `demo: true`،
+ * وأي حد فاتح الصفحة شايف الكلمتين. لو الحساب ده كان بيوصل لمساحة
+ * حقيقية يبقى الحكاية تبقى تانية خالص — وعشان كده هو **مربوط بالمصنع
+ * التجريبي وبس**، ومابيتعملش لو الجهاز فيه مساحة بنفس الإيميل.
+ *
+ * الهاش متحسوب مسبقًا بنفس دوال `hashPassword` (PBKDF2-SHA256، ١٢٠ ألف
+ * دورة) عشان البداية تفضل متزامنة: لو حسبناه وقت التشغيل، شاشة الدخول
+ * هتفتح قبل ما الحساب يبقى موجود، فأول محاولة دخول هتفشل.
+ */
+export const DEMO_LOGIN = {
+  email: "demo@sanaa.app",
+  password: "Sanaa@2026",
+  salt: "5a6e61616164656d6f73616c7430303031",
+  hash: "7976c35398bf4a5228288aab87cd6fa70348dc72f54b6ec59e00ed0c9e3c57dc",
+};
+
+const DEMO_USER_ID = "u-demo";
+
+function demoAccount(): UserAccount {
+  const now = new Date().toISOString();
+  return {
+    id: DEMO_USER_ID,
+    fullName: "مستخدم تجريبي",
+    email: DEMO_LOGIN.email,
+    phone: "1000000000",
+    countryCode: "+20",
+    passwordHash: DEMO_LOGIN.hash,
+    salt: DEMO_LOGIN.salt,
+    // متأكد من الأول: شاشة تأكيد الإيميل مالهاش لازمة في تجربة
+    emailVerified: true,
+    verifyCode: null,
+    verifySentAt: null,
+    termsAcceptedAt: now,
+    createdAt: now,
+  };
+}
+
+/**
+ * بيتأكد إن الحساب التجريبي وسجل مساحته موجودين، ومابيلمسش غير كده.
+ *
+ * **مابيكتبش دفتر المصنع** — الـ٧٩٢ سجل بتتولد أول مرة الحساب يدخل
+ * فعلًا. يعني اللي فاتح الصفحة وعمل مصنعه الحقيقي على طول مابيتكتبلهوش
+ * داتا تجريبية في المتصفح من غير ما يطلبها.
+ */
+export function ensureDemoLogin(
+  accounts: UserAccount[],
+  workspaces: Workspace[],
+  demoFactoryId: string,
+  demoDbKey: string,
+  demo: { name: string; industry: string },
+): { accounts: UserAccount[]; workspaces: Workspace[] } {
+  const taken = accounts.some((a) => a.email === DEMO_LOGIN.email && a.id !== DEMO_USER_ID);
+  const hasAccount = accounts.some((a) => a.id === DEMO_USER_ID);
+  const hasWorkspace = workspaces.some((w) => w.factoryId === demoFactoryId);
+  if (taken || (hasAccount && hasWorkspace)) return { accounts, workspaces };
+
+  const nextAccounts = hasAccount ? accounts : [...accounts, demoAccount()];
+  if (!hasAccount) saveAccounts(nextAccounts);
+
+  let nextWorkspaces = workspaces;
+  if (!hasWorkspace) {
+    nextWorkspaces = [
+      ...workspaces,
+      {
+        ...blankWorkspace(demoFactoryId, demoDbKey, demo.name, "alnoor-demo"),
+        industry: demo.industry,
+        ownerId: DEMO_USER_ID,
+        access: [{ userId: DEMO_USER_ID, role: "owner" as const }],
+        modules: [...MODULE_KEYS],
+        modulesV: MODULES_VERSION,
+      },
+    ];
+    saveWorkspaces(nextWorkspaces);
+  } else if (!workspaces.find((w) => w.factoryId === demoFactoryId)?.ownerId) {
+    // المساحة اتعملت من زرار التجربة قبل الحساب، فمالهاش مالك: بنربطها
+    nextWorkspaces = workspaces.map((w) =>
+      w.factoryId === demoFactoryId
+        ? { ...w, ownerId: DEMO_USER_ID, access: [{ userId: DEMO_USER_ID, role: "owner" as const }] }
+        : w,
+    );
+    saveWorkspaces(nextWorkspaces);
+  }
+
+  return { accounts: nextAccounts, workspaces: nextWorkspaces };
+}
+
 export function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(value.trim());
 }

@@ -21,7 +21,12 @@ import {
   type Warehouse,
 } from "./types";
 
-const FID = "factory-demo-1";
+/** معرّف المصنع التجريبي — ثابت عشان الحساب التجريبي يربط عليه */
+export const FID = "factory-demo-1";
+
+/** اسم ونشاط المصنع التجريبي، مستقلّين عن `demoDb()` عشان سجل الـworkspace
+ *  يتعمل من غير ما نبني ٧٩٢ سجل الأول */
+export const DEMO_FACTORY = { name: "مصنع النور للإنتاج", industry: "apparel" as Industry };
 
 export const DEMO_MEMBERS: Member[] = [
   { id: "m-owner", factoryId: FID, email: "owner@factory.demo", name: "صاحب المصنع", role: "owner" },
