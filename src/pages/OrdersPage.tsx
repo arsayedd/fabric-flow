@@ -126,6 +126,7 @@ export function OrdersPage() {
                 {can.edit ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     <select
+                      aria-label={`حالة أمر ${o.code}`}
                       className="h-9 rounded-md border border-input bg-background px-2 text-sm"
                       value={o.status}
                       onChange={(e) => updateOrder(o.id, { status: e.target.value as OrderStatus })}

@@ -64,7 +64,7 @@ export function ProductionPage() {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <select className={`${selectClass} w-36`} value={days} onChange={(e) => setDays(Number(e.target.value))}>
+          <select aria-label="المدة" className={`${selectClass} w-36`} value={days} onChange={(e) => setDays(Number(e.target.value))}>
             {RANGES.map((r) => (
               <option key={r.days} value={r.days}>
                 {r.label}

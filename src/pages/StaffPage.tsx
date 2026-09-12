@@ -68,6 +68,7 @@ export function StaffPage() {
             {m.role !== "owner" && m.id !== session?.memberId ? (
               <div className="mt-3 flex flex-wrap gap-2">
                 <select
+                  aria-label={`دور ${m.name}`}
                   className="h-9 rounded-md border border-input bg-background px-2 text-sm"
                   value={m.role}
                   onChange={(e) => changeRole(m.id, e.target.value as Role)}
@@ -196,6 +197,7 @@ function PermissionsCard() {
           </p>
         </div>
         <select
+          aria-label="الدور اللي بتجرّب صلاحياته"
           className="h-9 rounded-md border border-input bg-background px-2 text-sm"
           value={target}
           onChange={(e) => setTarget(e.target.value as Role)}

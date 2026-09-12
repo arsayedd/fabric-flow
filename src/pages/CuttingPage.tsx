@@ -385,6 +385,8 @@ function NewLayPanel({ open, onClose }: { open: boolean; onClose: () => void }) 
             onChange={(e) => setSizes(sizes.map((r, j) => (i === j ? { ...r, perPly: e.target.value } : r)))}
             inputMode="numeric"
             className="w-24"
+            placeholder="في الطبقة"
+            aria-label="عدد القطع في الطبقة"
           />
           <Button
             variant="ghost"
