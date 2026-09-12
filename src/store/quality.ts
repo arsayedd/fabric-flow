@@ -116,6 +116,12 @@ export type ProblemRow = {
   /** تكلفة المشكلة: أثر مرتجعاتها + تكلفة اللي اتمسك جوه */
   cost: number;
   cases: number;
+  /**
+   * حالات لسه مااتسوّتش (وصلت أو اتفحصت وبس). تكلفتها لسه مااتقرّرتش،
+   * فالـ`cost` فوق **أرضية** مش رقم نهائي. مهم يتعرض، لأن مشكلة تكلفتها
+   * صفر وهي لسه مافُتحتش مش «مشكلة ببلاش» — دي مشكلة لسه مااتحسبتش.
+   */
+  pending: number;
   pct: number;
   cumPct: number;
 };
@@ -132,9 +138,12 @@ const REWORK_SHARE = 0.5;
 
 export function problemPareto(db: Db, days = 30): ProblemRow[] {
   const from = addDays(cairoToday(), -days);
-  const map = new Map<ProblemKind, { inside: number; outside: number; cost: number; cases: number }>();
+  const map = new Map<
+    ProblemKind,
+    { inside: number; outside: number; cost: number; cases: number; pending: number }
+  >();
   const bump = (k: ProblemKind) => {
-    const cur = map.get(k) ?? { inside: 0, outside: 0, cost: 0, cases: 0 };
+    const cur = map.get(k) ?? { inside: 0, outside: 0, cost: 0, cases: 0, pending: 0 };
     map.set(k, cur);
     return cur;
   };
@@ -158,6 +167,7 @@ export function problemPareto(db: Db, days = 30): ProblemRow[] {
     const cur = bump(r.problem);
     cur.outside += r.qty;
     cur.cases += 1;
+    if (r.status === "open" || r.status === "inspected") cur.pending += 1;
     cur.cost += returnImpact(db, r).total;
   }
 
@@ -170,6 +180,7 @@ export function problemPareto(db: Db, days = 30): ProblemRow[] {
     qty: v.inside + v.outside,
     cost: v.cost,
     cases: v.cases,
+    pending: v.pending,
     pct: 0,
     cumPct: 0,
   }));

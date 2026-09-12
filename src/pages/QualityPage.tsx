@@ -266,6 +266,7 @@ function Problems() {
   }
 
   const flip = byQty[0] && byCost[0] && byQty[0].kind !== byCost[0].kind;
+  const pendingCases = byQty.reduce((s, r) => s + r.pending, 0);
 
   return (
     <div className="space-y-3">
@@ -303,13 +304,20 @@ function Problems() {
             أول {qty(eighty + 1, 0)} مشكلة بيعملوا {qty(byQty[eighty].cumPct, 0)}٪ من العيوب.
           </p>
         ) : null}
+        {by === "cost" && pendingCases > 0 ? (
+          <p className="mb-3 text-sm text-muted-foreground">
+            ترتيب الفلوس ده مؤقت: {qty(pendingCases, 0)} حالة لسه مستني قرار، وتكلفتها مش داخلة في الحساب لحد ما
+            تتسوّى.
+          </p>
+        ) : null}
         <ul className="space-y-3">
           {rows.map((r) => (
             <li key={r.kind}>
               <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
                 <span>{r.label}</span>
                 <span className="shrink-0 tabular text-muted-foreground">
-                  {qty(r.qty, 0)} قطعة · {money(r.cost)}
+                  {qty(r.qty, 0)} قطعة ·{" "}
+                  {r.cost === 0 && r.pending > 0 ? "التكلفة لسه مش محسوبة" : money(r.cost)}
                 </span>
               </div>
               <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted">
@@ -325,6 +333,7 @@ function Problems() {
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
                 اتمسك جوه {qty(r.inside, 0)} · رجع من برّه {qty(r.outside, 0)} · {qty(r.cases, 0)} حالة
+                {r.pending > 0 ? ` · منهم ${qty(r.pending, 0)} لسه مستني قرار` : ""}
               </p>
             </li>
           ))}
