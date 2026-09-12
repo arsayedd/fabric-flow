@@ -14,6 +14,7 @@
 [المعمارية](docs/architecture.md) · [نظام التصميم](docs/design-system.md) ·
 [جهات التعامل](docs/parties.md) · [ذكاء العملاء](docs/intelligence.md) ·
 [الدخول والتسجيل](docs/onboarding.md) · [الصاب دومين](docs/subdomains.md) ·
+[بورتال العميل](docs/portal.md) ·
 [هيكل النظام والصلاحيات](docs/shell.md) · [لوحة الإدارة](docs/dashboard.md) ·
 [التصدير والمستندات](docs/documents.md) ·
 [أرض المصنع والقص والورش](docs/floor.md) ·
@@ -31,6 +32,8 @@
 تفاصيل السيرفر والتحديث في [`docs/deploy.md`](docs/deploy.md)، وكل مصنع بياخد
 عنوانه المستقل — [`docs/subdomains.md`](docs/subdomains.md).
 المصنع التجريبي على <https://alnoor.sanaa.cloud>.
+وكل عميل بياخد لينك خاص بيه يشوف منه حسابه بدون كلمة سر —
+[`docs/portal.md`](docs/portal.md).
 
 > البيانات لسه في المتصفح: كل جهاز بيفتح النظام عنده مصنعه الخاص. المشاركة
 > بين الأجهزة هي شغلة [Supabase](docs/supabase.md)، وهي الخطوة الجاية.
