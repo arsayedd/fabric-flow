@@ -286,10 +286,17 @@ function HitCard({ hit }: { hit: Hit }) {
 
         {bundle ? (
           <div className="grid gap-2 sm:grid-cols-3">
-            {!op && !st?.done && can.do("production", "create") ? (
-              <Button onClick={start}>
-                <Play /> ابدأ {st?.nextOperationName ?? "العملية"}
-              </Button>
+            {!op && !st?.done && st?.totalSteps ? (
+              can.do("production", "create") ? (
+                <Button onClick={start}>
+                  <Play /> ابدأ {st.nextOperationName ?? "العملية"}
+                </Button>
+              ) : null
+            ) : null}
+            {st && st.totalSteps === 0 ? (
+              <p className="col-span-full text-sm text-muted-foreground">
+                المنتج مالوش مسار عمليات — مافيش شغل يتسجّل على الباندل لحد ما المسار يتضاف.
+              </p>
             ) : null}
             {op && can.do("production", "edit") ? (
               <Button variant="gold" onClick={() => setFinishing(bundle)}>

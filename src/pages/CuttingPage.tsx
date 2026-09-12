@@ -280,7 +280,18 @@ function NewLayPanel({ open, onClose }: { open: boolean; onClose: () => void }) 
 
   const order = orders.find((o) => o.id === orderId) ?? null;
   const routes = order?.productId ? routingLines(db, order.productId) : [];
-  const cutOp = routes[0] ?? null;
+  /**
+   * عملية القص في المسار.
+   *
+   * كانت بتتأخد على إنها **أول** عملية في المسار، وده بيغلط لما المسار
+   * مايبدأش بقص: الفرشة بتعلّم أول عملية (خياطة مثلًا) إنها خلصت، فالخياطة
+   * مابتتسجّلش على أي باندل، وأجرها ودقايقها بتضيع من غير ما حد ياخد باله.
+   * فبقت اختيار ظاهر، مبدئيًا على العملية اللي اسمها قص، ولو المسار مافيهوش
+   * قص يبقى «مش في المسار» — والفرشة مابتعلّمش حاجة خالصة.
+   */
+  const guessedCut = routes.find((r) => /قص|تقطيع/.test(r.name)) ?? null;
+  const [cutOpId, setCutOpId] = useState("");
+  const cutOp = routes.find((r) => r.operationId === cutOpId) ?? guessedCut;
   const perPlyTotal = sizes.reduce((s, r) => s + (Number(r.perPly) || 0), 0);
   const pieces = perPlyTotal * (Number(plies) || 0);
   const fabric = (Number(marker) + (Number(end) || 0)) * (Number(plies) || 0);
@@ -348,6 +359,24 @@ function NewLayPanel({ open, onClose }: { open: boolean; onClose: () => void }) 
           ))}
         </select>
       </Field>
+      {routes.length ? (
+        <Field label="عملية القص في المسار">
+          <select className={selectClass} value={cutOp?.operationId ?? ""} onChange={(e) => setCutOpId(e.target.value)}>
+            <option value="">مش في المسار — كل العمليات هتتسجّل على الباندل</option>
+            {routes.map((r) => (
+              <option key={r.operationId} value={r.operationId}>
+                {r.seq}. {r.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
+      {cutOp ? (
+        <p className="-mt-1 mb-3 text-xs text-muted-foreground">
+          العمليات لحد «{cutOp.name}» بتتحسب خالصة على الباندل، لأن القص بيتسجّل على الفرشة مرة واحدة.
+        </p>
+      ) : null}
+
       {stock && fabric > stock.qty ? (
         <p className="-mt-1 mb-3 text-xs text-danger">
           الفرشة عايزة {qty(fabric, 2)} والمتاح {qty(stock.qty, 2)} — القص هيترفض بالرصيد ده.

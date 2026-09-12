@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { Boxes, CheckCircle2, Pause, Play, ScanLine, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { Choice, Field, Panel } from "@/components/Panel";
@@ -161,8 +162,24 @@ export function StationPage() {
             </div>
           ) : null}
 
+          {/* من غير مسار عمليات مافيش حاجة تبدأ — فبدل زرار بيرفض بعد الضغط،
+              الشاشة بتقول السبب وبتوديه للمكان اللي يتصلح منه */
+          }
+          {st.totalSteps === 0 ? (
+            <div className="rounded-md border border-warn/30 bg-warn-soft/40 p-3 text-sm">
+              <p>المنتج مالوش مسار عمليات، فمافيش شغل يتسجّل على الباندل ده.</p>
+              {st.order?.productId ? (
+                <Link to={`/products/${st.order.productId}`} className="mt-1 inline-block text-accent">
+                  ضيف مسار العمليات للمنتج
+                </Link>
+              ) : (
+                <p className="mt-1 text-muted-foreground">الأمر مش مربوط بمنتج مسجّل — اربطه بمنتج وضيف مساره.</p>
+              )}
+            </div>
+          ) : null}
+
           <div className="grid grid-cols-2 gap-2">
-            {!mine && !st.done && can.do("production", "create") ? (
+            {!mine && !st.done && st.totalSteps > 0 && can.do("production", "create") ? (
               <Button size="lg" className="col-span-2" onClick={start}>
                 <Play /> ابدأ {st.nextOperationName ?? "العملية"}
               </Button>
