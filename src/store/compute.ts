@@ -1,5 +1,5 @@
 import { addDays, cairoToday, qty } from "@/lib/utils";
-import type { Collection, Db, Delivery, PayMethod } from "./types";
+import type { Collection, Db, Delivery, PayMethod, ReturnEntry } from "./types";
 
 export type DeliveryRemain = Delivery & {
   remaining: number;
@@ -19,7 +19,7 @@ export type ReceivableRow = {
 export type ClientStatementLine = {
   id: string;
   date: string;
-  kind: "delivery" | "collection";
+  kind: "delivery" | "collection" | "credit" | "refund";
   label: string;
   debit: number;
   credit: number;
@@ -30,14 +30,91 @@ export function confirmedCollections(db: Db): Collection[] {
   return db.collections.filter((c) => c.status === "confirmed");
 }
 
-export function fifoRemain(deliveries: Delivery[], collections: Collection[]): DeliveryRemain[] {
+/**
+ * توريدات موديل معيّن.
+ *
+ * الربط بالاسم مش بالـid لأن `Delivery.model` نص مكتوب بالإيد من قبل نواة
+ * التصنيع، فالتوريدات القديمة مالهاش `productId`. والقاعدة هنا هي **المرجع
+ * الوحيد** للربط ده: التكلفة والمرتجعات بيقراوا منها، عشان الكمية المتسلّمة
+ * تطلع نفس الرقم في الشاشتين بدل ما كل واحدة تطابق بطريقتها.
+ */
+export function deliveriesOfModel(db: Db, productName: string): Delivery[] {
+  const name = productName.trim();
+  if (!name) return [];
+  return db.deliveries.filter((d) => d.model.trim() === name);
+}
+
+/* ── المرتجعات في دفاتر الفلوس ─────────────────────────────────
+ *
+ * الأسطر دي هي اللي بتربط المرتجع بالفلوس، وكل واحدة بتتقرا من **مكان واحد
+ * بس** عشان مافيش مبلغ يتعدّ مرتين:
+ *
+ *   إشعار الخصم للعميل بيتعامل زي التحصيل بالظبط في حساب المديونية —
+ *   بيقلّل المطلوب من العميل بدون ما فلوس تتحرك.
+ *   الرد النقدي بيطلع من خزنة محددة، فبيتحسب في رصيد الخزنة.
+ *   إشعار خصم المورّد بيقلّل المستحق على فاتورة الشراء.
+ *
+ * ومكانها هنا مش في `returns.ts` لأن `returns.ts` بيقرا من الملف ده،
+ * فلو الاتنين بيقراوا من بعض كان بيبقى دوران في الاستيراد.
+ */
+
+/** المرتجع اللي بقى ليه أثر فعلي: اتسوّى، ومش مرفوض */
+export function isEffective(r: ReturnEntry): boolean {
+  return r.status === "settled" && r.resolution !== null && r.resolution !== "reject";
+}
+
+export type Credit = { id: string; partyId: string; date: string; amount: number; code: string };
+
+/** إشعارات الخصم للعملاء — بتقلّل المديونية */
+export function customerCredits(db: Db): Credit[] {
+  return (db.returns ?? [])
+    .filter((r) => r.source === "customer" && isEffective(r) && r.resolution === "credit" && r.settleAmount > 0 && r.partyId)
+    .map((r) => ({ id: r.id, partyId: r.partyId as string, date: r.settledAt?.slice(0, 10) ?? r.date, amount: r.settleAmount, code: r.code }));
+}
+
+/** الردود النقدية للعملاء — فلوس طلعت من خزنة */
+export function customerRefunds(db: Db): (Credit & { accountId: string })[] {
+  return (db.returns ?? [])
+    .filter(
+      (r) => r.source === "customer" && isEffective(r) && r.resolution === "refund" && r.settleAmount > 0 && r.partyId && r.accountId,
+    )
+    .map((r) => ({
+      id: r.id,
+      partyId: r.partyId as string,
+      date: r.settledAt?.slice(0, 10) ?? r.date,
+      amount: r.settleAmount,
+      code: r.code,
+      accountId: r.accountId as string,
+    }));
+}
+
+/** إشعار خصم المورّد على فاتورة شراء معيّنة */
+export function entryCredit(db: Db, costEntryId: string): number {
+  return (db.returns ?? [])
+    .filter((r) => r.source === "supplier" && r.costEntryId === costEntryId && isEffective(r) && r.resolution !== "replacement")
+    .reduce((s, r) => s + r.settleAmount, 0);
+}
+
+/**
+ * الأقدم أولًا: التحصيل بيسدّد أقدم توريد لسه مفتوح.
+ *
+ * و`credits` إشعارات الخصم — بتتعامل زي التحصيل بالظبط: بتسدّد توريد
+ * بالأقدمية وتقلّل المطلوب، والفرق الوحيد إن مافيش فلوس اتحركت. ولو
+ * ماعملناها كده، العميل اللي رجّع نص الشحنة يفضل ظاهر إنه مديون بكاملها.
+ */
+export function fifoRemain(
+  deliveries: Delivery[],
+  collections: Collection[],
+  credits: { id: string; partyId: string; date: string; amount: number }[] = [],
+): DeliveryRemain[] {
   const sortedDel = [...deliveries].sort((a, b) =>
     a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date),
   );
   const remain = sortedDel.map((d) => ({ ...d, remaining: d.amount, allocated: 0 }));
-  const cols = [...collections]
-    .filter((c) => c.status === "confirmed")
-    .sort((a, b) => (a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date)));
+  const cols = [
+    ...collections.filter((c) => c.status === "confirmed").map((c) => ({ id: c.id, clientId: c.clientId, date: c.date, amount: c.amount })),
+    ...credits.map((c) => ({ id: c.id, clientId: c.partyId, date: c.date, amount: c.amount })),
+  ].sort((a, b) => (a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date)));
 
   for (const col of cols) {
     let left = col.amount;
@@ -57,7 +134,10 @@ export function clientBalance(db: Db, clientId: string): number {
   const col = confirmedCollections(db)
     .filter((c) => c.clientId === clientId)
     .reduce((s, c) => s + c.amount, 0);
-  return del - col;
+  const credit = customerCredits(db)
+    .filter((c) => c.partyId === clientId)
+    .reduce((s, c) => s + c.amount, 0);
+  return del - col - credit;
 }
 
 export function clientStatement(db: Db, clientId: string): ClientStatementLine[] {
@@ -83,6 +163,14 @@ export function clientStatement(db: Db, clientId: string): ClientStatementLine[]
       credit: c.status === "confirmed" ? c.amount : 0,
     });
   }
+  /*
+   * إشعار الخصم دائن زي التحصيل. والرد النقدي **مابيدخلش** كشف الحساب:
+   * فلوس رجعت للعميل كاش، فمالهاش أثر على المديونية — ولو حسبناها دائن
+   * كان العميل هيبان إنه دافع مرتين على نفس المرتجع.
+   */
+  for (const c of customerCredits(db).filter((x) => x.partyId === clientId)) {
+    lines.push({ id: c.id, date: c.date, kind: "credit", label: `إشعار خصم ${c.code}`, debit: 0, credit: c.amount });
+  }
   lines.sort((a, b) => (a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date)));
   let bal = 0;
   return lines.map((l) => {
@@ -94,7 +182,7 @@ export function clientStatement(db: Db, clientId: string): ClientStatementLine[]
 export function receivables(db: Db) {
   const today = cairoToday();
   const week = addDays(today, 7);
-  const remain = fifoRemain(db.deliveries, db.collections).filter((d) => d.remaining > 0.5);
+  const remain = fifoRemain(db.deliveries, db.collections, customerCredits(db)).filter((d) => d.remaining > 0.5);
   const rows: ReceivableRow[] = remain.map((d) => {
     const client = db.parties.find((c) => c.id === d.clientId);
     return {
@@ -125,6 +213,8 @@ export function accountBalance(db: Db, accountId: string): number {
     if (p.accountId === accountId && (p.kind === "pay" || p.kind === "advance")) bal -= p.amount;
   }
   for (const p of db.subPayments ?? []) if (p.accountId === accountId) bal -= p.amount;
+  // الرد النقدي للعميل فلوس خرجت من الخزنة زي أي دفعة تانية
+  for (const r of customerRefunds(db)) if (r.accountId === accountId) bal -= r.amount;
   for (const t of db.manualTx) if (t.accountId === accountId) bal += t.amount;
   return bal;
 }
@@ -163,7 +253,22 @@ export function workerAdvance(db: Db, workerId: string): number {
 
 export function pnl(db: Db, from: string, to: string) {
   const inRange = (d: string) => d >= from && d <= to;
-  const revenue = db.deliveries.filter((d) => inRange(d.date)).reduce((s, d) => s + d.amount, 0);
+  /*
+   * المرتجع بيقلّل الإيراد مش بيزوّد المصروف.
+   *
+   * الخصم والرد النقدي الاتنين بيرجعوا فلوس بيع اتسجّلت إيراد قبل كده، فلو
+   * حسبناهم مصروف كان الإيراد والمصروف الاتنين بيتضخّموا بنفس المبلغ —
+   * الصافي صح، بس هامش الربح يطلع غلط. والمصاريف الحقيقية (الشحن والإصلاح)
+   * هي اللي بتتحسب مصروف، لأنها فلوس اتدفعت فعلًا.
+   */
+  const returnRows = (db.returns ?? []).filter((r) => isEffective(r) && r.source === "customer");
+  const returnCredits = returnRows
+    .filter((r) => inRange(r.settledAt?.slice(0, 10) ?? r.date))
+    .reduce((s, r) => s + r.settleAmount, 0);
+  const returnCosts = (db.returns ?? [])
+    .filter((r) => r.status !== "cancelled" && inRange(r.date))
+    .reduce((s, r) => s + r.extraCost, 0);
+  const revenue = db.deliveries.filter((d) => inRange(d.date)).reduce((s, d) => s + d.amount, 0) - returnCredits;
   const costs = db.costEntries.filter((d) => inRange(d.date)).reduce((s, d) => s + d.amount, 0);
   const labor = db.workerEarnings.filter((d) => inRange(d.date)).reduce((s, d) => s + d.amount, 0);
   const otherOut = db.manualTx.filter((d) => inRange(d.date) && d.amount < 0).reduce((s, d) => s + Math.abs(d.amount), 0);
@@ -172,7 +277,7 @@ export function pnl(db: Db, from: string, to: string) {
   // الشغل يرجع، مش لما الكمية تطلع. ومابيدخلش في `labor` عشان `labor`
   // معناها أجور عمال المصنع (دفتر مكاسب العمال) ومايختلطش بحساب الورشة.
   const outsourcing = subcontractCharges(db).filter((c) => inRange(c.date)).reduce((s, c) => s + c.amount, 0);
-  const expenses = costs + labor + outsourcing + otherOut;
+  const expenses = costs + labor + outsourcing + otherOut + returnCosts;
   return {
     revenue: revenue + otherIn,
     costs,
@@ -180,6 +285,8 @@ export function pnl(db: Db, from: string, to: string) {
     outsourcing,
     otherOut,
     otherIn,
+    returnCredits,
+    returnCosts,
     expenses,
     net: revenue + otherIn - expenses,
   };
@@ -208,7 +315,9 @@ export function payables(db: Db) {
     .map((e) => ({
       ...e,
       paid: costEntryPaid(db, e.id),
-      due: e.amount - costEntryPaid(db, e.id),
+      // إشعار خصم المورّد بيقلّل المستحق زي الدفع، بس مش دفع — فمنفصل عنه
+      credit: entryCredit(db, e.id),
+      due: e.amount - costEntryPaid(db, e.id) - entryCredit(db, e.id),
       itemName: db.costItems.find((i) => i.id === e.costItemId)?.name ?? "",
     }))
     .filter((e) => e.due > 0.5);

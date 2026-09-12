@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { cairoToday, nid } from "@/lib/utils";
+import { cairoToday, moneyPlain, nid } from "@/lib/utils";
 import {
   accountBalance,
   allAccountBalances,
@@ -62,9 +62,10 @@ import { bundleCode, layMath, nextBundleSeq, orderCutSummary, planBundles } from
 import { bundleState } from "./floor";
 import { KIND_MODULE } from "./codes";
 import { subMovement, subView } from "./outsourcing";
+import { RETURN_MODULE, nextComplaintCode, nextReturnCode, unitCostOf } from "./returns";
 import { buildDoc, canTransition, DOC_DEFS, findDoc, type IssueInput } from "./documents";
 import { demoDb, emptyDb, templateData } from "./seed";
-import { PRODUCTION_LINES } from "./types";
+import { PRODUCTION_LINES, RETURN_SOURCE_LABEL } from "./types";
 import type {
   Account,
   AuditEntry,
@@ -75,8 +76,15 @@ import type {
   CodeKind,
   CutLay,
   CutLayLine,
+  Complaint,
+  ComplaintKind,
   FloorIssue,
   FloorIssueKind,
+  ReturnCondition,
+  ReturnEntry,
+  ReturnReason,
+  ReturnResolution,
+  ReturnSource,
   Subcontract,
   SubPayment,
   SubReceipt,
@@ -170,6 +178,8 @@ function migrate(db: Db): Db {
     subcontracts: db.subcontracts ?? [],
     subReceipts: db.subReceipts ?? [],
     subPayments: db.subPayments ?? [],
+    returns: db.returns ?? [],
+    complaints: db.complaints ?? [],
     orders: (db.orders ?? []).map((o) => {
       const status: OrderStatus = (o.status as OrderStatus | "open") === "open" ? "running" : o.status;
       return {
@@ -510,6 +520,15 @@ type FactoryApi = {
   paySubcontract: (input: { partyId: string; subcontractId: string | null; date: string; amount: number; accountId: string; method: PayMethod; notes: string }) => void;
   closeSubcontract: (id: string) => void;
   cancelSubcontract: (id: string, reason: string) => void;
+  /* ── المرتجعات والشكاوى ── */
+  addReturn: (input: ReturnInput) => string;
+  /** الفحص: بيحدد رجع بأي حال وينفع يدخل المخزن ولا لأ */
+  inspectReturn: (id: string, input: { condition: ReturnCondition; qty: number; notes: string }) => void;
+  /** التسوية: هي اللي بتحرّك الفلوس والمخزن — مش لحظة الوصول */
+  settleReturn: (id: string, input: SettleInput) => void;
+  cancelReturn: (id: string, reason: string) => void;
+  addComplaint: (input: ComplaintInput) => string;
+  updateComplaint: (id: string, patch: Partial<Pick<Complaint, "status" | "severity" | "ownerId" | "dueDate" | "resolution" | "claimAmount" | "returnId">>) => void;
   /**
    * بيرجّع المستند: لو السجل ده ليه مستند شغّال بيرجّعه بنفس رقمه بدل ما
    * يعمل رقم جديد — طبع تاني مش مستند تاني.
@@ -540,6 +559,53 @@ export type LayInput = {
   markerWidthM: number;
   notes: string;
   sizes: { size: string; perPly: number }[];
+};
+
+export type ReturnInput = {
+  source: ReturnSource;
+  date: string;
+  partyId: string | null;
+  itemType: "product" | "material";
+  itemId: string;
+  qty: number;
+  condition: ReturnCondition;
+  reason: ReturnReason;
+  reasonNote: string;
+  unitValue: number;
+  deliveryId: string | null;
+  orderId: string | null;
+  bundleId: string | null;
+  costEntryId: string | null;
+  issueId: string | null;
+  notes: string;
+};
+
+export type SettleInput = {
+  resolution: ReturnResolution;
+  settleAmount: number;
+  accountId: string | null;
+  method: PayMethod | null;
+  extraCost: number;
+  extraNote: string;
+  restock: boolean;
+  warehouseId: string | null;
+  replacementQty: number;
+  notes: string;
+};
+
+export type ComplaintInput = {
+  partyId: string;
+  date: string;
+  kind: ComplaintKind;
+  severity: Complaint["severity"];
+  subject: string;
+  detail: string;
+  deliveryId: string | null;
+  orderId: string | null;
+  returnId: string | null;
+  ownerId: string | null;
+  dueDate: string | null;
+  claimAmount: number;
 };
 
 export type SubcontractInput = {
@@ -2115,6 +2181,272 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         );
       },
 
+      /* ── المرتجعات والشكاوى ──────────────────────────────────
+       *
+       * تلات خطوات مقصودة: **وصل** → **اتفحص** → **اتسوّى**. وكل خطوة
+       * بتاخد صلاحية الطرف اللي المرتجع جه منه (`RETURN_MODULE`)، فمفيش
+       * حد بيعمل إشعار خصم لعميل بصلاحية مخازن.
+       *
+       * والفلوس والمخزن **مابيتحركوش غير في التسوية**. لو اتحركوا وقت
+       * الوصول، كل قطعة تالفة كانت هتدخل المخزون وتطلع منه تاني، ورصيد
+       * العميل كان هيتغيّر قبل ما حد يقرر أصلًا إن المرتجع مقبول.
+       */
+      addReturn: (input) => {
+        need(RETURN_MODULE[input.source], "create");
+        if (input.qty <= 0) throw new Error("الكمية لازم تكون أكبر من صفر.");
+        if (!input.itemId) throw new Error("اختار الصنف الراجع.");
+        if (input.source !== "production" && !input.partyId) {
+          throw new Error(input.source === "customer" ? "اختار العميل." : "اختار المورّد.");
+        }
+        if (input.date > cairoToday()) throw new Error("تاريخ المرتجع مايكونش في المستقبل.");
+        if (input.unitValue < 0) throw new Error("قيمة القطعة مايصحّش تكون سالبة.");
+        /*
+         * الكمية الراجعة مايصحّش تعدّي اللي اتسلّم فعلًا في نفس التوريد.
+         * الشرط ده هو اللي بيمنع «رجّع ١٠٠ من شحنة ٨٠» — وهي الغلطة اللي
+         * بتخلّي نسبة الإرجاع تطلع أكبر من ١٠٠٪ ومحدش يعرف منين.
+         */
+        if (input.deliveryId) {
+          const del = db.deliveries.find((d) => d.id === input.deliveryId);
+          if (!del) throw new Error("التوريد المربوط مش موجود.");
+          const already = db.returns
+            .filter((r) => r.deliveryId === input.deliveryId && r.status !== "cancelled")
+            .reduce((s, r) => s + r.qty, 0);
+          const cap = del.quantity ?? 0;
+          if (cap > 0 && already + input.qty > cap) {
+            throw new Error(`التوريد ده كان ${qtyText(cap)} قطعة، ورجع منه ${qtyText(already)} — الباقي ${qtyText(cap - already)}.`);
+          }
+        }
+        const row: ReturnEntry = {
+          id: nid(),
+          factoryId: fid(db),
+          code: nextReturnCode(db.returns, input.date),
+          source: input.source,
+          date: input.date,
+          partyId: input.source === "production" ? null : input.partyId,
+          itemType: input.itemType,
+          itemId: input.itemId,
+          qty: input.qty,
+          condition: input.condition,
+          reason: input.reason,
+          reasonNote: input.reasonNote.trim(),
+          deliveryId: input.deliveryId,
+          orderId: input.orderId,
+          bundleId: input.bundleId,
+          costEntryId: input.costEntryId,
+          issueId: input.issueId,
+          status: "open",
+          resolution: null,
+          unitValue: input.unitValue,
+          settleAmount: 0,
+          accountId: null,
+          method: null,
+          extraCost: 0,
+          extraNote: "",
+          restock: false,
+          warehouseId: null,
+          replacementQty: 0,
+          inspectedAt: null,
+          inspectedBy: null,
+          settledAt: null,
+          settledBy: null,
+          cancelledAt: null,
+          cancelledBy: null,
+          cancelReason: null,
+          createdAt: new Date().toISOString(),
+          createdBy: session?.memberId ?? "",
+          notes: input.notes.trim(),
+        };
+        mutate({ returns: [row, ...db.returns] }, { action: "create", table: "returns", recordId: row.id, before: null, after: row });
+        return row.id;
+      },
+      inspectReturn: (id, input) => {
+        const before = db.returns.find((r) => r.id === id);
+        if (!before) throw new Error("المرتجع مش موجود.");
+        need(RETURN_MODULE[before.source], "edit");
+        if (before.status === "settled") throw new Error("المرتجع ده اتسوّى خلاص — الفحص بيبقى قبل التسوية.");
+        if (before.status === "cancelled") throw new Error("المرتجع ده ملغي.");
+        if (input.qty <= 0) throw new Error("الكمية لازم تكون أكبر من صفر.");
+        if (input.qty > before.qty) throw new Error(`المرتجع جه ${qtyText(before.qty)} — الفحص مايزوّدش الكمية.`);
+        const after = {
+          ...before,
+          status: "inspected" as const,
+          condition: input.condition,
+          qty: input.qty,
+          notes: input.notes.trim() || before.notes,
+          inspectedAt: new Date().toISOString(),
+          inspectedBy: session?.memberId ?? "",
+        };
+        mutate(
+          { returns: db.returns.map((r) => (r.id === id ? after : r)) },
+          { action: "update", table: "returns", recordId: id, before, after },
+        );
+      },
+      settleReturn: (id, input) => {
+        const before = db.returns.find((r) => r.id === id);
+        if (!before) throw new Error("المرتجع مش موجود.");
+        need(RETURN_MODULE[before.source], "edit");
+        if (before.status === "settled") throw new Error("المرتجع ده متسوّى خلاص.");
+        if (before.status === "cancelled") throw new Error("المرتجع ده ملغي.");
+        if (before.status === "open") throw new Error("افحص المرتجع الأول — القرار بيتبنى على حالة القطعة.");
+
+        const money = input.resolution === "credit" || input.resolution === "refund";
+        if (money && input.settleAmount <= 0) throw new Error("حدّد المبلغ اللي هيتخصم أو يترد.");
+        if (input.resolution === "refund") {
+          if (!input.accountId) throw new Error("الرد النقدي لازم يطلع من خزنة محددة.");
+          if (!input.method) throw new Error("اختار طريقة الرد.");
+          if (before.source === "customer") {
+            const bal = accountBalance(db, input.accountId);
+            if (input.settleAmount > bal) {
+              throw new Error(`الخزنة فيها ${moneyPlain(bal)} ج بس — الرد النقدي مايزوّدش عن الرصيد.`);
+            }
+          }
+        }
+        if (input.resolution === "replacement" && input.replacementQty <= 0) {
+          throw new Error("حدّد كمية البديل.");
+        }
+        if (input.resolution === "reject" && !input.notes.trim()) {
+          throw new Error("رفض المرتجع لازم له سبب مكتوب.");
+        }
+        /*
+         * القطعة التالفة مامتنفعش ترجع المخزون. الشرط ده هو الفرق بين
+         * مخزون بيتصرّف فعلًا ومخزون على الورق: لو سمحنا بيها، الرصيد
+         * هيقول إن فيه ١٢ قطعة للبيع وهي في الحقيقة تالفة في الرف.
+         */
+        if (input.restock && before.condition === "defective") {
+          throw new Error("المرتجع متفحوص إنه تالف — ماينفعش يرجع المخزون. لو سليم عدّل الفحص الأول.");
+        }
+        if (input.restock && input.resolution === "scrap") {
+          throw new Error("مش ممكن يرجع المخزون وهو متهلَك في نفس الوقت.");
+        }
+
+        const warehouseId =
+          input.warehouseId ??
+          db.warehouses.find((w) => w.kind === (before.itemType === "product" ? "finished" : "material"))?.id ??
+          null;
+        const now = new Date().toISOString();
+        const after: ReturnEntry = {
+          ...before,
+          status: "settled",
+          resolution: input.resolution,
+          settleAmount: money ? input.settleAmount : 0,
+          accountId: input.resolution === "refund" ? input.accountId : null,
+          method: input.resolution === "refund" ? input.method : null,
+          extraCost: Math.max(0, input.extraCost),
+          extraNote: input.extraNote.trim(),
+          restock: input.restock,
+          warehouseId: input.restock ? warehouseId : null,
+          replacementQty: input.resolution === "replacement" ? input.replacementQty : 0,
+          notes: input.notes.trim() || before.notes,
+          settledAt: now,
+          settledBy: session?.memberId ?? "",
+        };
+
+        /*
+         * حركة المخزون بتتسجّل هنا بس، ومرة واحدة. والإشارة هي اللي
+         * بتحدد الاتجاه: مرتجع داخل موجب، ومرتجع طالع لمورّد سالب.
+         */
+        const moves: StockMovement[] = [];
+        if (input.restock) {
+          moves.push({
+            id: nid(),
+            factoryId: fid(db),
+            date: cairoToday(),
+            itemType: before.itemType,
+            itemId: before.itemId,
+            warehouseId,
+            kind: "return",
+            qty: before.source === "supplier" ? -before.qty : before.qty,
+            unitCost: unitCostOf(db, before),
+            refType: "return",
+            refId: before.id,
+            notes: `${before.code} — ${RETURN_SOURCE_LABEL[before.source]}`,
+          });
+        }
+
+        mutate(
+          {
+            returns: db.returns.map((r) => (r.id === id ? after : r)),
+            ...(moves.length ? { stockMovements: [...moves, ...db.stockMovements] } : {}),
+          },
+          { action: "update", table: "returns", recordId: id, before, after },
+        );
+      },
+      cancelReturn: (id, reason) => {
+        const before = db.returns.find((r) => r.id === id);
+        if (!before) throw new Error("المرتجع مش موجود.");
+        need(RETURN_MODULE[before.source], "edit");
+        if (!reason.trim()) throw new Error("الإلغاء لازم له سبب مكتوب.");
+        /*
+         * المرتجع المتسوّى مابيتلغيش: فلوسه اتحركت ومخزونه اتغيّر، والإلغاء
+         * هنا كان هيسيب حركة مخزون ورصيد عميل بدون سند. اللي بيتعمل في
+         * الحالة دي مرتجع مضاد — مش مسح للأول.
+         */
+        if (before.status === "settled") {
+          throw new Error("المرتجع ده اتسوّى وفلوسه ومخزونه اتحركوا — سجّل حركة مضادة بدل الإلغاء.");
+        }
+        const after = {
+          ...before,
+          status: "cancelled" as const,
+          cancelReason: reason.trim(),
+          cancelledAt: new Date().toISOString(),
+          cancelledBy: session?.memberId ?? "",
+        };
+        mutate(
+          { returns: db.returns.map((r) => (r.id === id ? after : r)) },
+          { action: "update", table: "returns", recordId: id, before, after },
+        );
+      },
+      addComplaint: (input) => {
+        need("parties", "create");
+        if (!input.partyId) throw new Error("اختار الجهة صاحبة الشكوى.");
+        if (!input.subject.trim()) throw new Error("اكتب موضوع الشكوى.");
+        const row: Complaint = {
+          id: nid(),
+          factoryId: fid(db),
+          code: nextComplaintCode(db.complaints, input.date),
+          partyId: input.partyId,
+          date: input.date,
+          kind: input.kind,
+          severity: input.severity,
+          subject: input.subject.trim(),
+          detail: input.detail.trim(),
+          deliveryId: input.deliveryId,
+          orderId: input.orderId,
+          returnId: input.returnId,
+          ownerId: input.ownerId,
+          dueDate: input.dueDate,
+          status: "open",
+          claimAmount: Math.max(0, input.claimAmount),
+          resolution: "",
+          resolvedAt: null,
+          resolvedBy: null,
+          createdAt: new Date().toISOString(),
+          createdBy: session?.memberId ?? "",
+        };
+        mutate({ complaints: [row, ...db.complaints] }, { action: "create", table: "complaints", recordId: row.id, before: null, after: row });
+        return row.id;
+      },
+      updateComplaint: (id, patch) => {
+        need("parties", "edit");
+        const before = db.complaints.find((c) => c.id === id);
+        if (!before) throw new Error("الشكوى مش موجودة.");
+        if (before.status === "closed") throw new Error("الشكوى مقفولة — مابتتعدّلش بعد القفل.");
+        const closing = patch.status === "resolved" || patch.status === "closed";
+        const resolution = (patch.resolution ?? before.resolution).trim();
+        if (closing && !resolution) throw new Error("اكتب اللي اتعمل قبل ما تقفل الشكوى.");
+        const after: Complaint = {
+          ...before,
+          ...patch,
+          resolution,
+          resolvedAt: closing ? before.resolvedAt ?? new Date().toISOString() : before.resolvedAt,
+          resolvedBy: closing ? before.resolvedBy ?? session?.memberId ?? "" : before.resolvedBy,
+        };
+        mutate(
+          { complaints: db.complaints.map((c) => (c.id === id ? after : c)) },
+          { action: "update", table: "complaints", recordId: id, before, after },
+        );
+      },
+
       issueDoc: (input) => {
         const def = DOC_DEFS[input.type];
         need(def.perm, "export");
@@ -2254,6 +2586,8 @@ function emptyShell(): Db {
     subcontracts: [],
     subReceipts: [],
     subPayments: [],
+    returns: [],
+    complaints: [],
     auditLog: [],
   };
 }

@@ -433,7 +433,8 @@ export const STOCK_KIND_LABEL: Record<StockKind, string> = {
   opening: "رصيد افتتاحي",
   purchase: "شراء",
   issue: "صرف لأمر إنتاج",
-  return: "مرتجع للمخزن",
+  /* الاتجاه بيتقرا من إشارة الكمية: موجب مرتجع داخل، سالب مرتجع خارج لمورّد */
+  return: "مرتجع",
   adjust: "تسوية جرد",
   waste: "هالك",
   receipt_fg: "استلام إنتاج تام",
@@ -687,6 +688,232 @@ export type ScanEvent = {
   note: string;
 };
 
+/* ── المرتجعات والشكاوى ────────────────────────────────────────
+ *
+ * المرتجع فيه سؤالين مختلفين والخلط بينهم هو اللي بيوقّع أي نظام مرتجعات:
+ *
+ *   **مين رجّعه** (`source`) — عميل، أو مورّد، أو رجوع من الخط للمخزن.
+ *   **رجع بأي حال** (`condition`) — سليم ينفع يتباع تاني، أو تالف.
+ *
+ * وعشان كده «مرتجع تالف» مش نوع رابع جنب العميل والمورّد: هو **حالة** بتقع
+ * على أي واحد من التلاتة. لو عملناه نوع مستقل، المرتجع اللي جه من عميل
+ * وهو تالف مش هيبقى له خانة — يا نحسبه مرتجع عميل ونضيّع إنه تالف، يا
+ * نحسبه تالف ونضيّع إنه من عميل. فالسؤالين منفصلين هنا بالتصميم.
+ */
+
+export const RETURN_SOURCES = ["customer", "supplier", "production"] as const;
+export type ReturnSource = (typeof RETURN_SOURCES)[number];
+
+export const RETURN_SOURCE_LABEL: Record<ReturnSource, string> = {
+  customer: "مرتجع عميل",
+  supplier: "مرتجع لمورّد",
+  production: "مرتجع من الإنتاج",
+};
+
+export const RETURN_CONDITIONS = ["good", "defective"] as const;
+export type ReturnCondition = (typeof RETURN_CONDITIONS)[number];
+
+export const RETURN_CONDITION_LABEL: Record<ReturnCondition, string> = {
+  good: "سليم",
+  defective: "تالف",
+};
+
+/**
+ * أسباب المرتجع.
+ *
+ * قايمة مقفولة بالتصميم مش خانة كتابة حرة: «تحليل أكثر الموديلات إرجاعًا»
+ * مالوش أي معنى لو السبب مكتوب بخمس صيغ مختلفة. والتفاصيل بتتكتب في
+ * `reasonNote` جنب السبب المختار، فمحدش بيخسر معلومة.
+ *
+ * و`sources` بتحدّد السبب ده يظهر لمين: «خامة مخالفة للمواصفة» سبب مورّد،
+ * و«العميل غيّر رأيه» سبب عميل، و«فاضل من أمر إنتاج» رجوع من الخط.
+ */
+export const RETURN_REASONS = [
+  "quality",
+  "wrong_item",
+  "wrong_size",
+  "wrong_color",
+  "shortage",
+  "excess",
+  "damaged_transit",
+  "late",
+  "spec_mismatch",
+  "changed_mind",
+  "leftover",
+  "other",
+] as const;
+export type ReturnReason = (typeof RETURN_REASONS)[number];
+
+export const RETURN_REASON_DEFS: Record<ReturnReason, { label: string; sources: ReturnSource[] }> = {
+  quality: { label: "عيب صناعة", sources: ["customer", "supplier", "production"] },
+  wrong_item: { label: "صنف غلط", sources: ["customer", "supplier"] },
+  wrong_size: { label: "مقاس غلط", sources: ["customer"] },
+  wrong_color: { label: "لون مختلف", sources: ["customer", "supplier"] },
+  shortage: { label: "الكمية ناقصة", sources: ["customer", "supplier"] },
+  excess: { label: "الكمية زيادة", sources: ["customer", "supplier"] },
+  damaged_transit: { label: "تلف في النقل", sources: ["customer", "supplier"] },
+  late: { label: "تأخير التسليم", sources: ["customer", "supplier"] },
+  spec_mismatch: { label: "مخالف للمواصفة", sources: ["supplier", "customer"] },
+  changed_mind: { label: "العميل غيّر رأيه", sources: ["customer"] },
+  leftover: { label: "فاضل من أمر إنتاج", sources: ["production"] },
+  other: { label: "سبب تاني", sources: ["customer", "supplier", "production"] },
+};
+
+/**
+ * قرار المرتجع — وكل قرار له أثر مختلف تمامًا على الفلوس والمخزن:
+ *
+ *   `replacement` بديل: مفيش فلوس بتتحرك، وفيه كمية لازم تتنتج وتتسلّم تاني.
+ *   `credit`      إشعار خصم: بيقلّل مديونية العميل (أو مديونيتنا للمورّد) بدون كاش.
+ *   `refund`      رد نقدي: فلوس بتطلع من خزنة محددة.
+ *   `repair`      إصلاح وإعادة تسليم: تكلفة تشغيل بدون خصم.
+ *   `scrap`       إهلاك: القطعة خسارة، ومابتدخلش المخزن.
+ *   `reject`      المرتجع مرفوض: مفيش أثر، بسبب مكتوب.
+ */
+export const RETURN_RESOLUTIONS = ["replacement", "credit", "refund", "repair", "scrap", "reject"] as const;
+export type ReturnResolution = (typeof RETURN_RESOLUTIONS)[number];
+
+export const RETURN_RESOLUTION_LABEL: Record<ReturnResolution, string> = {
+  replacement: "بديل",
+  credit: "إشعار خصم",
+  refund: "رد نقدي",
+  repair: "إصلاح وإعادة تسليم",
+  scrap: "إهلاك",
+  reject: "مرفوض",
+};
+
+export const RETURN_STATUSES = ["open", "inspected", "settled", "cancelled"] as const;
+export type ReturnStatus = (typeof RETURN_STATUSES)[number];
+
+export const RETURN_STATUS_LABEL: Record<ReturnStatus, string> = {
+  open: "وصل — مستني فحص",
+  inspected: "متفحوص — مستني قرار",
+  settled: "متسوّى",
+  cancelled: "ملغي",
+};
+
+/**
+ * المرتجع.
+ *
+ * الحركة بتمشي على تلات خطوات مقصودة: **وصل** → **اتفحص** → **اتسوّى**.
+ * السبب إن أثر المرتجع على الفلوس والمخزن مايتحددش لحد ما حد يبصّ على
+ * القطعة: نفس الكمية لو رجعت سليمة تدخل المخزن، ولو رجعت تالفة تبقى خسارة.
+ * فلو سجّلنا الأثر وقت الوصول، كل مرتجع كان هيدخل المخزن غلط ويطلع منه بعدين.
+ *
+ * و`unitValue` بيتخزّن لأنه **قرار** مش حساب: قيمة القطعة المتفق عليها وقت
+ * المرتجع. السعر بيتغير بعد كده، والمرتجع لازم يفضل بقيمته وقتها — نفس
+ * منطق `rate` في `BundleOp` و`Subcontract`.
+ */
+export type ReturnEntry = {
+  id: string;
+  factoryId: string;
+  /** الرقم المطبوع على تيكت المرتجع، زي RET-2026-000012 */
+  code: string;
+  source: ReturnSource;
+  date: string;
+  /** العميل أو المورّد — فاضي في رجوع الخط للمخزن */
+  partyId: string | null;
+  itemType: "product" | "material";
+  itemId: string;
+  qty: number;
+  condition: ReturnCondition;
+  reason: ReturnReason;
+  reasonNote: string;
+  /* الربط: كل واحد بيجاوب سؤال مختلف عن مصدر المشكلة */
+  /** التوريد اللي القطعة خرجت فيه */
+  deliveryId: string | null;
+  /** أمر الإنتاج اللي طلعها */
+  orderId: string | null;
+  /** الباندل بالتحديد — منه نعرف العملية والعامل والخط */
+  bundleId: string | null;
+  /** فاتورة الشراء لمرتجع المورّد */
+  costEntryId: string | null;
+  /** بلاغ الجودة المرتبط لو المرتجع طلع من فحص */
+  issueId: string | null;
+  status: ReturnStatus;
+  resolution: ReturnResolution | null;
+  unitValue: number;
+  /** المبلغ اللي اتخصم أو اترد فعلًا وقت التسوية */
+  settleAmount: number;
+  accountId: string | null;
+  method: PayMethod | null;
+  /** مصاريف زيادة اتدفعت بسبب المرتجع: شحن رجوع، إصلاح، إعادة تعبئة */
+  extraCost: number;
+  extraNote: string;
+  /** رجع المخزن ولا لأ — الكمية التالفة مابتدخلش */
+  restock: boolean;
+  warehouseId: string | null;
+  /** كمية البديل المتفق عليها */
+  replacementQty: number;
+  inspectedAt: string | null;
+  inspectedBy: string | null;
+  settledAt: string | null;
+  settledBy: string | null;
+  cancelledAt: string | null;
+  cancelledBy: string | null;
+  cancelReason: string | null;
+  createdAt: string;
+  createdBy: string;
+  notes: string;
+};
+
+export const COMPLAINT_KINDS = ["quality", "delay", "shortage", "price", "service", "other"] as const;
+export type ComplaintKind = (typeof COMPLAINT_KINDS)[number];
+
+export const COMPLAINT_KIND_LABEL: Record<ComplaintKind, string> = {
+  quality: "جودة",
+  delay: "تأخير",
+  shortage: "كمية ناقصة",
+  price: "سعر وفاتورة",
+  service: "تعامل وخدمة",
+  other: "حاجة تانية",
+};
+
+export const COMPLAINT_STATUSES = ["open", "investigating", "resolved", "closed"] as const;
+export type ComplaintStatus = (typeof COMPLAINT_STATUSES)[number];
+
+export const COMPLAINT_STATUS_LABEL: Record<ComplaintStatus, string> = {
+  open: "مفتوحة",
+  investigating: "تحت الفحص",
+  resolved: "اتحلّت",
+  closed: "مقفولة",
+};
+
+/**
+ * الشكوى.
+ *
+ * منفصلة عن المرتجع لأن **مش كل شكوى معاها قطعة راجعة**: عميل بيشتكي إن
+ * التسليم اتأخر، أو إن الفاتورة فيها بند غلط، أو إن التعامل مضايقه — ومفيش
+ * كمية بتتحرك. ولو حبسنا الشكوى جوه المرتجع، النوع ده كله كان هيضيع، وهو
+ * بالظبط اللي بيسبق فقدان العميل.
+ *
+ * ولو الشكوى طلع منها مرتجع، `returnId` بيربطهم — علاقة، مش دمج.
+ */
+export type Complaint = {
+  id: string;
+  factoryId: string;
+  code: string;
+  partyId: string;
+  date: string;
+  kind: ComplaintKind;
+  severity: "low" | "medium" | "high";
+  subject: string;
+  detail: string;
+  deliveryId: string | null;
+  orderId: string | null;
+  returnId: string | null;
+  /** المسؤول عن المتابعة — عضو في المصنع */
+  ownerId: string | null;
+  dueDate: string | null;
+  status: ComplaintStatus;
+  /** مطالبة مالية من العميل لو موجودة */
+  claimAmount: number;
+  resolution: string;
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+  createdAt: string;
+  createdBy: string;
+};
+
 /* ── الورش الخارجية ────────────────────────────────────────────
  *
  * الورشة **جهة تعامل** بدور `workshop` — مش جدول تاني. اللي جديد هنا هو
@@ -891,6 +1118,8 @@ export type Db = {
   subcontracts: Subcontract[];
   subReceipts: SubReceipt[];
   subPayments: SubPayment[];
+  returns: ReturnEntry[];
+  complaints: Complaint[];
   costItems: CostItem[];
   costEntries: CostEntry[];
   costPayments: CostPayment[];
