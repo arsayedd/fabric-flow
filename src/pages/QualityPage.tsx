@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ShieldCheck } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
 import { Money } from "@/components/Money";
@@ -50,7 +50,19 @@ const TABS = [
 
 export function QualityPage() {
   const { db, can } = useFactory();
-  const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("center");
+  const [params, setParams] = useSearchParams();
+  const [tab, setTab] = useState<(typeof TABS)[number]["id"]>(() => {
+    const want = params.get("tab");
+    return TABS.some((t) => t.id === want) ? (want as (typeof TABS)[number]["id"]) : "center";
+  });
+
+  /* التاب في العنوان عشان التنبيه يقدر يوصّل للجدول اللي بيتكلم عنه */
+  const pickTab = (id: (typeof TABS)[number]["id"]) => {
+    setTab(id);
+    const next = new URLSearchParams(params);
+    next.set("tab", id);
+    setParams(next, { replace: true });
+  };
 
   const center = useMemo(() => qualityCenter(db, 30), [db]);
   const alerts = useMemo(() => qualityAlerts(db, 30), [db]);
@@ -122,7 +134,7 @@ export function QualityPage() {
             {TABS.map((t) => (
               <button
                 key={t.id}
-                onClick={() => setTab(t.id)}
+                onClick={() => pickTab(t.id)}
                 className={`shrink-0 rounded-full px-3 py-1.5 text-sm ${
                   tab === t.id ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"
                 }`}
