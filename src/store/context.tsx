@@ -50,6 +50,7 @@ import {
   type Workspace,
 } from "./account";
 import { partyAlerts, portfolio } from "./parties";
+import { blankGrant, grantOfParty } from "./portal";
 import { allowed, denied, roleMatrix, type PermAction, type PermMatrix, type PermModule } from "./permissions";
 import {
   activeBom,
@@ -145,6 +146,7 @@ import type {
   Order,
   OrderStatus,
   PayMethod,
+  PortalScope,
   Role,
   RootCause,
   Session,
@@ -563,6 +565,18 @@ type FactoryApi = {
   updateParty: (id: string, patch: Partial<Party>) => void;
   deleteParty: (id: string) => void;
   mergeParties: (duplicateId: string, keepId: string) => void;
+  /**
+   * لينك بورتال للعميل. بيرجّع التوكن.
+   *
+   * لو فيه لينك شغّال بالفعل بيرجّعه زي ما هو بدل ما يعمل واحد تاني —
+   * لينكين للعميل الواحد معناه إن سحب واحد منهم مابيقفلش الباب.
+   */
+  issuePortalLink: (partyId: string) => string;
+  setPortalScope: (grantId: string, scope: PortalScope) => void;
+  setPortalExpiry: (grantId: string, expiresAt: string | null) => void;
+  revokePortalLink: (grantId: string, reason: string) => void;
+  /** بيتنادى من صفحة البورتال نفسها — بيعدّ الفتحات، مش ميوتيشن للمستخدم */
+  recordPortalView: (grantId: string) => void;
   addContact: (input: Omit<PartyContact, "id" | "factoryId">) => void;
   removeContact: (id: string) => void;
   addAddress: (input: Omit<PartyAddress, "id" | "factoryId">) => void;
@@ -1957,9 +1971,87 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
             addresses: db.addresses.filter((a) => a.partyId !== id),
             communications: db.communications.filter((m) => m.partyId !== id),
             tasks: db.tasks.filter((t) => t.partyId !== id),
+            /* الجهة مروّحة، فلينك بورتالها لازم يبطّل يفتح معاها */
+            portalGrants: (db.portalGrants ?? []).filter((g) => g.partyId !== id),
           },
           { action: "delete", table: "parties", recordId: id, before, after: null },
         );
+      },
+      /**
+       * إصدار لينك بورتال.
+       *
+       * بيطلب `parties.edit` **و**`finance.view` مع بعض: اللينك بيعرض
+       * أرقام مالية، فمين مايشوفش المالية في النظام مايقدرش يفتحها لعميل
+       * من بره. الشرط المزدوج ده هو نفسه اللي بيتحقق في الدالة على
+       * السيرفر لما الدفتر ينقل.
+       */
+      issuePortalLink: (partyId) => {
+        need("parties", "edit");
+        need("finance", "view");
+        const party = db.parties.find((p) => p.id === partyId);
+        if (!party) throw new Error("العميل مش موجود.");
+        if (!party.roles.includes("customer")) throw new Error("اللينك ده للعملاء بس — الجهة دي مش مسجّلة كعميل.");
+        if (party.mergedIntoId) throw new Error("السجل ده مندمج في سجل تاني — افتح اللينك من السجل الأساسي.");
+        const live = grantOfParty(db, partyId);
+        if (live) return live.token;
+        const row = blankGrant(fid(db), partyId, {
+          id: session?.memberId ?? "system",
+          name: session?.name ?? "النظام",
+        });
+        mutate(
+          { portalGrants: [row, ...(db.portalGrants ?? [])] },
+          { action: "create", table: "portal_grants", recordId: row.id, before: null, after: { ...row, token: "—" } },
+        );
+        return row.token;
+      },
+      setPortalScope: (grantId, scope) => {
+        need("parties", "edit");
+        need("finance", "view");
+        const before = (db.portalGrants ?? []).find((g) => g.id === grantId);
+        if (!before) throw new Error("اللينك مش موجود.");
+        mutate(
+          { portalGrants: (db.portalGrants ?? []).map((g) => (g.id === grantId ? { ...g, scope } : g)) },
+          { action: "update", table: "portal_grants", recordId: grantId, before: before.scope, after: scope },
+        );
+      },
+      setPortalExpiry: (grantId, expiresAt) => {
+        need("parties", "edit");
+        need("finance", "view");
+        const before = (db.portalGrants ?? []).find((g) => g.id === grantId);
+        if (!before) throw new Error("اللينك مش موجود.");
+        if (expiresAt && expiresAt < cairoToday()) throw new Error("تاريخ الانتهاء مينفعش يكون في الماضي.");
+        mutate(
+          { portalGrants: (db.portalGrants ?? []).map((g) => (g.id === grantId ? { ...g, expiresAt } : g)) },
+          { action: "update", table: "portal_grants", recordId: grantId, before: before.expiresAt, after: expiresAt },
+        );
+      },
+      /** سحب مش مسح — الرابط اللي اتبعت مش هينمسح من موبايل حد */
+      revokePortalLink: (grantId, reason) => {
+        need("parties", "edit");
+        need("finance", "view");
+        const before = (db.portalGrants ?? []).find((g) => g.id === grantId);
+        if (!before) throw new Error("اللينك مش موجود.");
+        if (before.revokedAt) throw new Error("اللينك ده مسحوب أصلًا.");
+        if (!reason.trim()) throw new Error("اكتب سبب السحب.");
+        const after = { ...before, revokedAt: new Date().toISOString(), revokedReason: reason.trim() };
+        mutate(
+          { portalGrants: (db.portalGrants ?? []).map((g) => (g.id === grantId ? after : g)) },
+          { action: "update", table: "portal_grants", recordId: grantId, before: null, after: { revokedReason: after.revokedReason } },
+        );
+      },
+      /**
+       * عدّاد الفتحات.
+       *
+       * مش بيمرّ على `need` لأن اللي بيناديه هو صفحة العميل، ومافيش
+       * جلسة أصلًا. وعمدًا مابيسجّلش في سجل التعديلات: فتحة قراية مش
+       * تعديل، ولو دخلت السجل كانت ٤٠٠ سطر بتتمسح بفتحات العملاء.
+       */
+      recordPortalView: (grantId) => {
+        mutate({
+          portalGrants: (db.portalGrants ?? []).map((g) =>
+            g.id === grantId ? { ...g, viewCount: g.viewCount + 1, lastViewedAt: new Date().toISOString() } : g,
+          ),
+        });
       },
       /** الدمج بينقل كل الحركات للسجل الأساسي ويأرشف المكرر بدل ما يمسحه */
       mergeParties: (duplicateId, keepId) => {
@@ -1992,6 +2084,16 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
             addresses: db.addresses.map((a) => (a.partyId === duplicateId ? { ...a, partyId: keepId } : a)),
             communications: db.communications.map((m) => (m.partyId === duplicateId ? { ...m, partyId: keepId } : m)),
             tasks: db.tasks.map((t) => (t.partyId === duplicateId ? { ...t, partyId: keepId } : t)),
+            /*
+             * لينك المكرر بيتسحب مش بينتقل. الرابط ده مبعوت للعميل على
+             * إنه حسابه هو، ولو ربطناه بالسجل الأساسي بيبقى بيعرض حركات
+             * سجل تاني كان مخفي عنه — والدمج مش مفروض يوسّع صلاحية.
+             */
+            portalGrants: (db.portalGrants ?? []).map((g) =>
+              g.partyId === duplicateId && !g.revokedAt
+                ? { ...g, revokedAt: new Date().toISOString(), revokedReason: `اندمج في ${keep.name}` }
+                : g,
+            ),
           },
           { action: "update", table: "parties", recordId: keepId, before: dup, after: { mergedInto: keep.name } },
         );
@@ -3774,6 +3876,7 @@ function emptyShell(): Db {
     orders: [],
     manualTx: [],
     documents: [],
+    portalGrants: [],
     cutLays: [],
     cutLayLines: [],
     bundles: [],

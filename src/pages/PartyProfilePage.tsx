@@ -43,6 +43,7 @@ import {
 } from "@/store/types";
 import { CustomerIntelligence, ScoreSummary } from "@/components/Intelligence";
 import { ClientOpsTab, ClientProductsTab } from "@/components/ClientAnalytics";
+import { PortalLinkCard } from "@/components/PortalLinkCard";
 import { CollectPanel } from "./CollectionsPage";
 import { useSeen } from "@/store/recents";
 
@@ -451,6 +452,8 @@ function AccountTab({
 
   return (
     <div className="space-y-4">
+      {isCustomer ? <PortalLinkCard partyId={partyId} /> : null}
+
       {isCustomer && credit.hasLimit ? (
         <Card className={credit.overLimit ? "border-danger/30 bg-danger-soft/40" : ""}>
           <h3 className="text-base">الائتمان</h3>

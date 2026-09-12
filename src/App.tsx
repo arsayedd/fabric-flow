@@ -47,6 +47,7 @@ import { HealthPage } from "@/pages/HealthPage";
 import { AuditPage, SettingsPage, StaffPage } from "@/pages/StaffPage";
 import { DocumentsPage } from "@/pages/DocumentsPage";
 import { ExportsPage } from "@/pages/ExportsPage";
+import { PortalPage } from "@/pages/PortalPage";
 import { VerifyPage } from "@/pages/VerifyPage";
 import { useFactory } from "@/store/context";
 import type { PermModule } from "@/store/permissions";
@@ -66,6 +67,13 @@ export default function App() {
       */}
       {/* التحقق من مستند مفتوح بلا تسجيل دخول: الورقة بتتسلّم لناس بره النظام */}
       <Route path="/verify/:number" element={<VerifyPage />} />
+      {/*
+        بورتال العميل مفتوح بلا تسجيل دخول كمان — العميل مش مستخدم في
+        النظام، والتوكن اللي في الرابط هو الصلاحية. ومسجّل هنا فوق شرط
+        `inApp` عن قصد: لو نزل جوه، أي موظف مسجّل دخوله كان بيشوف
+        البورتال داخل الشِل بقائمة المصنع كلها حواليه.
+      */}
+      <Route path="/p/:token" element={<PortalPage />} />
       <Route path="/signup" element={<SignupWizard />} />
       <Route path="/signup/factory" element={<SignupWizard mode="factory" />} />
       <Route path="/factories/new" element={<SignupWizard mode="factory" />} />

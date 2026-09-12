@@ -1785,6 +1785,43 @@ export type AuditEntry = {
   at: string;
 };
 
+/** اللي العميل مسموح يشوفه في اللينك بتاعه — كل واحد بيتقفل لوحده */
+export type PortalScope = {
+  orders: boolean;
+  invoices: boolean;
+  payments: boolean;
+  statement: boolean;
+};
+
+/**
+ * لينك بورتال لعميل واحد.
+ *
+ * التوكن هو الصلاحية — مافيش كلمة سر، لأن العميل مش مستخدم في النظام.
+ * فاللي معاه الرابط يقرا، واللي مش معاه لأ. ومحدودية ده مقصودة ومكتوبة
+ * في `portal.ts`: نطاق ضيّق، وسحب في أي وقت، وسجل بكل فتحة.
+ *
+ * والسحب `revokedAt` مش مسح: الرابط اللي اتبعت في واتساب مش هينمسح من
+ * موبايل حد، فلازم نفضل عارفين إنه كان موجود واتسحب امتى وليه — ودي نفس
+ * قاعدة الإلغاء بدل الحذف في باقي النظام.
+ */
+export type PortalGrant = {
+  id: string;
+  factoryId: string;
+  partyId: string;
+  /** عشوائي ١٦٠ بت — مش مشتق من رقم العميل */
+  token: string;
+  scope: PortalScope;
+  createdAt: string;
+  createdById: string;
+  createdByName: string;
+  revokedAt: string | null;
+  revokedReason: string;
+  /** `null` معناه بلا نهاية — تاريخ ميلادي `YYYY-MM-DD` */
+  expiresAt: string | null;
+  viewCount: number;
+  lastViewedAt: string | null;
+};
+
 export type Db = {
   factory: Factory | null;
   settings: Settings;
@@ -1838,6 +1875,8 @@ export type Db = {
   orders: Order[];
   manualTx: ManualTx[];
   documents: IssuedDoc[];
+  /** اختياري: دفتر قديم مافيهوش المفتاح ده لازم يفضل يفتح */
+  portalGrants?: PortalGrant[];
   auditLog: AuditEntry[];
 };
 

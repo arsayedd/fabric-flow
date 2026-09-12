@@ -33,6 +33,16 @@ export const FID = "factory-demo-1";
  */
 export const DEMO_SLUG = "alnoor";
 
+/**
+ * توكن بورتال العميل في المصنع التجريبي.
+ *
+ * ثابت **في الديمو بس** عشان يتعرض في التوثيق ويتأكّد عليه في
+ * الاختبارات. أي لينك حقيقي بيتولّد من `newPortalToken` بعشوائي ١٦٠ بت،
+ * والعلم `demo` على المصنع هو اللي بيفرّق — التوكن ده بيفتح بيانات
+ * مولّدة للعرض، مش حساب عميل حقيقي.
+ */
+export const DEMO_PORTAL_TOKEN = "de0de0c1b1a5e4f7a2c9d8b6e0f3a1c7d5b9e2f4";
+
 /** اسم ونشاط المصنع التجريبي، مستقلّين عن `demoDb()` عشان سجل الـworkspace
  *  يتعمل من غير ما نبني ٧٩٢ سجل الأول */
 export const DEMO_FACTORY = { name: "مصنع النور للإنتاج", industry: "apparel" as Industry, slug: DEMO_SLUG };
@@ -307,6 +317,7 @@ export function emptyDb(factoryName: string, industry: Industry = "custom"): Db 
     orders: [],
     manualTx: [],
     documents: [],
+    portalGrants: [],
     cutLays: [],
     cutLayLines: [],
     bundles: [],
@@ -755,6 +766,9 @@ export function demoDb(): Db {
       email: "info@elanaka.example",
       taxId: "512-874-991",
       notes: "فاتورة شهرية",
+      /* ملاحظة داخلية حقيقية في الديمو عشان اختبار التسريب يكون عنده
+         حاجة يدوّر عليها فعلًا — قبلها كان بيمرّ على عميل مالوش ملاحظات */
+      internalNotes: "بيماطل في آخر دفعة كل مرة — ماتبعتش شحنة جديدة قبل تصفية اللي قبلها.",
       governorate: "القاهرة",
       city: "مدينة نصر",
       tags: ["موزّع"],
@@ -1864,6 +1878,27 @@ export function demoDb(): Db {
     orders,
     manualTx,
     documents: [],
+    /*
+     * لينك واحد مفتوح للعميل الأكبر عشان الميزة تبان شغّالة في الديمو من
+     * أول لحظة. والباقي بيتفتح بإيد صاحب المصنع من ملف كل عميل.
+     */
+    portalGrants: [
+      {
+        id: nid(),
+        factoryId: FID,
+        partyId: "cl-2",
+        token: DEMO_PORTAL_TOKEN,
+        scope: { orders: true, invoices: true, payments: true, statement: true },
+        createdAt: new Date(`${addDays(today, -40)}T09:00:00Z`).toISOString(),
+        createdById: "m-owner",
+        createdByName: "صاحب المصنع",
+        revokedAt: null,
+        revokedReason: "",
+        expiresAt: null,
+        viewCount: 34,
+        lastViewedAt: new Date(`${addDays(today, -2)}T11:20:00Z`).toISOString(),
+      },
+    ],
     auditLog: [
       {
         id: nid(),
