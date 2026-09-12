@@ -120,7 +120,7 @@ type CustomerPlan = {
  */
 const PLANS: CustomerPlan[] = [
   { clientId: "cl-1", monthsBack: 18, cycle: 14, base: 24000, growth: 0.34, term: 15, payLag: 12, unitPrice: 250, models: ["قميص رجالي", "بنطلون قماش", "قميص قطني"], method: "cash" },
-  { clientId: "cl-2", monthsBack: 20, cycle: 21, base: 46000, growth: 0.12, term: 30, payLag: 48, unitPrice: 1400, models: ["بدلة مكتبية", "قميص قطن"], method: "bank" },
+  { clientId: "cl-2", monthsBack: 20, cycle: 21, base: 46000, growth: 0.12, term: 30, payLag: 48, unitPrice: 1400, models: ["بدلة مكتبية", "طقم مكتبي"], method: "bank" },
   { clientId: "cl-3", monthsBack: 12, cycle: 10, base: 7200, growth: 0.06, term: 14, payLag: 4, unitPrice: 150, models: ["تيشيرت مطبوع"], method: "cash" },
   { clientId: "cl-4", monthsBack: 15, cycle: 24, base: 17000, growth: -0.22, term: 20, payLag: 19, unitPrice: 470, models: ["فستان صيفي", "بلوزة"], method: "instapay", stoppedSince: 125 },
   { clientId: "cl-5", monthsBack: 22, cycle: 30, base: 118000, growth: 0.26, term: 30, payLag: 54, unitPrice: 360, models: ["طقم تصدير"], method: "bank" },

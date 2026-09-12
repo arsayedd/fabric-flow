@@ -134,7 +134,11 @@ export function ReturnsPage() {
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
-          <ExportMenu module="sales" dataset={() => datasetOf(scoped, "returns")} />
+          {/* التصدير بيطلّع الجدول اللي المستخدم شايفه، مش دايمًا المرتجعات */}
+          <ExportMenu
+            module="sales"
+            dataset={() => datasetOf(scoped, tab === "complaints" ? "complaints" : "returns")}
+          />
           {canCreate ? <Button onClick={() => setNewOpen(true)}>مرتجع جديد</Button> : null}
         </div>
       </div>
