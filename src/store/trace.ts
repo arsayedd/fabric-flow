@@ -45,7 +45,12 @@ export type Trace = {
   gaps: string[];
 };
 
-const day = (d: string | null | undefined) => (d ? formatDate(d) : null);
+/**
+ * التواريخ في الدفتر نوعين: تاريخ لوحده (`2026-09-09`) ووقت كامل
+ * (`2026-09-09T11:20:00.000Z`). و`formatDate` بتقرا الأول بس، فالقص
+ * على عشر حروف هو اللي بيخلي الاتنين يشتغلوا في نفس السلسلة.
+ */
+const day = (d: string | null | undefined) => (d ? formatDate(d.slice(0, 10)) : null);
 
 /** السلسلة بتتبني من نقطة الارتكاز: الأمر لو فيه أمر، وإلا الخامة */
 export function trace(db: Db, kind: CodeKind, id: string): Trace {
@@ -87,7 +92,7 @@ export function trace(db: Db, kind: CodeKind, id: string): Trace {
       body: [
         material ? `${material.name}${theLay?.color ? ` · ${theLay.color}` : ""}` : "خامة",
         last ? `آخر توريد ${qty(Math.abs(last.qty))} بسعر ${moneyPlain(last.unitCost)} للوحدة` : "مفيش توريد مسجّل",
-        `${buys.length} حركة توريد في الدفتر`,
+        `${qty(buys.length, 0)} حركة توريد في الدفتر`,
       ],
       to: `/materials/${materialId}`,
       code: material?.sku ?? null,

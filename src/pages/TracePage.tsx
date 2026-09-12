@@ -55,7 +55,12 @@ export function TracePage() {
             module="audit"
             dataset={() =>
               datasetOf(db, "scans", {
-                where: (r) => String(r.code) === head.code,
+                /*
+                  الفلتر بالمعرّف مش بالكود: نفس السجل بيتمسح مرة بالـQR
+                  (فالمحفوظ رابط كامل) ومرة بالرقم المكتوب، والاتنين
+                  حركة على نفس الحاجة.
+                */
+                ids: new Set(scans.map((s) => s.id)),
                 filters: [{ label: "السجل", value: head.code }],
               })
             }

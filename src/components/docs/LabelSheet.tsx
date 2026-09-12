@@ -1,8 +1,9 @@
 import { code128Bars } from "@/lib/barcode";
-import { isThermal, type Paper } from "@/lib/print";
-import { CONTENT_MM, LABEL_MM, columnsFor, type LabelRow, type LabelSize } from "@/store/labels";
+import { PAPER_WIDTH_MM, isThermal, type Paper } from "@/lib/print";
+import { CONTENT_MM, LABEL_MM, LABEL_PAD_MM, columnsFor, type LabelRow, type LabelSize } from "@/store/labels";
+import { cn } from "@/lib/utils";
 import { qrPath } from "@/lib/qr";
-import { DocSheet } from "@/components/docs/Sheet";
+
 
 /**
  * ورق الليبلات.
@@ -32,14 +33,18 @@ export function LabelSheet({
   const mm = LABEL_MM[size];
   const width = thermal ? CONTENT_MM[paper] : mm.w;
 
+  /* الورقة هنا بهامشها الضيق بدل `.sheet-a4`، فالمقاس جوّه بيتقسم صح */
   return (
-    <DocSheet paper={paper}>
+    <div
+      className={cn("sheet", `sheet-${paper}`)}
+      style={{ padding: `${LABEL_PAD_MM}mm`, width: `${PAPER_WIDTH_MM[paper]}mm` }}
+    >
       <div className="flex flex-wrap" style={{ width: `${width * cols}mm` }}>
         {rows.map((r) => (
           <Label key={r.key} row={r} widthMm={width} heightMm={mm.h} showBarcode={showBarcode} />
         ))}
       </div>
-    </DocSheet>
+    </div>
   );
 }
 

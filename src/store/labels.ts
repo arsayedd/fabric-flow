@@ -180,15 +180,25 @@ export const MAX_LABELS = 2000;
 export const LABEL_SIZES = ["sm", "md", "lg"] as const;
 export type LabelSize = (typeof LABEL_SIZES)[number];
 
-/** المقاس بالمليمتر — مقاسات ورق ليبلات موجودة في السوق */
+/**
+ * هامش ورق الليبلات **أضيق** من هامش المستند: المستند بيتقرا في اليد
+ * فمحتاج فراغ، والليبل بيتقص فالفراغ خسارة. تمانية مليمتر هي أقل هامش
+ * طابعات الليزر المكتبية بتطبع فيه من غير ما تقطع.
+ */
+export const LABEL_PAD_MM = 8;
+
+/**
+ * المقاسات مختارة عشان **تقسم عرض الورقة صح**: بعد الهوامش فاضل ١٩٤ مم
+ * في A4، فالتلات مقاسات بتطلع ٥ و٣ و٢ في الصف بلا ورق ضايع على الجنب.
+ */
 export const LABEL_MM: Record<LabelSize, { w: number; h: number; label: string }> = {
   sm: { w: 38, h: 25, label: "٣٨×٢٥ مم" },
-  md: { w: 70, h: 37, label: "٧٠×٣٧ مم" },
-  lg: { w: 105, h: 48, label: "١٠٥×٤٨ مم" },
+  md: { w: 64, h: 36, label: "٦٤×٣٦ مم" },
+  lg: { w: 96, h: 48, label: "٩٦×٤٨ مم" },
 };
 
-/** العرض المتاح جوه الورقة بعد هوامش `.sheet` في index.css */
-export const CONTENT_MM: Record<Paper, number> = { a4: 186, a5: 132, t80: 74, t58: 54 };
+/** العرض المتاح جوه الورقة بعد الهوامش */
+export const CONTENT_MM: Record<Paper, number> = { a4: 194, a5: 132, t80: 74, t58: 54 };
 
 export type LabelRow = {
   key: string;
