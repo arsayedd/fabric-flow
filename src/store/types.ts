@@ -346,7 +346,14 @@ export type Settings = {
    * مافتحش الشاشة دي بيشوف نفس تنبيهاته بالحرف.
    */
   rules?: Partial<Record<
-    "stockBufferDays" | "overdueDangerDays" | "pendingCollectDays" | "lateOrderDangerDays" | "machineDownDangerHours" | "serviceWindowDays",
+    | "stockBufferDays"
+    | "overdueDangerDays"
+    | "pendingCollectDays"
+    | "lateOrderDangerDays"
+    | "machineDownDangerHours"
+    | "serviceWindowDays"
+    | "cashHorizonDays"
+    | "cashDangerDays",
     number
   >>;
   /** قرار الطاقة: أساس الجدولة كلها */

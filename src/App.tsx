@@ -14,6 +14,7 @@ import { IntelligencePage } from "@/pages/IntelligencePage";
 import { PartiesPage } from "@/pages/PartiesPage";
 import { PartyProfilePage } from "@/pages/PartyProfilePage";
 import { CollectionsPage } from "@/pages/CollectionsPage";
+import { CashflowPage } from "@/pages/CashflowPage";
 import { CostsPage, CostItemPage } from "@/pages/CostsPage";
 import { WorkersPage, WorkerProfilePage } from "@/pages/WorkersPage";
 import { TreasuryPage } from "@/pages/TreasuryPage";
@@ -147,6 +148,7 @@ function appRoutes() {
         {guarded("/materials", "inventory", <MaterialsPage />)}
         {guarded("/materials/:id", "inventory", <MaterialDetailPage />)}
         {guarded("/collections", "finance", <CollectionsPage />)}
+        {guarded("/cashflow", "finance", <CashflowPage />)}
         {guarded("/treasury", "finance", <TreasuryPage />)}
         {guarded("/parties", "parties", <PartiesPage />)}
         {guarded("/parties/:id", "parties", <PartyProfilePage />)}

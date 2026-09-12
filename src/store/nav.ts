@@ -153,6 +153,7 @@ export const NAV: NavSection[] = [
     icon: Banknote,
     items: [
       item("/collections", "التحصيل", "finance", "finance"),
+      item("/cashflow", "الفلوس الجاية والرايحة", "finance", "finance"),
       item("/treasury", "الخزينة", "finance", "finance"),
       item("/costing", "التكلفة والربحية", "costing", "costing"),
     ],
@@ -262,6 +263,7 @@ export const ROUTE_LABEL: Record<string, string> = {
   "/workers": "العمال",
   "/parties": "جهات التعامل",
   "/collections": "التحصيل",
+  "/cashflow": "الفلوس الجاية والرايحة",
   "/treasury": "الخزينة",
   "/costs": "فواتير المشتريات",
   "/costing": "التكلفة والربحية",

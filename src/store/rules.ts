@@ -34,6 +34,10 @@ export type AlertRules = {
   machineDownDangerHours: number;
   /** الصيانة الجاية بتظهر في الخطة قبل ميعادها بكام يوم */
   serviceWindowDays: number;
+  /** توقع الخزنة بيدوّر على ضيق جوه كام يوم جايين */
+  cashHorizonDays: number;
+  /** ضيق الخزنة بيبقى أحمر لو جاي جوه كام يوم */
+  cashDangerDays: number;
 };
 
 export const DEFAULT_RULES: AlertRules = {
@@ -43,6 +47,8 @@ export const DEFAULT_RULES: AlertRules = {
   lateOrderDangerDays: 3,
   machineDownDangerHours: 4,
   serviceWindowDays: 14,
+  cashHorizonDays: 30,
+  cashDangerDays: 14,
 };
 
 export const RULE_KEYS = Object.keys(DEFAULT_RULES) as (keyof AlertRules)[];
@@ -108,6 +114,23 @@ export const RULE_DEFS: Record<keyof AlertRules, RuleDef> = {
     max: 90,
     effect: "تبويب «الصيانة الجاية» بيعرض اللي ميعاده جوه المدة دي. اللي فات ميعاده بيظهر دايمًا مهما كان الرقم.",
     to: "/machines?tab=plan",
+  },
+  cashHorizonDays: {
+    label: "توقع الخزنة بيدوّر على ضيق جوه",
+    unit: "يوم",
+    min: 7,
+    max: 180,
+    effect:
+      "التنبيه «الخزنة هتضيق» بيتحسب على المدة دي. قصّرها وهتعرف متأخر، وطوّلها وهتشوف ضيق لسه ممكن يتغيّر قبله بتحصيل واحد.",
+    to: "/cashflow",
+  },
+  cashDangerDays: {
+    label: "ضيق الخزنة يبقى أحمر لو جاي جوه",
+    unit: "يوم",
+    min: 1,
+    max: 90,
+    effect: "الضيق البعيد بيبان أصفر واللي قريّب أحمر. التنبيه نفسه بيظهر في الحالتين.",
+    to: "/cashflow",
   },
 };
 

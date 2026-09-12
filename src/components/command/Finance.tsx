@@ -12,8 +12,9 @@ import {
   Scatter,
   Waterfall,
 } from "@/components/charts/Chart";
-import { money, qty } from "@/lib/utils";
+import { formatDate, money, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
+import { cashForecast } from "@/store/cashflow";
 import { targetMarginOf } from "@/store/costing";
 import {
   agingBuckets,
@@ -320,6 +321,7 @@ export function CashCenter({ range }: { range: Range }) {
   const { db } = useFactory();
   const [days, setDays] = useState(30);
   const outlook = cashOutlook(db, days);
+  const { shortfall, overdueIn } = cashForecast(db, days);
   const series = cashSeries(db, range);
   const hasFlow = series.some((p) => p.inflow > 0 || p.outflow > 0);
 
@@ -356,9 +358,23 @@ export function CashCenter({ range }: { range: Range }) {
           />
         </div>
 
-        {outlook.shortfall ? (
+        {shortfall ? (
           <p className="mt-2 rounded-md bg-danger-soft px-2.5 py-2 text-sm text-danger">
-            بالمعدل ده السيولة مش هتكفي الالتزامات خلال {qty(days, 0)} يوم. قدّم أقرب تحصيل أو أجّل دفعة مالهاش غرامة.
+            يوم {formatDate(shortfall.date)} الرصيد هيبقى {money(shortfall.balance)}. قدّم أقرب تحصيل أو أجّل دفعة مالهاش
+            غرامة.
+          </p>
+        ) : null}
+
+        {/*
+          المتأخر مش محسوب في «تحصيل متوقع» فوق عن قصد: الميعاد اللي فات
+          مابقاش ميعاد. فبيتقال هنا لوحده بدل ما يتحسب داخل ويطمّن غلط.
+        */}
+        {overdueIn > 0 ? (
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            و{money(overdueIn)} متأخرة على العملاء مش محسوبة في التحصيل المتوقع.{" "}
+            <Link to="/cashflow" className="text-accent underline underline-offset-4">
+              افتح توقع الخزنة
+            </Link>
           </p>
         ) : null}
 
@@ -423,8 +439,8 @@ export function AgingCard() {
               tone: b.tone === "danger" ? "var(--danger)" : b.tone === "warn" ? "var(--warn)" : "var(--ok)",
             }))}
           />
-          <Link to="/collections" className="mt-2 inline-block text-sm text-accent underline underline-offset-4">
-            افتح التحصيل
+          <Link to="/cashflow" className="mt-2 inline-block text-sm text-accent underline underline-offset-4">
+            افتح أعمار المستحقات
           </Link>
         </div>
       )}

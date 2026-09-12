@@ -1,4 +1,5 @@
 import { addDays, cairoToday, daysBetween, formatDate, moneyPlain, qty as num } from "@/lib/utils";
+import { cashForecast, receivableAging } from "./cashflow";
 import { allAccountBalances, payables, receivables } from "./compute";
 import { costSheet, modelVolume, profitRanking, targetMarginOf } from "./costing";
 import { factoryBottleneck } from "./health";
@@ -1245,56 +1246,47 @@ export type CashOutlook = {
 };
 
 /**
- * توقع السيولة. الداخل = التوريدات اللي ميعاد سدادها في النافذة،
- * والخارج = الفواتير اللي مدفوعهاش وأجور مستحقة. مفيش أي رقم مفترض.
+ * توقع السيولة في غرفة التحكم — **نفس محرّك شاشة الفلوس** (`cashflow.ts`).
+ *
+ * الدالة دي كان جواها حسابها الخاص، فكان ممكن الكارت في الداشبورد يقول
+ * رقم والشاشة تقول رقم تاني على نفس اليوم. فبقت بتنده المحرّك الواحد
+ * وبترجع نفس الشكل القديم.
+ *
+ * والتغيير الحقيقي في الأرقام اتنين، والاتنين مقصودين ومكتوبين في
+ * [cashflow.md](../../docs/cashflow.md):
+ *
+ *  * **المتأخر مابقاش محسوب داخل.** قبل كده كل مستحق ميعاده قبل نهاية
+ *    النافذة كان بيتحسب داخل — بما فيه اللي فات ميعاده بشهور. ده كان
+ *    بيطمّن صاحب المصنع على فلوس محدش وعد بيها. والمتأخر بيتعرض لوحده
+ *    في شاشة الفلوس تحت سطر «لو حصّلته».
+ *  * **مستحقات الورش بقت محسوبة خارج.** كانت ناقصة من `expectedOut`
+ *    خالص، فالمصنع اللي بيشغّل بره كان بيشوف مطلوب أقل من الحقيقة.
  */
 export function cashOutlook(db: Db, days: number): CashOutlook {
-  const today = cairoToday();
-  const until = addDays(today, days);
+  const f = cashForecast(db, days);
   const rec = receivables(db);
-  const pay = payables(db);
-  const cash = sum(allAccountBalances(db).map((a) => a.balance));
-
-  const expectedIn = sum(
-    [...rec.overdue, ...rec.today, ...rec.week, ...rec.later]
-      .filter((r) => r.dueDate <= until)
-      .map((r) => r.remaining),
-  );
-  const expectedOut = pay.vendorTotal + pay.workerTotal;
-  const projected = cash + expectedIn - expectedOut;
   return {
-    cash,
-    expectedIn,
-    expectedOut,
-    projected,
+    cash: f.opening,
+    expectedIn: f.inflow,
+    expectedOut: f.outflow,
+    projected: f.closing,
     days,
-    shortfall: projected < 0,
+    shortfall: !!f.shortfall,
     pendingIn: sum(rec.pending.map((c) => c.amount)),
   };
 }
 
 export type AgingBucket = { key: string; label: string; amount: number; count: number; tone: "ok" | "warn" | "danger" };
 
+/** نفس التبويب اللي في شاشة الفلوس بالحرف — الحدود متعرّفة مرة واحدة هناك */
 export function agingBuckets(db: Db): AgingBucket[] {
-  const today = cairoToday();
-  const rec = receivables(db);
-  const all = [...rec.overdue, ...rec.today, ...rec.week, ...rec.later];
-  const band = (dueDate: string) => {
-    if (dueDate >= today) return 0;
-    const d = daysBetween(dueDate, today);
-    return d <= 30 ? 1 : d <= 60 ? 2 : d <= 90 ? 3 : 4;
-  };
-  const defs: { label: string; tone: AgingBucket["tone"] }[] = [
-    { label: "لسه في الميعاد", tone: "ok" },
-    { label: "متأخر ١–٣٠ يوم", tone: "warn" },
-    { label: "متأخر ٣١–٦٠ يوم", tone: "warn" },
-    { label: "متأخر ٦١–٩٠ يوم", tone: "danger" },
-    { label: "متأخر أكتر من ٩٠ يوم", tone: "danger" },
-  ];
-  return defs.map((d, i) => {
-    const xs = all.filter((r) => band(r.dueDate) === i);
-    return { key: String(i), label: d.label, tone: d.tone, amount: sum(xs.map((r) => r.remaining)), count: xs.length };
-  });
+  return receivableAging(db).buckets.map((b) => ({
+    key: b.key,
+    label: b.key === "notDue" ? "لسه في الميعاد" : b.label,
+    tone: b.tone,
+    amount: b.total,
+    count: b.count,
+  }));
 }
 
 /* ── ١٠) العملاء والموديلات ────────────────────────────────────── */

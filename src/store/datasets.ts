@@ -1,6 +1,17 @@
 import { cairoToday, formatDate, money, moneyPlain, qty } from "@/lib/utils";
 import type { ExportCol, ExportDataset, ExportRow } from "@/lib/export";
 import { allAccountBalances, caseCostTotal, clientStatement, costEntryPaid, payables, receivables, repairCostOf, workerAdvance, workerBalance } from "./compute";
+import {
+  AGE_DEFS,
+  AGING_DEFS,
+  CASH_KIND_LABEL,
+  MIN_SETTLED,
+  agingBucketOf,
+  cashForecast,
+  payableAging,
+  payerBehavior,
+  receivableAging,
+} from "./cashflow";
 import { profitRanking } from "./costing";
 import { LAY_STATUS_LABEL, layMath } from "./cutting";
 import { bundleState, defectPareto, opMinutes, wip as wipRows, workerEfficiency } from "./floor";
@@ -587,6 +598,109 @@ export const DATASETS: DatasetDef[] = [
     groupBy: "bucket",
   },
   {
+    key: "receivable-aging",
+    title: "أعمار المستحقات على العملاء",
+    about: "نفس المستحق، بس متبوّب بتأخيره: ٤٠٠ ألف متأخرة ١٠ أيام مش زي ٤٠٠ ألف متأخرة ١٢٠ يوم.",
+    area: "finance",
+    module: "finance",
+    screen: "/cashflow",
+    groupBy: "bucket",
+    cols: [
+      text("client", "العميل", 22),
+      text("phone", "الهاتف", 16),
+      text("model", "الموديل", 20),
+      day("dueDate", "الاستحقاق"),
+      count("lateDays", "أيام التأخير", "none"),
+      cash("amount", "الباقي"),
+      text("bucket", "الفئة"),
+    ],
+    rows: (db) => {
+      const a = receivableAging(db);
+      const label = new Map(AGING_DEFS.map((d) => [d.key, d.label]));
+      return a.rows.map((r) => ({
+        id: r.deliveryId,
+        client: r.clientName,
+        phone: r.phone,
+        model: r.model,
+        dueDate: r.dueDate,
+        lateDays: Math.max(0, r.lateDays),
+        amount: r.amount,
+        bucket: label.get(r.bucket) ?? "",
+      }));
+    },
+  },
+  {
+    key: "payer-behavior",
+    title: "سلوك دفع العملاء",
+    about: "مين بيدفع في الميعاد فعلًا: متوسط أيام الدفع والتأخير ونسبة الالتزام لكل عميل.",
+    area: "finance",
+    module: "finance",
+    screen: "/cashflow",
+    cols: [
+      text("client", "العميل", 22),
+      count("termDays", "المهلة", "none"),
+      count("daysToPay", "بيدفع بعد (يوم)", "none"),
+      count("daysLate", "متوسط التأخير", "none"),
+      pct("onTime", "في الميعاد"),
+      cash("open", "مفتوح"),
+      cash("overdue", "متأخر عليه"),
+      cash("paid", "المحصّل منه"),
+      text("enough", "العيّنة"),
+    ],
+    notes: [
+      `العميل اللي عنده أقل من ${qty(MIN_SETTLED, 0)} توريدات مسدّدة بيطلع «لسه بدري» وأعمدة السلوك بتاعته فاضية: تحت الحد ده الرقم حادثة مش سلوك.`,
+    ],
+    rows: (db) =>
+      payerBehavior(db).map((r) => ({
+        id: r.clientId,
+        client: r.name,
+        termDays: r.termDays,
+        daysToPay: r.avgDaysToPay ?? "",
+        daysLate: r.avgDaysLate ?? "",
+        onTime: r.onTimePct ?? "",
+        open: r.openAmount,
+        overdue: r.overdueAmount,
+        paid: r.paidAmount,
+        enough: r.enough ? "مقيسة" : "لسه بدري",
+      })),
+  },
+  {
+    key: "cash-forecast",
+    title: "توقع الخزنة",
+    about: "كل حركة فلوس لها ميعاد في الدفتر خلال ٩٠ يوم، والرصيد بعد كل يوم.",
+    area: "finance",
+    module: "finance",
+    screen: "/cashflow",
+    cols: [
+      day("date", "التاريخ"),
+      text("kind", "النوع"),
+      text("detail", "التفصيل", 26),
+      cash("inflow", "داخل"),
+      cash("outflow", "خارج"),
+      cash("balance", "الرصيد بعد اليوم", "none"),
+    ],
+    notes: [
+      "الفلوس المتأخرة على العملاء مش محسوبة داخلة: الميعاد اللي فات مابقاش ميعاد. والمتأخر علينا محسوب خارج على اليوم صفر.",
+      "الأجور ومستحقات الورش مالهاش ميعاد مكتوب في الدفتر، فبتتحسب مستحقة دلوقتي بدل ما نخترع لها ميعاد جاي.",
+    ],
+    rows: (db) => {
+      const f = cashForecast(db, 90);
+      return f.days
+        .filter((d) => d.items.length)
+        .flatMap((d) =>
+          d.items.map((it, i) => ({
+            id: `${d.date}-${i}`,
+            date: d.date,
+            kind: CASH_KIND_LABEL[it.kind],
+            detail: it.label + (it.now ? " (مستحق دلوقتي)" : ""),
+            inflow: it.amount > 0 ? it.amount : 0,
+            outflow: it.amount < 0 ? -it.amount : 0,
+            balance: d.balance,
+          })),
+        );
+    },
+  },
+  {
     key: "statements",
     title: "كشوف حساب العملاء",
     about: "حركة كل عميل سطر بسطر: مدين ودائن ورصيد متحرك.",
@@ -845,6 +959,42 @@ export const DATASETS: DatasetDef[] = [
         paid: v.paid,
         due: v.due,
       })),
+  },
+  {
+    key: "payable-aging",
+    title: "أعمار فواتير الموردين",
+    about: "كل فاتورة لسه فيها باقي، بعمرها وميعادها لما يكون للمورّد مهلة دفع مكتوبة.",
+    area: "purchasing",
+    module: "purchasing",
+    screen: "/cashflow",
+    cols: [
+      text("vendor", "المورد", 22),
+      text("item", "البند", 20),
+      day("date", "تاريخها"),
+      count("ageDays", "عمرها بالأيام", "none"),
+      day("dueDate", "ميعاد الدفع"),
+      count("lateDays", "أيام التأخير", "none"),
+      cash("due", "الباقي"),
+      text("bucket", "الفئة"),
+    ],
+    notes: [
+      "التبويب بعمر الفاتورة مش بتأخيرها: ميعاد الدفع بيتحسب من مهلة المورّد المكتوبة في ملفه، واللي مالوش مهلة بيطلع «ميعاد الدفع» فاضي.",
+    ],
+    rows: (db) => {
+      const p = payableAging(db);
+      const label = new Map(AGE_DEFS.map((d) => [d.key, d.label]));
+      return p.rows.map((r) => ({
+        id: r.entryId,
+        vendor: r.vendor,
+        item: r.itemName,
+        date: r.date,
+        ageDays: r.ageDays,
+        dueDate: r.dueDate ?? "",
+        lateDays: r.lateDays ?? "",
+        due: r.due,
+        bucket: label.get(agingBucketOf(r.ageDays)) ?? "",
+      }));
+    },
   },
   {
     key: "subcontracts",

@@ -26,7 +26,9 @@
  */
 
 import { cairoToday, formatDate, moneyPlain, qty as num } from "@/lib/utils";
+import { MIN_SETTLED, cashForecast, payerRanking, receivableAging } from "./cashflow";
 import { receivables, allAccountBalances, payables } from "./compute";
+import { rulesOf } from "./rules";
 import { profitDashboard } from "./costing";
 import { clientContribution } from "./clients";
 import { deadStock, orderMix, rangeOf, workerLeaderboard } from "./command";
@@ -137,6 +139,116 @@ const INTENTS: Intent[] = [
         ],
         basis: "الرصيد = التحصيلات المؤكدة ناقص المدفوعات، لكل حساب على حدة. التحصيل المستني تأكيد مش داخل.",
         to: "/treasury",
+      };
+    },
+  },
+
+  {
+    key: "cash-runway",
+    question: "الخزنة هتضيق امتى؟",
+    perm: "finance",
+    words: ["هتضيق", "تضيق", "هتقفل", "اقفل الشهر", "تكفي", "هتكفي", "سيوله جايه", "توقع", "التوقع"],
+    boost: ["خزنه", "الخزنه", "فلوس", "كاش"],
+    run: (db) => {
+      const rules = rulesOf(db);
+      const f = cashForecast(db, rules.cashHorizonDays);
+      const base = `التوقع بيتبني من مواعيد مكتوبة بس: مستحقات بميعادها الجاي، شيكات بتاريخها، فواتير موردين بمهلة الدفع المكتوبة على المورّد، وأجور ومستحقات ورش محسوبة مستحقة دلوقتي. والمتأخر على العملاء مش محسوب داخل، لأن الميعاد اللي فات مابقاش ميعاد.`;
+      if (!f.shortfall) {
+        return {
+          headline: `مش هتضيق في ${num(rules.cashHorizonDays, 0)} يوم. أقل رصيد ${moneyPlain(f.lowest?.balance ?? f.opening)} ج${f.lowest ? ` يوم ${formatDate(f.lowest.date)}` : ""}.`,
+          rows: [
+            { label: "في الخزنة دلوقتي", value: `${moneyPlain(f.opening)} ج`, to: "/treasury" },
+            { label: "داخل بمواعيده", value: `${moneyPlain(f.inflow)} ج`, to: "/cashflow" },
+            { label: "خارج في المدة", value: `${moneyPlain(f.outflow)} ج`, to: "/cashflow" },
+            ...(f.overdueIn > 0
+              ? [{ label: "متأخر مش محسوب داخل", value: `${moneyPlain(f.overdueIn)} ج`, to: "/collections" }]
+              : []),
+          ],
+          basis: base,
+          to: "/cashflow",
+        };
+      }
+      return {
+        headline: `أيوه — يوم ${formatDate(f.shortfall.date)} الرصيد هيبقى ${moneyPlain(f.shortfall.balance)} ج.`,
+        rows: [
+          { label: "في الخزنة دلوقتي", value: `${moneyPlain(f.opening)} ج`, to: "/treasury" },
+          { label: "خارج في المدة", value: `${moneyPlain(f.outflow)} ج`, to: "/cashflow" },
+          { label: "داخل بمواعيده", value: `${moneyPlain(f.inflow)} ج`, to: "/cashflow" },
+          { label: "لو حصّلت المتأخر", value: `+${moneyPlain(f.overdueIn)} ج`, to: "/collections" },
+        ],
+        basis: base,
+        to: "/cashflow",
+      };
+    },
+  },
+
+  {
+    key: "aging",
+    question: "المستحق على العملاء أعماره إيه؟",
+    perm: "finance",
+    words: ["اعمار", "عمر الدين", "مبوب", "قديم", "قد ايه بقاله", "مشكوك"],
+    boost: ["مستحق", "متاخر", "العملاء"],
+    run: (db) => {
+      const a = receivableAging(db);
+      if (!a.total) {
+        return {
+          headline: "مفيش مستحق على العملاء.",
+          rows: [],
+          basis: "المستحق = كل توريدة لسه فيها باقي بعد توزيع التحصيل بالأقدمية.",
+          to: "/cashflow",
+          missing: "توريدات بميعاد آجل",
+        };
+      }
+      const bad = a.buckets.filter((b) => b.key === "d61" || b.key === "d91").reduce((s, b) => s + b.total, 0);
+      return {
+        headline: `${moneyPlain(a.total)} ج مستحقة، منها ${moneyPlain(a.overdue)} ج فات ميعادها و${moneyPlain(bad)} ج فوق ٦٠ يوم.`,
+        rows: a.buckets
+          .filter((b) => b.count)
+          .map((b) => ({ label: b.label, value: `${moneyPlain(b.total)} ج`, sub: b.about, to: "/cashflow" })),
+        basis:
+          "كل توريدة فيها باقي بتتبوّب بفرق الأيام بين ميعادها والنهارده. والتحصيل بيتوزّع على الأقدم الأول، فالفلوس الباقية هي فعلًا أقدم فلوس.",
+        to: "/cashflow",
+      };
+    },
+  },
+
+  {
+    key: "payers",
+    question: "مين بيدفع في الميعاد ومين لأ؟",
+    perm: "finance",
+    words: ["بيدفع", "يدفع في الميعاد", "احسن دافع", "اسوا دافع", "ملتزم", "التزام", "سلوك الدفع"],
+    run: (db) => {
+      const rank = payerRanking(db, 3);
+      if (!rank.measured) {
+        return {
+          headline: `مفيش عميل عنده ${num(MIN_SETTLED, 0)} توريدات مسدّدة لحد دلوقتي.`,
+          rows: [],
+          basis: `تحت ${num(MIN_SETTLED, 0)} توريدات مسدّدة الرقم بيبقى حادثة مش سلوك، فمابنرتّبش بيه.`,
+          to: "/cashflow",
+          missing: "تحصيلات لتوريدات مختلفة عشان يبقى فيه سلوك مقيس",
+        };
+      }
+      const worst = rank.worst[0];
+      return {
+        headline: worst
+          ? `أسوأ دافع: ${worst.name} — بيتأخر ${num(worst.avgDaysLate ?? 0, 0)} يوم في المتوسط.`
+          : "كل العملاء المقيسين بيدفعوا في الميعاد.",
+        rows: [
+          ...rank.worst.map((r) => ({
+            label: r.name,
+            value: `متأخر ${num(r.avgDaysLate ?? 0, 0)} يوم`,
+            sub: `${num(r.onTimePct ?? 0, 0)}٪ في الميعاد · مفتوح ${moneyPlain(r.openAmount)} ج`,
+            to: `/parties/${r.clientId}`,
+          })),
+          ...rank.best.slice(0, 2).map((r) => ({
+            label: `${r.name} — من الأحسن`,
+            value: `${num(r.onTimePct ?? 0, 0)}٪ في الميعاد`,
+            sub: `بيدفع بعد ${num(r.avgDaysToPay ?? 0, 0)} يوم`,
+            to: `/parties/${r.clientId}`,
+          })),
+        ],
+        basis: `كل تحصيل مربوط بالتوريدة اللي سدّدها وبميعادها، والمتوسط موزون بالمبلغ. إشعارات الخصم مش محسوبة دفع. والترتيب على ${num(rank.measured, 0)} من ${num(rank.all, 0)} عميل — الباقي عيّنته أصغر من ${num(MIN_SETTLED, 0)}.`,
+        to: "/cashflow",
       };
     },
   },

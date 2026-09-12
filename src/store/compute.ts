@@ -133,15 +133,55 @@ export function fifoRemain(
   collections: Collection[],
   credits: { id: string; partyId: string; date: string; amount: number }[] = [],
 ): DeliveryRemain[] {
+  return fifoAllocate(deliveries, collections, credits).remain;
+}
+
+/**
+ * نفس التوزيع، بس بيرجّع **مين سدّد مين**.
+ *
+ * ده اللي بيخلّي «العميل ده بيدفع بعد كام يوم» رقم محسوب مش تقدير: كل
+ * جزء من كل تحصيل مربوط بالتوريدة اللي سدّدها وبميعادها. ومابنكتبش حلقة
+ * توزيع تانية — الحلقة واحدة في `fifoAllocate`، لأن اتنين بنفس المنطق
+ * بيتفرّقوا بعد أول تعديل، وساعتها كشف الحساب يقول رقم والتحصيل يقول
+ * رقم تاني على نفس التوريدة.
+ */
+export type FifoPair = {
+  deliveryId: string;
+  clientId: string;
+  deliveryDate: string;
+  dueDate: string;
+  /** التحصيل فلوس، وإشعار الخصم لأ — والفرق ده مهم في قياس سلوك الدفع */
+  kind: "collection" | "credit";
+  sourceId: string;
+  date: string;
+  amount: number;
+};
+
+export function fifoPairs(
+  deliveries: Delivery[],
+  collections: Collection[],
+  credits: { id: string; partyId: string; date: string; amount: number }[] = [],
+): FifoPair[] {
+  return fifoAllocate(deliveries, collections, credits).pairs;
+}
+
+function fifoAllocate(
+  deliveries: Delivery[],
+  collections: Collection[],
+  credits: { id: string; partyId: string; date: string; amount: number }[],
+): { remain: DeliveryRemain[]; pairs: FifoPair[] } {
   const sortedDel = [...deliveries].sort((a, b) =>
     a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date),
   );
   const remain = sortedDel.map((d) => ({ ...d, remaining: d.amount, allocated: 0 }));
   const cols = [
-    ...collections.filter((c) => c.status === "confirmed").map((c) => ({ id: c.id, clientId: c.clientId, date: c.date, amount: c.amount })),
-    ...credits.map((c) => ({ id: c.id, clientId: c.partyId, date: c.date, amount: c.amount })),
+    ...collections
+      .filter((c) => c.status === "confirmed")
+      .map((c) => ({ id: c.id, clientId: c.clientId, date: c.date, amount: c.amount, kind: "collection" as const })),
+    ...credits.map((c) => ({ id: c.id, clientId: c.partyId, date: c.date, amount: c.amount, kind: "credit" as const })),
   ].sort((a, b) => (a.date === b.date ? a.id.localeCompare(b.id) : a.date.localeCompare(b.date)));
 
+  const pairs: FifoPair[] = [];
   for (const col of cols) {
     let left = col.amount;
     for (const d of remain) {
@@ -150,9 +190,19 @@ export function fifoRemain(
       d.remaining -= take;
       d.allocated += take;
       left -= take;
+      pairs.push({
+        deliveryId: d.id,
+        clientId: d.clientId,
+        deliveryDate: d.date,
+        dueDate: d.dueDate,
+        kind: col.kind,
+        sourceId: col.id,
+        date: col.date,
+        amount: take,
+      });
     }
   }
-  return remain;
+  return { remain, pairs };
 }
 
 export function clientBalance(db: Db, clientId: string): number {

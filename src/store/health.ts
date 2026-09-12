@@ -1,4 +1,5 @@
-import { addDays, cairoToday, formatDate, moneyPlain, qty as num } from "@/lib/utils";
+import { addDays, cairoToday, daysBetween, formatDate, moneyPlain, qty as num } from "@/lib/utils";
+import { cashForecast } from "./cashflow";
 import { allAccountBalances, payables, receivables } from "./compute";
 import { costSheet, profitAlerts, profitDashboard } from "./costing";
 import { customerScore, riskScore } from "./intelligence";
@@ -551,6 +552,30 @@ export function exceptions(db: Db): Exception[] {
       action: "ابعت تذكير واتساب أو كلّمه",
       to: `/parties/${c.id}`,
       impact: c.amount,
+    });
+  }
+
+  /*
+   * الخزنة هتضيق.
+   *
+   * ده أخطر تنبيه في النظام، وبيتحسب من مواعيد مكتوبة بس: مستحقات بميعادها
+   * الجاي داخلة، وفواتير بمهلتها وأجور ومستحقات ورش خارجة. ومابيتنبّهش على
+   * المتأخر على العملاء لأنه **مش محسوب داخل** من الأصل (`cashflow.ts`).
+   */
+  const cash = cashForecast(db, rules.cashHorizonDays);
+  if (cash.shortfall) {
+    const inDays = Math.max(0, daysBetween(today, cash.shortfall.date));
+    out.push({
+      key: "cash-shortfall",
+      tone: inDays <= rules.cashDangerDays ? "danger" : "warn",
+      title: `الخزنة هتضيق ${inDays === 0 ? "النهارده" : `بعد ${num(inDays, 0)} يوم`}`,
+      why: `يوم ${formatDate(cash.shortfall.date)} الرصيد هيبقى ${moneyPlain(cash.shortfall.balance)} ج — المطلوب في المدة ${moneyPlain(cash.outflow)} ج والداخل بمواعيده ${moneyPlain(cash.inflow)} ج`,
+      action:
+        cash.overdueIn > 0
+          ? `حصّل المتأخر (${moneyPlain(cash.overdueIn)} ج) أو أجّل دفعة مورّد`
+          : "أجّل دفعة مورّد أو اتفق على مقدّم من عميل",
+      to: "/cashflow",
+      impact: Math.abs(cash.shortfall.balance) + 10_000,
     });
   }
 
