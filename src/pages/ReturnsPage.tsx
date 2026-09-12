@@ -1096,19 +1096,31 @@ function CasePanel({ r, open, onClose }: { r: ReturnEntry; open: boolean; onClos
               <option value="after">بعد الإصلاح</option>
             </select>
           </Field>
-          <Field label="ضيف صورة">
-            <Input
-              type="file"
-              accept="image/*"
-              disabled={busy || r.attachments.length >= 6}
-              onChange={(e) => void pickImage(e.target.files?.[0])}
-            />
+          {/* مش جوه Field: الـField نفسه label، وlabel جوه label بيبوّظ الكليك */}
+          <div className="mb-3">
+            <span className="mb-1.5 block text-sm text-muted-foreground">ضيف صورة</span>
+            <label
+              className={`block rounded-md border border-dashed border-border bg-card px-4 py-3 text-center text-sm ${
+                busy || r.attachments.length >= 6
+                  ? "cursor-not-allowed text-muted-foreground opacity-60"
+                  : "cursor-pointer text-foreground hover:border-accent"
+              }`}
+            >
+              {busy ? "بيتحمّل…" : "اختار صورة من الجهاز"}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={busy || r.attachments.length >= 6}
+                onChange={(e) => void pickImage(e.target.files?.[0])}
+              />
+            </label>
             <p className="mt-1 text-xs text-muted-foreground">
               {r.attachments.length >= 6
                 ? "وصلت لأقصى ست صور للحالة في النسخة المحلية."
                 : "الصورة بتتصغّر قبل ما تتخزّن. الفيديو والملفات الكبيرة محتاجة تخزين على السيرفر — لسه مش متاح."}
             </p>
-          </Field>
+          </div>
         </>
       ) : null}
 
