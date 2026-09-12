@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, DataRow } from "@/components/ui/card";
 import { Input, selectClass } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { cairoToday, formatDate, qty } from "@/lib/utils";
+import { addDays, cairoToday, formatDate, qty } from "@/lib/utils";
 import { whatsappReminder } from "@/store/compute";
 import { useFactory } from "@/store/context";
 import { DocumentButton } from "@/components/docs/DocumentPrint";
@@ -1252,7 +1252,15 @@ function DeliveryPanel({
   const { db, addDelivery } = useFactory();
   const credit = partyCredit(db, partyId);
   const [date, setDate] = useState(cairoToday());
-  const [dueDate, setDueDate] = useState(cairoToday());
+  /**
+   * ميعاد الآجل بيتحسب من مدة السماح من أول ما البانل يفتح.
+   *
+   * كان بيفتح على تاريخ النهارده وماكانش بيتحسب غير لما المستخدم **يغيّر**
+   * التاريخ. اللي بيحفظ بالتاريخ الافتراضي — وده الحالة الطبيعية — كان
+   * بيطلع توريد مستحق النهارده على عميل مدته ٣٠ يوم، فيبان متأخر فورًا،
+   * ويكذّب أعمار المستحقات ومتوسط أيام التحصيل والتنبيهات.
+   */
+  const [dueDate, setDueDate] = useState(() => addDays(cairoToday(), Math.max(0, termDays)));
   const [amount, setAmount] = useState("");
   const [model, setModel] = useState("");
   const [quantity, setQuantity] = useState("");
@@ -1310,11 +1318,7 @@ function DeliveryPanel({
           value={date}
           onChange={(e) => {
             setDate(e.target.value);
-            if (termDays > 0) {
-              const d = new Date(`${e.target.value}T00:00:00`);
-              d.setDate(d.getDate() + termDays);
-              setDueDate(d.toISOString().slice(0, 10));
-            }
+            if (termDays > 0) setDueDate(addDays(e.target.value, termDays));
           }}
         />
       </Field>
