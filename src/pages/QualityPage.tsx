@@ -135,7 +135,15 @@ export function QualityPage() {
           {tab === "center" ? <Center alerts={alerts} reps={reps} center={center} /> : null}
           {tab === "problems" ? <Problems /> : null}
           {tab === "causes" ? <Causes /> : null}
-          {tab === "lines" ? <Lines canSeeWorkers={can.do("workers", "view")} /> : null}
+          {/*
+            ترتيب العمال بالعيب **تقييم أشخاص**، فمحتاج صلاحيتين مع بعض:
+            العمال (بيانات ناس) والتقارير (مقارنة بين ناس). والمشرف عنده
+            الأولى بحكم شغله ومعندوش التانية — وهو أقرب واحد للترتيب ده
+            وأكتر واحد ممكن يتحوّل على إيده من قياس لحكم على زمايله.
+          */}
+          {tab === "lines" ? (
+            <Lines canSeeWorkers={can.do("workers", "view") && can.do("reports", "view")} />
+          ) : null}
           {tab === "suppliers" ? <Suppliers /> : null}
           {tab === "cost" ? <CostOfQuality /> : null}
         </>
@@ -452,7 +460,8 @@ function Lines({ canSeeWorkers }: { canSeeWorkers: boolean }) {
         <p className="mb-1">جودة العمال</p>
         {!canSeeWorkers ? (
           <p className="text-sm text-muted-foreground">
-            الأرقام دي بتاعة أشخاص، فمابتظهرش غير لصلاحية العمال. اطلبها من صاحب المصنع لو شغلك عليها.
+            الترتيب ده تقييم أشخاص، فمحتاج صلاحية العمال وصلاحية التقارير مع بعض — مش صلاحية واحدة. أرقام خطك موجودة
+            فوق، واللي ناقص هو مقارنة العمال ببعض. اطلبها من صاحب المصنع لو شغلك عليها.
           </p>
         ) : !workers.length ? (
           <p className="text-sm text-muted-foreground">مافيش شغل مسجّل على العمال بالاسم في آخر ٩٠ يوم.</p>
