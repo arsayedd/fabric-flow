@@ -7,6 +7,7 @@ import { useCommandKey } from "@/lib/useCommandKey";
 import { Topbar } from "@/components/Topbar";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { cn } from "@/lib/utils";
+import { effectiveModules } from "@/store/account";
 import { useFactory } from "@/store/context";
 import { NAV, crumbs, sectionOf, type NavItem, type NavSection } from "@/store/nav";
 import { ROLE_LABEL } from "@/store/types";
@@ -28,7 +29,7 @@ const MOBILE_PRIMARY = ["/", "/orders", "/collections", "/parties", "/workers", 
 
 function useTree() {
   const { can, account } = useFactory();
-  const picked = account.workspace?.modules ?? [];
+  const picked = effectiveModules(account.workspace);
   const chose = picked.length > 0;
 
   const out: NavSection[] = [];

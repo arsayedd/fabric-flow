@@ -6,12 +6,15 @@ import { AuthShell, Field, PasswordInput, PasswordMeter } from "@/components/Aut
 import { Button } from "@/components/ui/button";
 import { Input, selectClass } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
+import { cn, qty } from "@/lib/utils";
 import {
   COUNTRIES,
+  effectiveModules,
   EMPLOYEE_BANDS,
   FACTORY_TYPES,
   JOB_TITLES,
+  MODULE_ABOUT,
+  MODULE_GROUPS,
   MODULE_KEYS,
   MODULE_LABEL,
   MODULE_READY,
@@ -32,7 +35,7 @@ import {
 import { useFactory, type FactoryInput, type TeamRow } from "@/store/context";
 import type { Role } from "@/store/types";
 
-const STEP_LABELS = ["الحساب", "المصنع", "الـWorkspace", "التجهيز", "الفريق", "تم"];
+const STEP_LABELS = ["الحساب", "المصنع", "الـWorkspace", "التشغيل", "الفريق", "المراجعة"];
 
 /** الافتراضي: كل اللي مبني مختار، والمستخدم يشيل اللي مش محتاجه — أحسن من إنه
  *  يكتشف بعد كده إن فيه شاشات مخبّية عنه */
@@ -194,10 +197,10 @@ export function SignupWizard({ mode = "signup" }: { mode?: "signup" | "factory" 
         {step === 4 ? (
           <ModulesStep
             picked={modules}
-            onToggle={(k) => {
-              const next = modules.includes(k) ? modules.filter((x) => x !== k) : [...modules, k];
+            setPicked={(next) => {
               setPicked(next);
-              setModules(next);
+              // الحفظ فوري: المصنع اتعمل خلاص، والخطوة دي بتعدّل عليه
+              if (next.length) setModules(next);
             }}
             onNext={() => setStep(5)}
           />
@@ -218,7 +221,7 @@ export function SignupWizard({ mode = "signup" }: { mode?: "signup" | "factory" 
             }}
           />
         ) : null}
-        {step === 6 && created ? <DoneStep name={created.name} slug={created.slug} onEnter={finish} /> : null}
+        {step === 6 && created ? <ReviewStep slug={created.slug} onEnter={finish} /> : null}
       </div>
     </AuthShell>
   );
@@ -659,57 +662,103 @@ function WorkspaceStep({
 
 /* ── ٤ · التجهيز ────────────────────────────────────────────── */
 
+/**
+ * الخطوة دي **مش قايمة تفضيلات**. هي السؤال اللي بيحدّد شكل النظام كله
+ * بعد كده، وعشان كده السؤال اتغيّر: مش «اختار اللي عايز تديره» — ده
+ * بيحمّل المستخدم قرار هو لسه ماعرفش النظام عشان يأخده. السؤال بقى
+ * **«طبيعة شغلك إيه»**، وصنعة بتجهّز على أساسه.
+ *
+ * وعمود واحد فيه تمانتاشر خانة بيبقى قايمة مش قرار، فالخانات مجمّعة
+ * في ستة عناوين، وكل خانة جنبها **إيه اللي بيتفتح بسببها** بالظبط.
+ */
 function ModulesStep({
   picked,
-  onToggle,
+  setPicked,
   onNext,
 }: {
   picked: ModuleKey[];
-  onToggle: (k: ModuleKey) => void;
+  setPicked: (next: ModuleKey[]) => void;
   onNext: () => void;
 }) {
+  const ready = MODULE_KEYS.filter((k) => MODULE_READY[k]);
+  const all = ready.every((k) => picked.includes(k));
+  const soon = MODULE_KEYS.filter((k) => !MODULE_READY[k]);
+
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-ok/30 bg-ok-soft p-4 text-sm">
+      <div className="rounded-lg border border-ok/30 bg-ok-soft p-4 text-sm leading-7">
         <Check className="mb-1 h-4 w-4 text-ok" />
-        المصنع والـworkspace اتجهّزوا. اختار اللي عايز تديره، والقائمة الجانبية هتتظبّط على اختيارك — وتقدر تغيّره أي وقت
-        من الإعدادات.
+        المصنع والـworkspace اتجهّزوا. اختار <span className="font-medium">طبيعة شغلك</span>، وصنعة هتجهّز الـworkspace
+        والأقسام المناسبة تلقائيًا. تقدر تفتح أو توقف أي قسم في أي وقت من الإعدادات.
       </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {MODULE_KEYS.map((k) => {
-          const on = picked.includes(k);
-          const ready = MODULE_READY[k];
-          return (
-            <button
-              key={k}
-              type="button"
-              disabled={!ready}
-              onClick={() => onToggle(k)}
-              className={cn(
-                "flex items-center justify-between rounded-md border px-4 py-3 text-right text-sm transition-colors",
-                !ready
-                  ? "cursor-not-allowed border-border bg-muted/40 text-muted-foreground"
-                  : on
-                    ? "border-accent bg-accent-soft"
-                    : "border-border bg-card hover:border-accent/50",
-              )}
-            >
-              <span>{MODULE_LABEL[k]}</span>
-              {ready ? (
-                <span className={cn("flex h-5 w-5 items-center justify-center rounded-full border", on ? "border-accent bg-accent text-accent-foreground" : "border-border")}>
-                  {on ? <Check className="h-3 w-3" /> : null}
-                </span>
-              ) : (
-                <span className="text-[11px]">قريب</span>
-              )}
-            </button>
-          );
-        })}
+
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          مختار {qty(picked.length, 0)} من {qty(ready.length, 0)}
+        </p>
+        <button
+          type="button"
+          onClick={() => setPicked(all ? [] : ready)}
+          className="text-sm text-accent underline underline-offset-4"
+        >
+          {all ? "شيل الكل" : "اختيار الكل"}
+        </button>
       </div>
+
+      {MODULE_GROUPS.map((g) => (
+        <div key={g.label}>
+          <p className="text-[13px] text-muted-foreground">{g.label}</p>
+          <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
+            {g.keys.map((k) => {
+              const on = picked.includes(k);
+              const built = MODULE_READY[k];
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  disabled={!built}
+                  onClick={() => setPicked(on ? picked.filter((x) => x !== k) : [...picked, k])}
+                  className={cn(
+                    "flex items-start justify-between gap-2 rounded-md border px-4 py-3 text-right text-sm transition-colors",
+                    !built
+                      ? "cursor-not-allowed border-border bg-muted/40 text-muted-foreground"
+                      : on
+                        ? "border-accent bg-accent-soft"
+                        : "border-border bg-card hover:border-accent/50",
+                  )}
+                >
+                  <span className="min-w-0">
+                    {MODULE_LABEL[k]}
+                    <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{MODULE_ABOUT[k]}</span>
+                  </span>
+                  {built ? (
+                    <span
+                      className={cn(
+                        "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
+                        on ? "border-accent bg-accent text-accent-foreground" : "border-border",
+                      )}
+                    >
+                      {on ? <Check className="h-3 w-3" /> : null}
+                    </span>
+                  ) : (
+                    <span className="mt-0.5 shrink-0 text-[11px]">قريب</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
       <p className="text-xs leading-6 text-muted-foreground">
-        الجودة والماكينات لسه مش مبنيين، فمش بنخليك تختارهم عشان ما نوعدك بشاشة مش موجودة.
+        {soon.map((k) => MODULE_LABEL[k]).join(" و")} لسه مش مبنيين، فمش بنخليك تختارهم عشان ما نوعدك بشاشة مش
+        موجودة. والمسح والبحث والإشعارات والإعدادات مش في القايمة دي أصلًا: دي مداخل بتفضل شغّالة دايمًا.
       </p>
-      <Nav onBack={null} next={{ label: "التالي: الفريق", onClick: onNext }} />
+      <Nav
+        onBack={null}
+        next={{ label: "التالي: الفريق", onClick: onNext }}
+        disabled={!picked.length}
+      />
     </div>
   );
 }
@@ -814,22 +863,81 @@ function TeamStep({
 
 /* ── ٦ · تم ─────────────────────────────────────────────────── */
 
-function DoneStep({ name, slug, onEnter }: { name: string; slug: string; onEnter: () => void }) {
+/**
+ * المراجعة والتشغيل.
+ *
+ * الخطوة دي كانت «تم» وبس. والمشكلة إن المستخدم خلاص دخل بيانات على
+ * خمس خطوات ومابيشوفهاش مجمّعة ولا مرة — فأول مكان بيتأكد فيه إن
+ * اللي كتبه اتحفظ صح هو الشاشات نفسها.
+ *
+ * والمراجعة هنا **بتقرا من المصنع اللي اتعمل فعلًا**، مش من الـdraft
+ * اللي في الـwizard. لو اتفرجت على الـdraft، الملخّص كان بيأكّد اللي
+ * المستخدم كتبه بدل ما يأكّد اللي اتحفظ — والفرق بين الاتنين هو
+ * بالظبط الحاجة اللي المراجعة موجودة عشانها.
+ */
+function ReviewStep({ slug, onEnter }: { slug: string; onEnter: () => void }) {
+  const { db, account } = useFactory();
+  const ws = account.workspace;
+  const picked = effectiveModules(ws);
+  const invites = db.invites ?? [];
+
+  const rows: { label: string; value: string; to?: string }[] = [
+    { label: "المصنع", value: db.factory?.name ?? "—" },
+    { label: "النشاط", value: ws?.types.length ? ws.types.join(" · ") : "مش محدّد" },
+    { label: "العنوان", value: workspaceUrl(slug) },
+    { label: "العملة", value: "الجنيه المصري" },
+    {
+      label: "الأقسام",
+      value: `${qty(picked.length, 0)} قسم مفتوح`,
+      to: "/staff",
+    },
+    {
+      label: "الفريق",
+      value: invites.length ? `${qty(invites.length, 0)} دعوة مسجّلة` : "لسه مفيش — تقدر تضيف بعدين",
+      to: "/staff",
+    },
+    {
+      label: "اللي اتجهّز مع النشاط",
+      value: `${qty(db.materials.length, 0)} خامة · ${qty(db.operations.length, 0)} عملية · ${qty(db.units.length, 0)} وحدة قياس`,
+    },
+  ];
+
   return (
-    <div className="space-y-5 text-center">
-      <PartyPopper className="mx-auto h-10 w-10 text-accent" />
-      <h2 className="text-2xl">مصنعك جاهز!</h2>
-      <p className="text-sm leading-7 text-muted-foreground">
-        {name} بقى له workspace مستقل ببياناته وصلاحياته. أنت صاحب المصنع، ومعاك كل الصلاحيات.
-      </p>
-      <div className="rounded-lg border border-border bg-card p-4">
-        <p className="text-xs text-muted-foreground">عنوان مصنعك</p>
-        <p className="latin mt-1 break-all text-lg">{workspaceUrl(slug)}</p>
+    <div className="space-y-5">
+      <div className="text-center">
+        <PartyPopper className="mx-auto h-10 w-10 text-accent" />
+        <h2 className="mt-3 text-2xl">مصنعك جاهز على صنعة</h2>
+        <p className="mt-1.5 text-sm leading-7 text-muted-foreground">
+          {db.factory?.name ?? ""} بقى له workspace مستقل ببياناته وصلاحياته. أنت صاحب المصنع، ومعاك كل الصلاحيات.
+        </p>
       </div>
+
+      <div className="divide-y divide-border rounded-lg border border-border bg-card">
+        {rows.map((r) => (
+          <div key={r.label} className="flex flex-wrap items-baseline justify-between gap-2 px-4 py-3">
+            <span className="text-sm text-muted-foreground">{r.label}</span>
+            <span className="flex items-baseline gap-2 text-sm">
+              <span className={r.label === "العنوان" ? "latin break-all" : ""}>{r.value}</span>
+              {r.to ? (
+                <Link to={r.to} className="shrink-0 text-xs text-accent underline underline-offset-4">
+                  تعديل
+                </Link>
+              ) : null}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-lg border border-accent/30 bg-accent-soft p-4 text-sm leading-7">
+        الخامات والعمليات ووحدات القياس اتجهّزوا من قالب نشاطك — فأول أمر إنتاج تقدر تعمله من غير ما تدخل
+        حاجة تانية. اللي لسه ناقص هتلاقيه في قايمة التجهيز على الصفحة الرئيسية.
+      </div>
+
       <Button size="lg" className="w-full" onClick={onEnter}>
-        دخول إلى المصنع
+        دخول إلى لوحة التحكم
         <ArrowLeft className="h-4 w-4" />
       </Button>
+
       <p className="text-xs leading-6 text-muted-foreground">
         العنوان الحقيقي محتاج DNS وسيرفر. في النسخة الحالية بنفتح المصنع من نفس الجهاز، والنظام بيعرف المصنع من الـslug
         بنفس الطريقة اللي الـbackend هيستخدمها.

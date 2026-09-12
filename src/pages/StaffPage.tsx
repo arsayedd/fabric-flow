@@ -8,7 +8,16 @@ import { Card } from "@/components/ui/card";
 import { Input, selectClass } from "@/components/ui/input";
 import { formatDate } from "@/lib/utils";
 import { supabaseConfigured } from "@/lib/supabase";
-import { MODULE_KEYS, MODULE_LABEL, MODULE_READY, SLUG_MESSAGE, slugState } from "@/store/account";
+import {
+  effectiveModules,
+  MODULE_ABOUT,
+  MODULE_GROUPS,
+  MODULE_KEYS,
+  MODULE_LABEL,
+  MODULE_READY,
+  SLUG_MESSAGE,
+  slugState,
+} from "@/store/account";
 import { useFactory } from "@/store/context";
 import { ExportMenu } from "@/components/export/ExportMenu";
 import { datasetOf } from "@/store/datasets";
@@ -394,6 +403,7 @@ function WorkspaceCard() {
   const [slug, setSlug] = useState(ws?.subdomain ?? "");
   if (!ws) return null;
   const state = slugState(slug, account.workspaces, ws.factoryId);
+  const picked = effectiveModules(ws);
 
   return (
     <Card>
@@ -431,33 +441,55 @@ function WorkspaceCard() {
         ) : null}
       </div>
 
+      {/* نفس الخانات اللي في التجهيز بالظبط، وبنفس الشرح. لو الإعدادات
+          عرضت أسماء تانية، المستخدم بيحتار هو قفل إيه */}
       <div className="mt-5">
-        <p className="text-sm text-muted-foreground">الموديولات اللي بتظهر في القائمة</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {MODULE_KEYS.filter((k) => MODULE_READY[k]).map((k) => {
-            const on = !ws.modules.length || ws.modules.includes(k);
+        <p className="text-sm">الأقسام اللي بتظهر في القائمة</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          إيقاف قسم بيشيله من القائمة بس — <span className="text-foreground">البيانات بتفضل زي ما هي</span>، وبترجع
+          لما تفتحه تاني.
+        </p>
+        <div className="mt-3 space-y-3">
+          {MODULE_GROUPS.map((g) => {
+            const keys = g.keys.filter((k) => MODULE_READY[k]);
+            if (!keys.length) return null;
             return (
-              <button
-                key={k}
-                onClick={() => {
-                  const base = ws.modules.length ? ws.modules : MODULE_KEYS.filter((x) => MODULE_READY[x]);
-                  const next = on ? base.filter((x) => x !== k) : [...base, k];
-                  if (!next.length) {
-                    toast.error("لازم موديول واحد على الأقل.");
-                    return;
-                  }
-                  setModules(next);
-                }}
-                className={`rounded-full border px-3 py-1.5 text-[13px] transition-colors ${
-                  on ? "border-accent bg-accent-soft" : "border-border bg-card hover:border-accent/50"
-                }`}
-              >
-                {on ? "✓ " : ""}
-                {MODULE_LABEL[k]}
-              </button>
+              <div key={g.label}>
+                <p className="text-xs text-muted-foreground">{g.label}</p>
+                <div className="mt-1.5 flex flex-wrap gap-2">
+                  {keys.map((k) => {
+                    const on = !picked.length || picked.includes(k);
+                    return (
+                      <button
+                        key={k}
+                        title={MODULE_ABOUT[k]}
+                        onClick={() => {
+                          const base = picked.length ? picked : MODULE_KEYS.filter((x) => MODULE_READY[x]);
+                          const next = on ? base.filter((x) => x !== k) : [...base, k];
+                          if (!next.length) {
+                            toast.error("لازم قسم واحد على الأقل.");
+                            return;
+                          }
+                          setModules(next);
+                        }}
+                        className={`rounded-full border px-3 py-1.5 text-[13px] transition-colors ${
+                          on ? "border-accent bg-accent-soft" : "border-border bg-card hover:border-accent/50"
+                        }`}
+                      >
+                        {on ? "✓ " : ""}
+                        {MODULE_LABEL[k]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </div>
+        <p className="mt-3 text-xs leading-6 text-muted-foreground">
+          المسح والبحث والإشعارات والإعدادات <span className="text-foreground">مش بتتقفل</span>: دي مداخل مش
+          أقسام، والعامل اللي بيمسح كود في الورشة ماعندوش سياق يقوله إن القسم مقفول.
+        </p>
       </div>
 
       {account.user ? (

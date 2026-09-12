@@ -113,7 +113,7 @@ export const NAV: NavSection[] = [
     icon: Factory,
     items: [
       item("/orders", "أوامر الإنتاج", "production", "production"),
-      item("/cutting", "القص والفرشات", "production", "production"),
+      item("/cutting", "القص والفرشات", "production", "cutting"),
       item("/production", "متابعة العمليات", "production", "production"),
       item("/floor", "شاشة أرض المصنع", "production", "production"),
       item("/station", "محطة العامل", "production", "production"),
@@ -154,7 +154,7 @@ export const NAV: NavSection[] = [
     icon: Truck,
     items: [
       item("/parties?role=supplier", "الموردين", "purchasing", "purchasing"),
-      item("/supply", "التوريد والدفعات", "purchasing", "purchasing"),
+      item("/supply", "التوريد والدفعات", "purchasing", "supply"),
       item("/costs", "فواتير المشتريات", "purchasing", "purchasing"),
       item("/outsourcing", "الورش الخارجية", "purchasing", "purchasing"),
     ],
@@ -185,8 +185,8 @@ export const NAV: NavSection[] = [
     items: [
       item("/quality", "مركز الجودة", "quality", "quality"),
       // مفتوح: كل مصدر مرتجع بياخد صلاحيته لوحده جوه الشاشة
-      item("/returns", "المرتجعات والشكاوى", "sales", null),
-      item("/repairs", "أوامر الإصلاح", "quality", "quality"),
+      item("/returns", "المرتجعات والشكاوى", "sales", "returns"),
+      item("/repairs", "أوامر الإصلاح", "quality", "returns"),
     ],
   },
   {
@@ -200,10 +200,14 @@ export const NAV: NavSection[] = [
     label: "المستندات والطباعة",
     icon: Printer,
     items: [
-      // مفتوحين للكل: الصلاحية جوه الصفحة على كل جدول ومستند لوحده
-      item("/documents", "دفتر المستندات", "production", null),
-      item("/exports", "مركز التصدير", "production", null),
-      item("/labels", "مركز الطباعة والليبلات", "production", null),
+      // الصلاحية جوه الصفحة على كل جدول ومستند لوحده
+      item("/documents", "دفتر المستندات", "production", "documents"),
+      item("/exports", "مركز التصدير", "production", "documents"),
+      item("/labels", "مركز الطباعة والليبلات", "production", "codes"),
+      // المسح **عمومي دايمًا** ومالوش موديول: هو مدخل مش قسم. العامل
+      // اللي بيمسح كود ماعندوش سياق يقوله «القسم ده مقفول» — والكود
+      // اللي بيتمسح النظام هو اللي بيفهم هو إيه. إخفاؤه كان بيقطع
+      // الطريق الوحيد اللي بيشتغل من الموبايل جوه المصنع
       item("/scan", "مسح كود", "production", null),
     ],
   },
@@ -223,7 +227,7 @@ export const NAV: NavSection[] = [
     key: "ai",
     label: "مساعد صنعة",
     icon: Brain,
-    items: [item("/ai", "اسأل صنعة", "reports", null, false)],
+    items: [item("/ai", "اسأل صنعة", "reports", "automation", false)],
   },
   {
     key: "settings",

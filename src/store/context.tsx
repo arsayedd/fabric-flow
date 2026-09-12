@@ -29,6 +29,7 @@ import {
   loadAccounts,
   loadCurrent,
   loadWorkspaces,
+  MODULES_VERSION,
   randomSalt,
   resolveTenant,
   roleIn,
@@ -1094,9 +1095,17 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         if (!workspace) return;
         persistWorkspaces(workspaces.map((w) => (w.factoryId === workspace.factoryId ? { ...w, ...patch } : w)));
       },
+      /**
+       * الحفظ بيختم النسخة. بعد الختم، القايمة بتتقرا زي ما هي —
+       * فاللي قفل قسم بإرادته مايرجعش يلاقيه مفتوح تاني.
+       */
       setModules: (modules) => {
         if (!workspace) return;
-        persistWorkspaces(workspaces.map((w) => (w.factoryId === workspace.factoryId ? { ...w, modules } : w)));
+        persistWorkspaces(
+          workspaces.map((w) =>
+            w.factoryId === workspace.factoryId ? { ...w, modules, modulesV: MODULES_VERSION } : w,
+          ),
+        );
       },
       /**
        * الدعوات بتتسجّل في قائمة الموظفين بالمسمّى والصلاحية.

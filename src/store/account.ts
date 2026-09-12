@@ -118,11 +118,25 @@ export function industryOf(types: string[]): "apparel" | "bags" | "shoes" | "fur
   return "custom";
 }
 
-/** الموديولات اللي المستخدم عايز يديرها — بتحدّد شكل القائمة الجانبية */
+/**
+ * الموديولات اللي المصنع بيديرها — بتحدّد شكل القائمة الجانبية.
+ *
+ * الاختيار هنا **مش تفضيل شكلي**. هو إجابة على سؤال «طبيعة شغلك إيه»،
+ * والقائمة بتتبنى عليه. وعشان كده الليستة دي **مش بتتقفل على حد**: أي
+ * قسم بيتفتح أو بيتوقف أي وقت من الإعدادات.
+ *
+ * والقاعدة اللي بتحكم `MODULE_READY`: **مابنعرضش اختيار لشاشة مش
+ * موجودة.** اللي مش مبني بيبان مطفي ومكتوب عليه «قريب» — وده بيلزمنا
+ * إننا نرجع نحدّث الملف ده مع كل موديول بيخلص. (الجودة قعدت `false`
+ * بعد ما مركز الجودة اتبنى، فالمستخدم كان بيتقال له «لسه مش مبني» عن
+ * حاجة شغّالة — أسوأ نوع من الكذب: كذب بيقلّل من النظام.)
+ */
 export const MODULE_KEYS = [
   "production",
+  "cutting",
   "planning",
   "inventory",
+  "supply",
   "purchasing",
   "workers",
   "parties",
@@ -130,16 +144,22 @@ export const MODULE_KEYS = [
   "finance",
   "costing",
   "quality",
+  "returns",
   "machines",
+  "documents",
+  "codes",
   "reports",
+  "automation",
 ] as const;
 
 export type ModuleKey = (typeof MODULE_KEYS)[number];
 
 export const MODULE_LABEL: Record<ModuleKey, string> = {
   production: "الإنتاج وأوامر التشغيل",
+  cutting: "القص والتشغيل",
   planning: "التخطيط والطاقة",
   inventory: "المخزون والخامات",
+  supply: "التوريد والاستلام",
   purchasing: "المشتريات والموردين",
   workers: "العمال والحضور",
   parties: "العملاء والتجار",
@@ -147,41 +167,107 @@ export const MODULE_LABEL: Record<ModuleKey, string> = {
   finance: "الخزينة والتحصيل",
   costing: "التكلفة والربحية",
   quality: "الجودة والفحص",
+  returns: "المرتجعات والإصلاحات",
   machines: "الماكينات والصيانة",
+  documents: "المستندات والطباعة",
+  codes: "QR والباركود",
   reports: "التقارير والتحليلات",
+  automation: "الأتمتة والذكاء الاصطناعي",
+};
+
+/**
+ * إيه اللي بيتفتح بالظبط لما تختار القسم ده.
+ *
+ * السطر ده مش زينة. «المخزون» كلمة ماتقولش إن جواها الجرد والهالك،
+ * والمستخدم اللي بيختار من ١٨ خانة محتاج يعرف إيه اللي بيدخل وإيه
+ * اللي بيقف — مش يجرّب ويشوف.
+ */
+export const MODULE_ABOUT: Record<ModuleKey, string> = {
+  production: "أوامر الإنتاج، متابعة العمليات، شاشة أرض المصنع، ومحطة العامل",
+  cutting: "الفرشات والتكتيك، والباندلات اللي الإنتاج بيتحسب عليها بالقطعة",
+  planning: "طاقة الخطوط، جدولة الأوامر، واحتياج الخامات قبل ما ينفد",
+  inventory: "الخامات وأرصدتها وحركاتها وأسعارها، والجرد والهالك",
+  supply: "أوامر التوريد والاستلام الجزئي والدفعات والاستدعاء",
+  purchasing: "الموردين وفواتير المشتريات والورش الخارجية",
+  workers: "العمال والحضور والأجر بالقطعة والسلف",
+  parties: "جهات التعامل بأدوارها، ملف العميل ٣٦٠، وذكاء العملاء",
+  sales: "الموديلات، التوريد للعميل، والفواتير",
+  finance: "الخزينة والحسابات والتحصيل والمستحق",
+  costing: "ورقة تكلفة الموديل، الربحية، وسعر التعادل",
+  quality: "الفحص والعيوب وتحليل الأسباب وتكلفة الجودة الرديئة",
+  returns: "مرتجعات العملاء والموردين، الشكاوى، وأوامر الإصلاح",
+  machines: "سجل الماكينات والصيانة والأعطال",
+  documents: "دفتر المستندات، مركز التصدير، ومحرّك الطباعة",
+  codes: "ليبلات QR وباركود لكل كيان، وسلسلة التتبّع",
+  reports: "غرفة التحكم، صحة المصنع، واستنتاجات صنعة",
+  automation: "قواعد تلقائية، وسؤال وجواب على بيانات مصنعك",
 };
 
 /** الموديولات اللي لسه مش مبنية — بنقولها صريح في الاختيار بدل ما نوعد */
 export const MODULE_READY: Record<ModuleKey, boolean> = {
   production: true,
+  cutting: true,
   planning: true,
   inventory: true,
+  supply: true,
   purchasing: true,
   workers: true,
   parties: true,
   sales: true,
   finance: true,
   costing: true,
-  quality: false,
+  quality: true,
+  returns: true,
   machines: false,
+  documents: true,
+  codes: true,
   reports: true,
+  automation: false,
 };
 
-/** الاختيار بيحدّد القائمة الجانبية: كل موديول والروابط اللي بتظهر بسببه */
-export const MODULE_ROUTES: Record<ModuleKey, string[]> = {
-  production: ["/orders"],
-  planning: ["/planning"],
-  inventory: ["/materials"],
-  purchasing: ["/costs"],
-  workers: ["/workers"],
-  parties: ["/parties", "/intelligence"],
-  sales: ["/products"],
-  finance: ["/collections", "/treasury"],
-  costing: ["/costing"],
-  quality: [],
-  machines: [],
-  reports: ["/dashboard"],
-};
+/** مجموعات الاختيار — ١٨ خانة في عمود واحد بتبقى قايمة، مش قرار */
+export const MODULE_GROUPS: { label: string; keys: ModuleKey[] }[] = [
+  { label: "التشغيل", keys: ["production", "cutting", "planning", "machines"] },
+  { label: "الخامات والتوريد", keys: ["inventory", "supply", "purchasing"] },
+  { label: "الناس", keys: ["workers", "parties"] },
+  { label: "الفلوس", keys: ["sales", "finance", "costing"] },
+  { label: "الجودة والتتبّع", keys: ["quality", "returns", "codes"] },
+  { label: "الورق والتحليل", keys: ["documents", "reports", "automation"] },
+];
+
+/**
+ * توسيع اختيارات مصنع قديم.
+ *
+ * الموديولات كانت اتناشر، وبقت تمانتاشر. والستة الجداد **مكانوا
+ * ظاهرين فعلًا** للمصانع القديمة: القص كان تحت الإنتاج، والتوريد تحت
+ * المشتريات، والمرتجعات والمستندات والأكواد مكانوا مربوطين بأي اختيار
+ * أصلًا — يعني ظاهرين للكل.
+ *
+ * فلو قرينا قايمة قديمة زي ما هي، **المستخدم بيصحى يلاقي شاشات
+ * اختفت** — وهو ماعملش حاجة. عشان كده بنوسّعها عند القراءة.
+ *
+ * والتوسيع بيتحدد بـ`modulesV`، مش بتخمين على محتوى القايمة: لو
+ * خمّنّا «القايمة مافيهاش `documents` يعني قديمة»، يبقى المستخدم
+ * اللي **قافل** المستندات بإرادته هنرجّعها له كل مرة. العلامة بتتكتب
+ * أول ما الاختيارات تتحفظ من الإعدادات أو من التجهيز.
+ */
+export const MODULES_VERSION = 2;
+
+export function effectiveModules(w: Pick<Workspace, "modules" | "modulesV"> | null): ModuleKey[] {
+  if (!w) return [];
+  const saved = w.modules ?? [];
+  if (!saved.length) return [];
+  if ((w.modulesV ?? 1) >= MODULES_VERSION) return saved;
+
+  const out = new Set<ModuleKey>(saved);
+  if (out.has("production")) out.add("cutting");
+  if (out.has("purchasing")) out.add("supply");
+  // دول مكانوا ظاهرين للكل قبل ما يبقى لهم خانة
+  out.add("returns");
+  out.add("documents");
+  out.add("codes");
+  return MODULE_KEYS.filter((k) => out.has(k));
+}
 
 export type Workspace = {
   factoryId: string;
@@ -202,6 +288,11 @@ export type Workspace = {
   branches: number | null;
   logo: string | null;
   modules: ModuleKey[];
+  /**
+   * نسخة قايمة الموديولات. غايب = قايمة اتحفظت قبل ما الستة الجداد
+   * يبقى لهم خانة، فبتتوسّع عند القراءة (`effectiveModules`).
+   */
+  modulesV?: number;
   ownerId: string;
   /** المستخدمين اللي ليهم وصول: حساب → دور */
   access: { userId: string; role: "owner" | "accountant" | "supervisor" }[];
@@ -231,6 +322,7 @@ export function blankWorkspace(factoryId: string, dbKey: string, name: string, s
     branches: null,
     logo: null,
     modules: [],
+    modulesV: MODULES_VERSION,
     ownerId: "",
     access: [],
     createdAt: new Date().toISOString(),
