@@ -20,6 +20,11 @@ import { TreasuryPage } from "@/pages/TreasuryPage";
 import { OrdersPage } from "@/pages/OrdersPage";
 import { OrderDetailPage } from "@/pages/OrderDetailPage";
 import { PlanningPage } from "@/pages/PlanningPage";
+import { CuttingPage } from "@/pages/CuttingPage";
+import { ProductionPage } from "@/pages/ProductionPage";
+import { FloorPage } from "@/pages/FloorPage";
+import { StationPage } from "@/pages/StationPage";
+import { OutsourcingPage } from "@/pages/OutsourcingPage";
 import { CostingPage } from "@/pages/CostingPage";
 import { CommandPage } from "@/pages/CommandPage";
 import { ProductsPage, ProductDetailPage } from "@/pages/ProductsPage";
@@ -89,6 +94,11 @@ function appRoutes() {
         {guarded("/workers/:id", "workers", <WorkerProfilePage />)}
         {guarded("/orders", "production", <OrdersPage />)}
         {guarded("/orders/:id", "production", <OrderDetailPage />)}
+        {guarded("/cutting", "production", <CuttingPage />)}
+        {guarded("/production", "production", <ProductionPage />)}
+        {guarded("/floor", "production", <FloorPage />)}
+        {guarded("/station", "production", <StationPage />)}
+        {guarded("/outsourcing", "purchasing", <OutsourcingPage />)}
         {guarded("/planning", "planning", <PlanningPage />)}
         {guarded("/products", "sales", <ProductsPage />)}
         {guarded("/products/:id", "sales", <ProductDetailPage />)}

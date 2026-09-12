@@ -24,8 +24,8 @@ export const SUB_STATUS_LABEL: Record<Subcontract["status"], string> = {
   cancelled: "ملغي",
 };
 
-export const SUB_STATUS_TONE: Record<Subcontract["status"], "accent" | "ok" | "muted"> = {
-  open: "accent",
+export const SUB_STATUS_TONE: Record<Subcontract["status"], "gold" | "ok" | "muted"> = {
+  open: "gold",
   closed: "ok",
   cancelled: "muted",
 };

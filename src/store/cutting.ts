@@ -25,8 +25,8 @@ export const LAY_STATUS_LABEL: Record<CutLay["status"], string> = {
   cancelled: "ملغية",
 };
 
-export const LAY_STATUS_TONE: Record<CutLay["status"], "accent" | "ok" | "muted"> = {
-  planned: "accent",
+export const LAY_STATUS_TONE: Record<CutLay["status"], "gold" | "ok" | "muted"> = {
+  planned: "gold",
   cut: "ok",
   cancelled: "muted",
 };
