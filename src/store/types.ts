@@ -222,6 +222,17 @@ export type Delivery = {
   factoryId: string;
   /** جهة التعامل صاحبة التوريد — نفس الـid القديم للعميل */
   clientId: string;
+  /**
+   * أمر الإنتاج اللي التوريد ده خرج منه.
+   *
+   * من غيره «طلب كام واستلم كام» بيتحسب بمطابقة اسم الموديل، والمطابقة
+   * دي بتغلط: عميلين بياخدوا «قميص قطني» من أمرين مختلفين. وفي الاستدعاء
+   * الغلط ده تكلفته إننا نكلّم العميل الغلط ونسيب اللي فعلًا عنده
+   * المشكلة — فالربط هنا بالمعرّف، مش بالاسم.
+   *
+   * و`null` مسموح: توريد قديم أو توريد مش من أمر متسجّل.
+   */
+  orderId?: string | null;
   date: string;
   dueDate: string;
   amount: number;
@@ -455,6 +466,225 @@ export type StockMovement = {
   unitCost: number;
   refType: string;
   refId: string | null;
+  /**
+   * الدفعة اللي الحركة دي منها.
+   *
+   * ده العمود اللي التتبّع والاستدعاء كله قايم عليه: حركة دخول بتكتب
+   * الدفعة اللي وصلت، وحركة صرف بتكتب الدفعة اللي نزلت الإنتاج — فسؤال
+   * «الدفعة دي مشيت فين؟» بيتجاوب من الدفتر، مش من الذاكرة.
+   *
+   * و`null` مقصود ومسموح: المخزون اللي اتسجّل قبل الدفعات لسه موجود
+   * وحقيقي، وماينفعش نخترع له دفعة مااتسجّلتش.
+   */
+  batchId?: string | null;
+  notes: string;
+};
+
+/* ══ أوامر التوريد والاستلام والدفعات (M-S1) ══════════════════════ */
+
+/**
+ * أمر التوريد.
+ *
+ * قبل ده كان الشراء بيتسجّل كحركة مخزن جاهزة: «دخل ٩٧٠ متر». الحركة
+ * بتقول اللي دخل ومابتقولش **اللي كان مطلوب**، فسؤال «في عجز؟» مالوش
+ * إجابة في الدفتر، وسؤال «المورّد بيسلّم في ميعاده؟» كمان.
+ *
+ * الأمر ده بيفصل الاتفاق عن التنفيذ: الاتفاق سطور بكميات وأسعار، والتنفيذ
+ * استلامات متعددة. والفرق بين الاتنين هو العجز والزيادة.
+ */
+export const SUPPLY_STATUSES = ["open", "partial", "received", "closed", "cancelled"] as const;
+export type SupplyStatus = (typeof SUPPLY_STATUSES)[number];
+
+export const SUPPLY_STATUS_LABEL: Record<SupplyStatus, string> = {
+  open: "مفتوح — لسه مااستلمناش",
+  partial: "توريد جزئي",
+  received: "اتوصل بالكامل",
+  closed: "مقفول بعجز",
+  cancelled: "ملغي",
+};
+
+export type SupplyOrder = {
+  id: string;
+  factoryId: string;
+  code: string;
+  /** المورّد كجهة تعامل */
+  partyId: string;
+  date: string;
+  /**
+   * ميعاد التوريد المتفق عليه. ده الرقم اللي بيخلّي «المورّد بيتأخر؟»
+   * سؤال ليه إجابة: بنقارنه بتاريخ آخر استلام، مش بإحساس.
+   */
+  expectedDate: string;
+  status: SupplyStatus;
+  /** قفل الأمر بعجز **قرار**: بنسجّل مين قرر وليه */
+  closedAt?: string | null;
+  closeReason?: string | null;
+  cancelReason?: string | null;
+  notes: string;
+};
+
+export type SupplyOrderLine = {
+  id: string;
+  factoryId: string;
+  supplyOrderId: string;
+  itemType: "material" | "product";
+  itemId: string;
+  /** الكمية المتفق عليها */
+  qtyOrdered: number;
+  /** السعر المتفق عليه — رقم اتفاق فبيتخزّن، مش بيتحسب */
+  unitPrice: number;
+  notes: string;
+};
+
+/**
+ * الاستلام.
+ *
+ * **التوريد مش حركة واحدة.** أمر بعشرة آلاف متر بيوصل على تلات شحنات،
+ * وكل شحنة ليها تاريخها ومستندها وعينتها. عشان كده الاستلام كيان بحياته،
+ * والأمر بيفضل مفتوح لحد ما يخلص أو يتقفل بعجز.
+ */
+export type SupplyReceipt = {
+  id: string;
+  factoryId: string;
+  code: string;
+  supplyOrderId: string;
+  date: string;
+  warehouseId: string | null;
+  /** رقم إذن التسليم بتاع المورّد — ورقته، مش ورقتنا */
+  supplierDocNo: string;
+  /** فاتورة المورّد في دفتر المصروفات، لو اتسجّلت */
+  costEntryId: string | null;
+  notes: string;
+};
+
+/**
+ * سطر الاستلام: تفصيل الكمية.
+ *
+ * الكميات التلاتة اللي بتتخزّن هنا **حاضرة ومعدودة**: اتقبلت، أو اترفضت
+ * بعيب، أو وصلت تالفة. واللي غير كده بيتحسب ولا يتخزّن:
+ *
+ *  - **الواصل** = المقبول + المرفوض + التالف (اللي نزل من العربية فعلًا)
+ *  - **الباقي** = المطلوب − الواصل، طالما الأمر لسه مفتوح
+ *  - **العجز** = نفس الرقم، بس **بعد** ما الأمر يتقفل — ساعتها بس الباقي
+ *    بيبقى عجز، لأن اللي لسه جاي مش ناقص
+ *  - **المرتجع** = اللي رجع للمورّد فعلًا، وده بيتسجّل في دفتر المرتجعات
+ *    الموجود (`returns` بمصدر `supplier`) مش في جدول تاني
+ *
+ * والفرق بين «باقي» و«عجز» مش لعب بالكلام: الأول انتظار، والتاني خسارة
+ * بقيمة، وبتتحسب على المورّد في درجته.
+ */
+export type SupplyReceiptLine = {
+  id: string;
+  factoryId: string;
+  receiptId: string;
+  supplyOrderLineId: string;
+  /** اتقبل ودخل المخزن */
+  qtyAccepted: number;
+  /** وصل سليم الشكل بس مرفوض بالمواصفة */
+  qtyRejected: number;
+  /** وصل تالف — تلف نقل أو تخزين */
+  qtyDamaged: number;
+  /**
+   * مكتوب في مستند المورّد ومش موجود في الشحنة.
+   *
+   * ده مختلف عن العجز: العجز في الأمر كله، وده **تعارض في ورقة الشحنة
+   * دي بالذات** — المورّد كاتب ١٠٠٠ ونزل ٩٩٠. بيتسجّل عشان المطالبة
+   * تبقى على ورقة، ومابيدخلش المخزن ولا بيتحسب واصل.
+   */
+  qtyMissing: number;
+  /** الدفعة اللي اتعملت للكمية المقبولة */
+  batchId: string | null;
+  notes: string;
+};
+
+/**
+ * الدفعة (لوط).
+ *
+ * أهم حاجة في القسم ده. من غير دفعة، «الخامة دي فيها مشكلة» سؤال مالوش
+ * إجابة: عندك ٣ توريدات من نفس القماش من نفس المورّد، ومش عارف أنهي
+ * توريد نزل أنهي أمر إنتاج، فبتسحب المنتجات كلها أو مافيش.
+ *
+ * الرصيد **مابيتخزّنش هنا**: بيتحسب من حركات المخزن اللي عليها الدفعة
+ * دي، زي أي رصيد تاني في النظام.
+ */
+export const BATCH_STATUSES = ["active", "hold", "recalled", "blocked"] as const;
+export type BatchStatus = (typeof BATCH_STATUSES)[number];
+
+export const BATCH_STATUS_LABEL: Record<BatchStatus, string> = {
+  active: "متاحة للصرف",
+  hold: "موقوفة للفحص",
+  recalled: "متستدعاة",
+  blocked: "موقوفة نهائي",
+};
+
+export type MaterialBatch = {
+  id: string;
+  factoryId: string;
+  code: string;
+  itemType: "material" | "product";
+  itemId: string;
+  /** المورّد اللي جابها */
+  partyId: string | null;
+  /** سطر الاستلام اللي عملها — `null` لدفعة اتسجّلت بالإيد */
+  receiptLineId: string | null;
+  receivedDate: string;
+  /** الكمية اللي دخلت بالدفعة — قياس وقت الاستلام، فبيتخزّن */
+  qtyIn: number;
+  /** تكلفة الوحدة في الدفعة دي — أساس تكلفة الدفعة في التقييم */
+  unitCost: number;
+  /** رقم اللوط المكتوب على الرول من المورّد — ورقه مش ورقنا */
+  supplierLot: string;
+  /** للخامات اللي بتنتهي: غرا، دهان، صبغة. `null` للقماش */
+  expiryDate: string | null;
+  status: BatchStatus;
+  notes: string;
+};
+
+/**
+ * الاستدعاء.
+ *
+ * لما دفعة تطلع فيها مشكلة، السؤال مش «إيه المشكلة» — ده متسجّل في
+ * الجودة. السؤال **«المشكلة دي وصلت لمين؟»**، وإجابته سلسلة: الدفعة →
+ * حركات الصرف → أوامر الإنتاج → التوريدات → العملاء → الفواتير.
+ *
+ * ومدى الاستدعاء **مابيتخزّنش**: بيتحسب من الدفتر وقت العرض. لو اتخزّن،
+ * أول مرتجع جديد يخليه قديم.
+ *
+ * واللي **بيرجع** فعلًا بيتسجّل في دفتر المرتجعات الموجود بـ`recallId`،
+ * مش في جدول جديد — عشان تكلفة الرجوع تمشي في نفس الحسابات.
+ */
+export const RECALL_STATUSES = ["open", "contained", "closed", "cancelled"] as const;
+export type RecallStatus = (typeof RECALL_STATUSES)[number];
+
+export const RECALL_STATUS_LABEL: Record<RecallStatus, string> = {
+  open: "مفتوح — بنسحب",
+  contained: "متحاصر",
+  closed: "مقفول",
+  cancelled: "ملغي",
+};
+
+export const RECALL_SEVERITIES = ["low", "high", "critical"] as const;
+export type RecallSeverity = (typeof RECALL_SEVERITIES)[number];
+
+export const RECALL_SEVERITY_LABEL: Record<RecallSeverity, string> = {
+  low: "محدود",
+  high: "خطير",
+  critical: "حرج — وقف كل حاجة",
+};
+
+export type Recall = {
+  id: string;
+  factoryId: string;
+  code: string;
+  batchId: string;
+  date: string;
+  reason: string;
+  severity: RecallSeverity;
+  status: RecallStatus;
+  /** المسؤول عن السحب */
+  ownerId: string | null;
+  closedAt?: string | null;
+  cancelReason?: string | null;
   notes: string;
 };
 
@@ -610,6 +840,8 @@ export const CODE_KINDS = [
   "worker",
   "operation",
   "document",
+  "batch",
+  "supply",
 ] as const;
 
 export type CodeKind = (typeof CODE_KINDS)[number];
@@ -627,6 +859,8 @@ export const KIND_TAG: Record<CodeKind, string> = {
   worker: "WRK",
   operation: "OPR",
   document: "DOC",
+  batch: "LOT",
+  supply: "SUP",
 };
 
 export const KIND_LABEL: Record<CodeKind, string> = {
@@ -641,6 +875,8 @@ export const KIND_LABEL: Record<CodeKind, string> = {
   worker: "عامل",
   operation: "عملية",
   document: "مستند",
+  batch: "دفعة خامة",
+  supply: "أمر توريد",
 };
 
 /** الإجراءات اللي المسح بيوصّل لها — كل واحدة مربوطة بميوتيشن موجودة */
@@ -1046,6 +1282,14 @@ export type ReturnEntry = {
   costEntryId: string | null;
   /** بلاغ الجودة المرتبط لو المرتجع طلع من فحص */
   issueId: string | null;
+  /**
+   * الاستدعاء اللي المرتجع ده جزء منه.
+   *
+   * وجوده هنا مش تزويد عمود: هو اللي بيخلّي «رجع كام من الاستدعاء»
+   * يتحسب من دفتر المرتجعات بتكلفته الكاملة، بدل جدول تاني بأرقام
+   * موازية تفرق عنه.
+   */
+  recallId?: string | null;
   status: ReturnStatus;
   resolution: ReturnResolution | null;
   unitValue: number;
@@ -1393,6 +1637,12 @@ export type Db = {
   operations: Operation[];
   routingSteps: RoutingStep[];
   stockMovements: StockMovement[];
+  supplyOrders: SupplyOrder[];
+  supplyOrderLines: SupplyOrderLine[];
+  supplyReceipts: SupplyReceipt[];
+  supplyReceiptLines: SupplyReceiptLine[];
+  batches: MaterialBatch[];
+  recalls: Recall[];
   stageEntries: StageEntry[];
   cutLays: CutLay[];
   cutLayLines: CutLayLine[];

@@ -268,6 +268,12 @@ export function emptyDb(factoryName: string, industry: Industry = "custom"): Db 
     operations: tpl.operations,
     routingSteps: [],
     stockMovements: [],
+    supplyOrders: [],
+    supplyOrderLines: [],
+    supplyReceipts: [],
+    supplyReceiptLines: [],
+    batches: [],
+    recalls: [],
     stageEntries: [],
     costItems: DEFAULT_COST_ITEMS.map((c) => ({ id: nid(), factoryId, ...c })),
     costEntries: [],
@@ -434,25 +440,54 @@ export function demoDb(): Db {
     refType = "",
     refId: string | null = null,
     notes = "",
-  ) => ({ id: nid(), factoryId: FID, date, itemType, itemId, warehouseId, kind, qty, unitCost, refType, refId, notes });
+    batchId: string | null = null,
+  ) => ({ id: nid(), factoryId: FID, date, itemType, itemId, warehouseId, kind, qty, unitCost, refType, refId, batchId, notes });
+
+  /**
+   * دفعات الديمو.
+   *
+   * مش كل شراء له دفعة — وده **مقصود**. الشراء المستعجل لأمر القمصان
+   * الجديد دخل بلا لوط، زي اللي بيحصل فعلًا. فتغطية الدفعات في الديمو
+   * أقل من ١٠٠٪، وشاشة التقييم بتقول النسبة بدل ما تدّعي إن كل حبة في
+   * المخزن متتبّعة.
+   */
+  const batchKey = (name: string, ago: number) => `${name}|${ago}`;
+  const purchaseBatch: Record<string, string> = {
+    [batchKey("قماش قطن", 60)]: "bt-1",
+    [batchKey("قماش قطن", 14)]: "bt-2",
+    [batchKey("قماش قطن", 5)]: "bt-3",
+    [batchKey("قماش كتان", 20)]: "bt-4",
+    [batchKey("أزرار", 25)]: "bt-6",
+  };
 
   /** سعر الخامة وقت صرفها لأمر SN-1042 — المتوسط المرجّح للمشتريات لحد يومها */
   const costAtIssue = (name: string) => avgAt(name, 10) ?? materials.find((m) => m.name === name)!.avgCost;
 
   const stockMovements = [
-    ...purchases.map(([name, qty, price, ago]) =>
-      name === "قماش قطن"
-        ? mv("material", mat(name), whMat, "purchase", qty, price, addDays(today, -ago), "cost_entry", "ce1", "أقمشة قمصان")
+    ...purchases.map(([name, qty, price, ago]) => {
+      const batch = purchaseBatch[batchKey(name, ago)] ?? null;
+      return name === "قماش قطن"
+        ? mv("material", mat(name), whMat, "purchase", qty, price, addDays(today, -ago), "cost_entry", "ce1", "أقمشة قمصان", batch)
         : name === "قماش كتان"
-          ? mv("material", mat(name), whMat, "purchase", qty, price, addDays(today, -ago), "cost_entry", "ce6", "قماش كتان")
-          : mv("material", mat(name), whMat, "purchase", qty, price, addDays(today, -ago)),
-    ),
+          ? mv("material", mat(name), whMat, "purchase", qty, price, addDays(today, -ago), "cost_entry", "ce6", "قماش كتان", batch)
+          : mv("material", mat(name), whMat, "purchase", qty, price, addDays(today, -ago), "", null, "", batch);
+    }),
     // شراء من المورّد التاني بسعر أقل — منه بيتحسب فرق السعر عن الوسيط
-    mv("material", mat("قماش قطن"), whMat, "purchase", 400, 82, addDays(today, -13), "cost_entry", "ce5", "قماش قطن — أقمشة الدلتا"),
+    mv("material", mat("قماش قطن"), whMat, "purchase", 400, 82, addDays(today, -13), "cost_entry", "ce5", "قماش قطن — أقمشة الدلتا", "bt-5"),
     // هالك الكتان: المصبغة هي مورّده الوحيد، فالهالك ده يتحمّل عليها
     mv("material", mat("قماش كتان"), whMat, "waste", -12, 120, addDays(today, -4), "lay", "lay-1", "هالك فرشة الفستان"),
     // صرف خامات أمر SN-1042
-    mv("material", mat("قماش قطن"), whMat, "issue", -518.4, costAtIssue("قماش قطن"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
+    /*
+     * صرف قماش الأمر ده **مقسوم على دفعتين**، وده أهم سطر في الديمو:
+     * لولاه، «الدفعة دي نزلت فين؟» مالهاش إجابة، والاستدعاء بيسحب
+     * المنتجات كلها أو مافيش.
+     *
+     * والترتيب مش الأقدم الأول عن قصد: أمين المخزن خد الرول القريب منه.
+     * ده بيحصل في المصانع، والنظام لازم يقدر يقوله بعد كده إن ٣٨٠ متر من
+     * دفعة الدلتا بالتحديد نزلوا أمر SN-1042.
+     */
+    mv("material", mat("قماش قطن"), whMat, "issue", -380, costAtIssue("قماش قطن"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042 — لوط DL-2207", "bt-5"),
+    mv("material", mat("قماش قطن"), whMat, "issue", -138.4, costAtIssue("قماش قطن"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042 — لوط CT-9188", "bt-2"),
     mv("material", mat("خيط بوليستر"), whMat, "issue", -15, costAtIssue("خيط بوليستر"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
     mv("material", mat("أزرار"), whMat, "issue", -2142, costAtIssue("أزرار"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
     mv("material", mat("تيكت وباركود"), whMat, "issue", -300, costAtIssue("تيكت وباركود"), addDays(today, -10), "order", "o1", "صرف لأمر SN-1042"),
@@ -460,14 +495,151 @@ export function demoDb(): Db {
     mv("material", mat("قماش قطن"), whMat, "waste", -12, costAtIssue("قماش قطن"), addDays(today, -9), "order", "o1", "هالك قص"),
     // إنتاج تام
     mv("product", "p1", whFg, "receipt_fg", 190, 212, addDays(today, -3), "order", "o1", "تام جزئي"),
-    mv("product", "p3", whFg, "receipt_fg", 160, 114, addDays(today, -5), "order", "o5"),
-    mv("product", "p3", whFg, "delivery", -160, 114, addDays(today, -2), "delivery", "d5", "تسليم تيشيرت"),
+    // دفعة إنتاج تام: الأمر هو اللي عملها، والتوريد هو اللي طلّعها للعميل.
+    // الاتنين على نفس الدفعة، فسلسلة الاستدعاء توصل من الموديل للعميل.
+    mv("product", "p3", whFg, "receipt_fg", 160, 114, addDays(today, -5), "order", "o5", "", "bt-7"),
+    mv("product", "p3", whFg, "delivery", -160, 114, addDays(today, -2), "delivery", "d5", "تسليم تيشيرت", "bt-7"),
     // قماش الفرشة بيتصرف على الفرشة نفسها، مش على الأمر كله — فالمستهلك
     // معروف لأي فرشة بالظبط، ومنه بتتحسب نسبة الاستغلال
-    mv("material", mat("قماش كتان"), whMat, "issue", -94, 120, addDays(today, -5), "lay", "lay-1", "فرشة فستان — 20 طبقة"),
+    mv("material", mat("قماش كتان"), whMat, "issue", -94, 120, addDays(today, -5), "lay", "lay-1", "فرشة فستان — 20 طبقة", "bt-4"),
     // خامات طلعت مع إذن التشغيل الخارجي ورجع منها جزء
     mv("material", mat("خيط بوليستر"), whMat, "issue", -9, 18, addDays(today, -12), "subcontract", "sub-1", "خامات طلعت لورشة — SUB-0001"),
     mv("material", mat("خيط بوليستر"), whMat, "return", 1, 18, addDays(today, -5), "subcontract", "sub-1", "خامات رجعت من ورشة — SUB-0001"),
+  ];
+
+  /* ── الدفعات ───────────────────────────────────────────────── */
+
+  const batch = (
+    id: string,
+    code: string,
+    itemType: "material" | "product",
+    itemId: string,
+    ago: number,
+    qtyIn: number,
+    unitCost: number,
+    extra: Partial<Db["batches"][number]> = {},
+  ): Db["batches"][number] => ({
+    id,
+    factoryId: FID,
+    code,
+    itemType,
+    itemId,
+    partyId: null,
+    receiptLineId: null,
+    receivedDate: addDays(today, -ago),
+    qtyIn,
+    unitCost,
+    supplierLot: "",
+    expiryDate: null,
+    status: "active",
+    notes: "",
+    ...extra,
+  });
+
+  const batches: Db["batches"] = [
+    batch("bt-1", "LOT-2026-000001", "material", mat("قماش قطن"), 60, 300, 74, { partyId: "sup-1", supplierLot: "CT-9041" }),
+    batch("bt-2", "LOT-2026-000002", "material", mat("قماش قطن"), 14, 350, 88, { partyId: "sup-1", supplierLot: "CT-9188" }),
+    batch("bt-3", "LOT-2026-000003", "material", mat("قماش قطن"), 5, 200, 96, { partyId: "sup-1", supplierLot: "CT-9254" }),
+    batch("bt-4", "LOT-2026-000004", "material", mat("قماش كتان"), 20, 200, 120, { partyId: "sup-1", supplierLot: "LN-3310", receiptLineId: "srl-1" }),
+    /*
+     * دفعة الدلتا — بطلة الاستدعاء.
+     *
+     * هي نفس المورّد اللي طبقة الاستنتاجات بتقول عليه «أرخص في السعر
+     * وأغلى في التكلفة الحقيقية»، ودلوقتي بقى فيه سبب ملموس للجملة دي:
+     * الدفعة وصلت ناقصة وتالف منها ٢٠ متر، وبعدها طلعت مشكلة في اللون.
+     */
+    batch("bt-5", "LOT-2026-000005", "material", mat("قماش قطن"), 13, 400, 82, {
+      partyId: "sup-5",
+      supplierLot: "DL-2207",
+      receiptLineId: "srl-2",
+      status: "recalled",
+      notes: "متوقفة — بلاغ بهتان لون",
+    }),
+    batch("bt-6", "LOT-2026-000006", "material", mat("أزرار"), 25, 2000, 1.7, { partyId: "sup-2", supplierLot: "BT-771", receiptLineId: "srl-4" }),
+    // دفعة منتج تام — مالهاش مورّد، إحنا اللي عملناها
+    batch("bt-7", "LOT-2026-000007", "product", "p3", 5, 160, 114, { supplierLot: "", notes: "تشغيلة أمر SN-1041", status: "recalled" }),
+  ];
+
+  /* ── أوامر التوريد واستلاماتها ─────────────────────────────── */
+
+  const supplyOrders: Db["supplyOrders"] = [
+    // وصل كامل وفي ميعاده — الحالة الطبيعية، ولازم تبان في الديمو كمرجع
+    { id: "so-1", factoryId: FID, code: "SUP-2026-000001", partyId: "sup-1", date: addDays(today, -25), expectedDate: addDays(today, -20), status: "received", notes: "كتان الفساتين" },
+    /*
+     * الأمر اللي بيشرح القسم كله: وصل **في ميعاده** و**ناقص**.
+     * لو كنا بنقيس الميعاد بس، المورّد ده تقييمه ١٠٠٪.
+     */
+    { id: "so-2", factoryId: FID, code: "SUP-2026-000002", partyId: "sup-5", date: addDays(today, -16), expectedDate: addDays(today, -13), status: "closed", closedAt: addDays(today, -11), closeReason: "المورّد قال مافيش باقي من نفس اللوط — قفلنا الأمر بعجز ٣٠ متر", notes: "قماش قطن — عرض سعر أقل" },
+    { id: "so-3", factoryId: FID, code: "SUP-2026-000003", partyId: "sup-1", date: addDays(today, -2), expectedDate: addDays(today, 5), status: "open", notes: "قماش أمر SN-1046" },
+    // توريد جزئي ومتأخر: نص الكمية وصلت بعد الميعاد، والباقي لسه
+    { id: "so-4", factoryId: FID, code: "SUP-2026-000004", partyId: "sup-2", date: addDays(today, -30), expectedDate: addDays(today, -28), status: "partial", notes: "أزرار — التوريد بيجي على دفعات" },
+  ];
+
+  const supplyOrderLines: Db["supplyOrderLines"] = [
+    { id: "sol-1", factoryId: FID, supplyOrderId: "so-1", itemType: "material", itemId: mat("قماش كتان"), qtyOrdered: 200, unitPrice: 120, notes: "" },
+    { id: "sol-2", factoryId: FID, supplyOrderId: "so-2", itemType: "material", itemId: mat("قماش قطن"), qtyOrdered: 450, unitPrice: 82, notes: "لوط واحد" },
+    { id: "sol-3", factoryId: FID, supplyOrderId: "so-3", itemType: "material", itemId: mat("قماش قطن"), qtyOrdered: 500, unitPrice: 86, notes: "" },
+    { id: "sol-4", factoryId: FID, supplyOrderId: "so-4", itemType: "material", itemId: mat("أزرار"), qtyOrdered: 4000, unitPrice: 1.7, notes: "" },
+  ];
+
+  const supplyReceipts: Db["supplyReceipts"] = [
+    { id: "sr-1", factoryId: FID, code: "GRN-2026-000001", supplyOrderId: "so-1", date: addDays(today, -20), warehouseId: whMat, supplierDocNo: "SLM-4471", costEntryId: "ce6", notes: "" },
+    { id: "sr-2", factoryId: FID, code: "GRN-2026-000002", supplyOrderId: "so-2", date: addDays(today, -13), warehouseId: whMat, supplierDocNo: "DLT-1180", costEntryId: "ce5", notes: "٢٠ متر وصلوا مبلولين من النقل" },
+    { id: "sr-3", factoryId: FID, code: "GRN-2026-000003", supplyOrderId: "so-4", date: addDays(today, -25), warehouseId: whMat, supplierDocNo: "ACC-990", costEntryId: null, notes: "نص الكمية" },
+  ];
+
+  const supplyReceiptLines: Db["supplyReceiptLines"] = [
+    { id: "srl-1", factoryId: FID, receiptId: "sr-1", supplyOrderLineId: "sol-1", qtyAccepted: 200, qtyRejected: 0, qtyDamaged: 0, qtyMissing: 0, batchId: "bt-4", notes: "" },
+    /*
+     * السطر اللي فيه كل الحالات مع بعض:
+     * مطلوب ٤٥٠ · اتقبل ٤٠٠ · تالف ٢٠ · ناقص في ورقة المورّد ١٠ · الباقي
+     * ٣٠ بقى عجز لما الأمر اتقفل.
+     */
+    { id: "srl-2", factoryId: FID, receiptId: "sr-2", supplyOrderLineId: "sol-2", qtyAccepted: 400, qtyRejected: 0, qtyDamaged: 20, qtyMissing: 10, batchId: "bt-5", notes: "التالف من مطر في النقل" },
+    { id: "srl-4", factoryId: FID, receiptId: "sr-3", supplyOrderLineId: "sol-4", qtyAccepted: 2000, qtyRejected: 0, qtyDamaged: 0, qtyMissing: 0, batchId: "bt-6", notes: "" },
+  ];
+
+  /* ── الاستدعاء ─────────────────────────────────────────────── */
+
+  const recalls: Db["recalls"] = [
+    /*
+     * استدعاء اتلحق جوه المصنع: القماش نزل أمر إنتاج، بس ولا قطعة خرجت
+     * لعميل لحد دلوقتي. ده أحسن نتيجة ممكنة، والشاشة لازم تقولها بالصريح
+     * بدل ما تعرض أصفار تبان زي الشاشة الفاضية.
+     */
+    {
+      id: "rc-1",
+      factoryId: FID,
+      code: "RCL-2026-000001",
+      batchId: "bt-5",
+      date: addDays(today, -1),
+      reason: "لون القماش بيبهت بعد أول غسلة — نفس اللوط في شكوتين",
+      severity: "high",
+      status: "open",
+      ownerId: "m-sup",
+      closedAt: null,
+      cancelReason: null,
+      notes: "",
+    },
+    /*
+     * والاستدعاء التاني خرج من المصنع فعلًا: دفعة تيشيرتات اتسلّمت
+     * لعميل، ورجع منها جزء. هنا بيبان الفرق بين «اللي رجع» و«اللي لسه
+     * عند العميل» — وهو الرقم اللي بيقول الاستدعاء خلص ولا لأ.
+     */
+    {
+      id: "rc-2",
+      factoryId: FID,
+      code: "RCL-2026-000002",
+      batchId: "bt-7",
+      date: today,
+      reason: "الطبعة بتقشّر بعد أول غسلة — الحبر أو الحرارة",
+      severity: "critical",
+      status: "open",
+      ownerId: "m-sup",
+      closedAt: null,
+      cancelReason: null,
+      notes: "نفس شكوى تاجر العباسية",
+    },
   ];
 
   const party = (
@@ -637,7 +809,7 @@ export function demoDb(): Db {
     { id: "d2", factoryId: FID, clientId: "cl-1", date: addDays(today, -8), dueDate: today, amount: 18500, model: "بنطلون قماش", quantity: 80, notes: "" },
     { id: "d3", factoryId: FID, clientId: "cl-2", date: addDays(today, -20), dueDate: addDays(today, -5), amount: 61000, model: "بدلة مكتبية", quantity: 40, notes: "" },
     { id: "d4", factoryId: FID, clientId: "cl-2", date: addDays(today, -4), dueDate: addDays(today, 3), amount: 30000, model: "قميص قطني", quantity: 120, notes: "" },
-    { id: "d5", factoryId: FID, clientId: "cl-3", date: addDays(today, -2), dueDate: addDays(today, 12), amount: 24000, model: "تيشيرت مطبوع", quantity: 160, notes: "" },
+    { id: "d5", factoryId: FID, clientId: "cl-3", orderId: "o5", date: addDays(today, -2), dueDate: addDays(today, 12), amount: 24000, model: "تيشيرت مطبوع", quantity: 160, notes: "" },
     { id: "d6", factoryId: FID, clientId: "cl-4", date: addDays(today, -96), dueDate: addDays(today, -76), amount: 18800, model: "فستان صيفي", quantity: 40, notes: "آخر طلب قبل ما يتوقف" },
     { id: "d7", factoryId: FID, clientId: "cl-5", date: addDays(today, -40), dueDate: addDays(today, -12), amount: 180000, model: "طقم تصدير", quantity: 500, notes: "دفعة أولى اتجمعت" },
     { id: "d8", factoryId: FID, clientId: "cl-5", date: addDays(today, -6), dueDate: addDays(today, 20), amount: 95000, model: "طقم تصدير", quantity: 250, notes: "" },
@@ -1196,6 +1368,10 @@ export function demoDb(): Db {
       ownerId: "m-sup",
       status: "open",
       unitValue: 150,
+      // الحالة دي هي أول اللي رجع من الاستدعاء — منها بيتحسب «رجع كام
+      // ولسه كام عند العميل» بدل جدول تاني بأرقام موازية
+      orderId: "o5",
+      recallId: "rc-2",
       notes: "وصل الصبح — لسه مافتحناش الكراتين",
     }),
     ret("ret-8", rcode(8), {
@@ -1416,6 +1592,12 @@ export function demoDb(): Db {
     operations: tpl.operations,
     routingSteps,
     stockMovements,
+    supplyOrders,
+    supplyOrderLines,
+    supplyReceipts,
+    supplyReceiptLines,
+    batches,
+    recalls,
     stageEntries,
     cutLays,
     cutLayLines,

@@ -64,10 +64,20 @@ import { KIND_MODULE } from "./codes";
 import { subMovement, subView } from "./outsourcing";
 import { RETURN_MODULE, nextComplaintCode, nextRepairCode, nextReturnCode, repairsOf, unitCostOf } from "./returns";
 import { repairCostOf } from "./compute";
+import { allocateFifo, issuableQty, nextSerial, supplyView } from "./supply";
 import { buildDoc, canTransition, DOC_DEFS, findDoc, type IssueInput } from "./documents";
 import { demoDb, emptyDb, templateData } from "./seed";
 import { PRODUCTION_LINES, REPAIR_DERIVED_COSTS, RETURN_SOURCE_LABEL } from "./types";
 import type {
+  BatchStatus,
+  MaterialBatch,
+  Recall,
+  RecallSeverity,
+  RecallStatus,
+  SupplyOrder,
+  SupplyOrderLine,
+  SupplyReceipt,
+  SupplyReceiptLine,
   Account,
   Attachment,
   AttachmentPhase,
@@ -177,7 +187,14 @@ function migrate(db: Db): Db {
     operations: db.operations ?? seeded?.operations ?? [],
     routingSteps: db.routingSteps ?? [],
     stockMovements: db.stockMovements ?? [],
+    supplyOrders: db.supplyOrders ?? [],
+    supplyOrderLines: db.supplyOrderLines ?? [],
+    supplyReceipts: db.supplyReceipts ?? [],
+    supplyReceiptLines: db.supplyReceiptLines ?? [],
+    batches: db.batches ?? [],
+    recalls: db.recalls ?? [],
     stageEntries: db.stageEntries ?? [],
+    deliveries: (db.deliveries ?? []).map((d) => ({ ...d, orderId: d.orderId ?? null })),
     documents: db.documents ?? [],
     cutLays: db.cutLays ?? [],
     cutLayLines: db.cutLayLines ?? [],
@@ -556,6 +573,18 @@ type FactoryApi = {
   paySubcontract: (input: { partyId: string; subcontractId: string | null; date: string; amount: number; accountId: string; method: PayMethod; notes: string }) => void;
   closeSubcontract: (id: string) => void;
   cancelSubcontract: (id: string, reason: string) => void;
+  /* ── التوريد والاستلام والدفعات ── */
+  openSupplyOrder: (input: SupplyInput) => string;
+  /** استلام جزئي: بيدخل المقبول المخزن ويعمل دفعة، والباقي يفضل مستنى */
+  receiveSupply: (input: ReceiveInput) => string;
+  /** قفل الأمر بعجز — قرار، فلازم يتقال سببه */
+  closeSupplyOrder: (id: string, reason: string) => void;
+  cancelSupplyOrder: (id: string, reason: string) => void;
+  setBatchStatus: (id: string, status: BatchStatus, note: string) => void;
+  /* ── الاستدعاء ── */
+  openRecall: (input: RecallInput) => string;
+  setRecallStatus: (id: string, status: RecallStatus) => void;
+  cancelRecall: (id: string, reason: string) => void;
   /* ── المرتجعات والشكاوى ── */
   addReturn: (input: ReturnInput) => string;
   /** الفحص: بيحدد رجع بأي حال وينفع يدخل المخزن ولا لأ */
@@ -594,6 +623,42 @@ type FactoryApi = {
   changeRole: (memberId: string, role: Role) => void;
   removeMember: (memberId: string) => void;
   computed: ReturnType<typeof buildComputed>;
+};
+
+export type SupplyInput = {
+  partyId: string;
+  date: string;
+  expectedDate: string;
+  notes: string;
+  lines: { itemType: "material" | "product"; itemId: string; qtyOrdered: number; unitPrice: number; notes: string }[];
+};
+
+export type ReceiveInput = {
+  supplyOrderId: string;
+  date: string;
+  warehouseId: string | null;
+  supplierDocNo: string;
+  notes: string;
+  lines: {
+    supplyOrderLineId: string;
+    qtyAccepted: number;
+    qtyRejected: number;
+    qtyDamaged: number;
+    qtyMissing: number;
+    /** رقم اللوط المكتوب على الشحنة — لو فاضي بنولّد كود دفعة لوحدنا */
+    supplierLot: string;
+    expiryDate: string | null;
+    notes: string;
+  }[];
+};
+
+export type RecallInput = {
+  batchId: string;
+  date: string;
+  reason: string;
+  severity: RecallSeverity;
+  ownerId: string | null;
+  notes: string;
 };
 
 export type LayInput = {
@@ -1240,6 +1305,301 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         const row: Operation = { id: nid(), factoryId: fid(db), name: name.trim(), defaultRate: rate, defaultMinutes: minutes, isOutsourced: outsourced };
         mutate({ operations: [...db.operations, row] }, { action: "create", table: "operations", recordId: row.id, before: null, after: row });
       },
+      /* ── التوريد والاستلام والدفعات ─────────────────────────── */
+      openSupplyOrder: (input) => {
+        need("purchasing", "create");
+        if (!db.parties.some((p) => p.id === input.partyId)) throw new Error("اختار المورّد.");
+        const lines = input.lines.filter((l) => l.qtyOrdered > 0);
+        if (!lines.length) throw new Error("ضيف بند واحد على الأقل بكمية أكبر من صفر.");
+        if (input.expectedDate < input.date) throw new Error("ميعاد التوريد مينفعش يكون قبل تاريخ الأمر.");
+
+        const order: SupplyOrder = {
+          id: nid(),
+          factoryId: fid(db),
+          code: nextSerial("SUP", (db.supplyOrders ?? []).map((o) => o.code), input.date),
+          partyId: input.partyId,
+          date: input.date,
+          expectedDate: input.expectedDate,
+          status: "open",
+          closedAt: null,
+          closeReason: null,
+          cancelReason: null,
+          notes: input.notes.trim(),
+        };
+        const rows: SupplyOrderLine[] = lines.map((l) => ({
+          id: nid(),
+          factoryId: fid(db),
+          supplyOrderId: order.id,
+          itemType: l.itemType,
+          itemId: l.itemId,
+          qtyOrdered: l.qtyOrdered,
+          unitPrice: l.unitPrice,
+          notes: l.notes.trim(),
+        }));
+        mutate(
+          {
+            supplyOrders: [order, ...(db.supplyOrders ?? [])],
+            supplyOrderLines: [...rows, ...(db.supplyOrderLines ?? [])],
+          },
+          { action: "create", table: "supply_orders", recordId: order.id, before: null, after: order },
+        );
+        return order.id;
+      },
+      /**
+       * الاستلام.
+       *
+       * الحركة دي بتلمس تلات دفاتر مع بعض، ولازم تبقى كلها أو ولا حاجة:
+       * المقبول بيعمل **دفعة** وبيدخل **المخزن**، وحالة **الأمر** بتتحدّث.
+       * ولو أي شرط اتكسر، بنرفض قبل أي كتابة — مش بنكتب نص استلام.
+       *
+       * والمرفوض والتالف **مابيدخلوش المخزن**. ده مش إهمال: القطعة
+       * المرفوضة لسه ملكنا وواقفة في الحوش، بس لو دخلت الرصيد هتتصرف
+       * لأمر إنتاج بالغلط. اللي بيرجع للمورّد بيتسجّل في دفتر المرتجعات
+       * بحياته.
+       */
+      receiveSupply: (input) => {
+        need("purchasing", "create");
+        const order = (db.supplyOrders ?? []).find((o) => o.id === input.supplyOrderId);
+        if (!order) throw new Error("أمر التوريد مش موجود.");
+        if (order.status === "cancelled") throw new Error("الأمر ملغي.");
+        if (order.status === "closed") throw new Error("الأمر مقفول — افتح أمر جديد للباقي.");
+
+        const view = supplyView(db, order);
+        const rows = input.lines.filter(
+          (l) => l.qtyAccepted > 0 || l.qtyRejected > 0 || l.qtyDamaged > 0 || l.qtyMissing > 0,
+        );
+        if (!rows.length) throw new Error("سجّل كمية واحدة على الأقل.");
+
+        for (const l of rows) {
+          const lv = view.lines.find((x) => x.line.id === l.supplyOrderLineId);
+          if (!lv) throw new Error("بند مش من الأمر ده.");
+          if (l.qtyAccepted < 0 || l.qtyRejected < 0 || l.qtyDamaged < 0 || l.qtyMissing < 0) {
+            throw new Error("الكميات مينفعش تكون بالسالب.");
+          }
+          const here = l.qtyAccepted + l.qtyRejected + l.qtyDamaged;
+          if (here > lv.remaining + 0.0001) {
+            throw new Error(
+              `${lv.name}: باقي ${qtyText(lv.remaining)} ${lv.unit} من المطلوب — مينفعش تستلم ${qtyText(here)}.`,
+            );
+          }
+        }
+
+        const receipt: SupplyReceipt = {
+          id: nid(),
+          factoryId: fid(db),
+          code: nextSerial("GRN", (db.supplyReceipts ?? []).map((r) => r.code), input.date),
+          supplyOrderId: order.id,
+          date: input.date,
+          warehouseId: input.warehouseId,
+          supplierDocNo: input.supplierDocNo.trim(),
+          costEntryId: null,
+          notes: input.notes.trim(),
+        };
+
+        const batches: MaterialBatch[] = [];
+        const lines: SupplyReceiptLine[] = [];
+        const moves: StockMovement[] = [];
+        let serial = (db.batches ?? []).map((b) => b.code);
+
+        for (const l of rows) {
+          const lv = view.lines.find((x) => x.line.id === l.supplyOrderLineId)!;
+          let batchId: string | null = null;
+          if (l.qtyAccepted > 0) {
+            const batch: MaterialBatch = {
+              id: nid(),
+              factoryId: fid(db),
+              code: nextSerial("LOT", serial, input.date),
+              itemType: lv.line.itemType,
+              itemId: lv.line.itemId,
+              partyId: order.partyId,
+              receiptLineId: null,
+              receivedDate: input.date,
+              qtyIn: l.qtyAccepted,
+              unitCost: lv.line.unitPrice,
+              supplierLot: l.supplierLot.trim(),
+              expiryDate: l.expiryDate,
+              status: "active",
+              notes: "",
+            };
+            serial = [...serial, batch.code];
+            batches.push(batch);
+            batchId = batch.id;
+            moves.push({
+              id: nid(),
+              factoryId: fid(db),
+              date: input.date,
+              itemType: lv.line.itemType,
+              itemId: lv.line.itemId,
+              warehouseId: input.warehouseId,
+              kind: "purchase",
+              qty: l.qtyAccepted,
+              unitCost: lv.line.unitPrice,
+              refType: "supply_receipt",
+              refId: receipt.id,
+              batchId: batch.id,
+              notes: `استلام ${receipt.code} — ${order.code}`,
+            });
+          }
+          const row: SupplyReceiptLine = {
+            id: nid(),
+            factoryId: fid(db),
+            receiptId: receipt.id,
+            supplyOrderLineId: l.supplyOrderLineId,
+            qtyAccepted: l.qtyAccepted,
+            qtyRejected: l.qtyRejected,
+            qtyDamaged: l.qtyDamaged,
+            qtyMissing: l.qtyMissing,
+            batchId,
+            notes: l.notes.trim(),
+          };
+          lines.push(row);
+          if (batchId) {
+            const b = batches.find((x) => x.id === batchId)!;
+            b.receiptLineId = row.id;
+          }
+        }
+
+        // الحالة بتتحسب بعد الاستلام ده، مش بالإيد
+        const after: Db = {
+          ...db,
+          supplyReceiptLines: [...lines, ...(db.supplyReceiptLines ?? [])],
+        };
+        const derived = supplyView(after, order).derivedStatus;
+
+        mutate(
+          {
+            supplyReceipts: [receipt, ...(db.supplyReceipts ?? [])],
+            supplyReceiptLines: after.supplyReceiptLines,
+            batches: [...batches, ...(db.batches ?? [])],
+            ...(moves.length ? { stockMovements: [...moves, ...db.stockMovements] } : {}),
+            supplyOrders: (db.supplyOrders ?? []).map((o) => (o.id === order.id ? { ...o, status: derived } : o)),
+          },
+          { action: "create", table: "supply_receipts", recordId: receipt.id, before: null, after: receipt },
+        );
+        return receipt.id;
+      },
+      closeSupplyOrder: (id, reason) => {
+        need("purchasing", "edit");
+        const order = (db.supplyOrders ?? []).find((o) => o.id === id);
+        if (!order) throw new Error("أمر التوريد مش موجود.");
+        if (order.status === "cancelled" || order.status === "closed") throw new Error("الأمر مقفول أصلًا.");
+        if (!reason.trim()) throw new Error("اكتب سبب القفل — العجز لازم يبقى له سبب مكتوب.");
+        mutate(
+          {
+            supplyOrders: (db.supplyOrders ?? []).map((o) =>
+              o.id === id ? { ...o, status: "closed" as const, closedAt: cairoToday(), closeReason: reason.trim() } : o,
+            ),
+          },
+          { action: "update", table: "supply_orders", recordId: id, before: order, after: { status: "closed", reason } },
+        );
+      },
+      /**
+       * الإلغاء مش حذف. الأمر بيفضل في الدفتر بحالته وسببه، لأنه ممكن
+       * يكون عليه استلامات فعلية ومخزون دخل — ومسحه بيخلّي المخزون
+       * ييتّم.
+       */
+      cancelSupplyOrder: (id, reason) => {
+        need("purchasing", "edit");
+        const order = (db.supplyOrders ?? []).find((o) => o.id === id);
+        if (!order) throw new Error("أمر التوريد مش موجود.");
+        if (!reason.trim()) throw new Error("اكتب سبب الإلغاء.");
+        const got = supplyView(db, order).lines.some((l) => l.received > 0.0001);
+        if (got) throw new Error("الأمر ده عليه استلامات فعلية — اقفله بعجز بدل ما تلغيه.");
+        mutate(
+          {
+            supplyOrders: (db.supplyOrders ?? []).map((o) =>
+              o.id === id ? { ...o, status: "cancelled" as const, cancelReason: reason.trim() } : o,
+            ),
+          },
+          { action: "update", table: "supply_orders", recordId: id, before: order, after: { status: "cancelled", reason } },
+        );
+      },
+      setBatchStatus: (id, status, note) => {
+        need("inventory", "edit");
+        const batch = (db.batches ?? []).find((b) => b.id === id);
+        if (!batch) throw new Error("الدفعة مش موجودة.");
+        mutate(
+          {
+            batches: (db.batches ?? []).map((b) =>
+              b.id === id ? { ...b, status, notes: note.trim() || b.notes } : b,
+            ),
+          },
+          { action: "update", table: "batches", recordId: id, before: batch, after: { status, note } },
+        );
+      },
+      /* ── الاستدعاء ──────────────────────────────────────────── */
+      /**
+       * فتح استدعاء **بيوقف الدفعة فورًا**.
+       *
+       * ده مقصود: أول ما يبقى في شك، اللي فاضل في المخزن مايكمّلش نزول
+       * إنتاج جديد. توسيع المشكلة وإحنا بنحقق فيها أغلى من وقفة يوم.
+       */
+      openRecall: (input) => {
+        need("quality", "create");
+        const batch = (db.batches ?? []).find((b) => b.id === input.batchId);
+        if (!batch) throw new Error("اختار الدفعة.");
+        if (!input.reason.trim()) throw new Error("اكتب سبب الاستدعاء.");
+        const row: Recall = {
+          id: nid(),
+          factoryId: fid(db),
+          code: nextSerial("RCL", (db.recalls ?? []).map((r) => r.code), input.date),
+          batchId: input.batchId,
+          date: input.date,
+          reason: input.reason.trim(),
+          severity: input.severity,
+          status: "open",
+          ownerId: input.ownerId,
+          closedAt: null,
+          cancelReason: null,
+          notes: input.notes.trim(),
+        };
+        mutate(
+          {
+            recalls: [row, ...(db.recalls ?? [])],
+            batches: (db.batches ?? []).map((b) => (b.id === input.batchId ? { ...b, status: "recalled" as const } : b)),
+          },
+          { action: "create", table: "recalls", recordId: row.id, before: null, after: row },
+        );
+        return row.id;
+      },
+      setRecallStatus: (id, status) => {
+        need("quality", "edit");
+        const row = (db.recalls ?? []).find((r) => r.id === id);
+        if (!row) throw new Error("الاستدعاء مش موجود.");
+        if (row.status === "cancelled") throw new Error("الاستدعاء ملغي.");
+        mutate(
+          {
+            recalls: (db.recalls ?? []).map((r) =>
+              r.id === id ? { ...r, status, closedAt: status === "closed" ? cairoToday() : r.closedAt } : r,
+            ),
+          },
+          { action: "update", table: "recalls", recordId: id, before: row, after: { status } },
+        );
+      },
+      cancelRecall: (id, reason) => {
+        need("quality", "edit");
+        const row = (db.recalls ?? []).find((r) => r.id === id);
+        if (!row) throw new Error("الاستدعاء مش موجود.");
+        if (!reason.trim()) throw new Error("اكتب سبب الإلغاء.");
+        /*
+         * إلغاء الاستدعاء بيرجّع الدفعة متاحة — بس **بس** لو مافيش
+         * استدعاء تاني شغّال عليها. غير كده بتفضل موقوفة.
+         */
+        const other = (db.recalls ?? []).some(
+          (r) => r.id !== id && r.batchId === row.batchId && (r.status === "open" || r.status === "contained"),
+        );
+        mutate(
+          {
+            recalls: (db.recalls ?? []).map((r) =>
+              r.id === id ? { ...r, status: "cancelled" as const, cancelReason: reason.trim() } : r,
+            ),
+            batches: other
+              ? (db.batches ?? [])
+              : (db.batches ?? []).map((b) => (b.id === row.batchId ? { ...b, status: "active" as const } : b)),
+          },
+          { action: "update", table: "recalls", recordId: id, before: row, after: { status: "cancelled", reason } },
+        );
+      },
       addStockMovement: (input) => {
         need("inventory", "create");
         if (!input.qty) throw new Error("الكمية لازم تكون أكبر من صفر.");
@@ -1261,21 +1621,69 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         if (!reqs.length) throw new Error("كل الخامات اتصرفت للأمر ده.");
         const short = reqs.filter((r) => r.shortage > 0.0001);
         if (short.length) throw new Error(`مفيش رصيد كافي من: ${short.map((s) => s.name).join("، ")}`);
+        /*
+         * الرصيد الكلي مش كله متاح: اللي في دفعة موقوفة أو متستدعاة
+         * ممنوع ينزل إنتاج. لو ماتحققناش من ده، الصرف كان هيكمّل الكمية
+         * من الموقوف بحركة بلا دفعة — يعني نستهلك بإيدينا الدفعة اللي
+         * بنسحبها.
+         */
+        const blocked = reqs.filter((r) => r.remaining > issuableQty(db, "material", r.materialId) + 0.0001);
+        if (blocked.length) {
+          throw new Error(
+            `رصيد موقوف في دفعات مش متاحة للصرف: ${blocked.map((b) => b.name).join("، ")}. راجع الدفعات أو استلم توريد جديد.`,
+          );
+        }
         const date = cairoToday();
-        const rows: StockMovement[] = reqs.map((r) => ({
-          id: nid(),
-          factoryId: fid(db),
-          date,
-          itemType: "material",
-          itemId: r.materialId,
-          warehouseId: db.warehouses.find((w) => w.kind === "material")?.id ?? null,
-          kind: "issue",
-          qty: -r.remaining,
-          unitCost: r.unitCost,
-          refType: "order",
-          refId: order.id,
-          notes: `صرف لأمر ${order.code}`,
-        }));
+        const wh = db.warehouses.find((w) => w.kind === "material")?.id ?? null;
+        /*
+         * الصرف بيتقسّم على الدفعات بالأقدم الأول.
+         *
+         * وده اللي بيخلّي سلسلة التتبّع تتكتب وقت الصرف، مش بعد كده
+         * بالتخمين: كل حركة بتحمل الدفعة اللي نزلت منها، فلما دفعة تطلع
+         * فيها مشكلة نعرف أنهي أمر بالتحديد نزلت فيه.
+         *
+         * والكمية اللي مالقتش دفعة بتخرج بحركة بلا دفعة زي الأول بالظبط.
+         * ده مقصود: مخزون قديم بلا لوط رصيد حقيقي، ومنع الصرف منه لحد ما
+         * يتلوّط كان هيوقف مصانع شغّالة عشان بيانات ماضية.
+         */
+        const rows: StockMovement[] = [];
+        for (const r of reqs) {
+          const { picks, unbatched } = allocateFifo(db, "material", r.materialId, r.remaining);
+          for (const pick of picks) {
+            rows.push({
+              id: nid(),
+              factoryId: fid(db),
+              date,
+              itemType: "material",
+              itemId: r.materialId,
+              warehouseId: wh,
+              kind: "issue",
+              qty: -pick.qty,
+              unitCost: pick.unitCost,
+              refType: "order",
+              refId: order.id,
+              batchId: pick.batchId,
+              notes: `صرف لأمر ${order.code}`,
+            });
+          }
+          if (unbatched > 0.0001) {
+            rows.push({
+              id: nid(),
+              factoryId: fid(db),
+              date,
+              itemType: "material",
+              itemId: r.materialId,
+              warehouseId: wh,
+              kind: "issue",
+              qty: -unbatched,
+              unitCost: r.unitCost,
+              refType: "order",
+              refId: order.id,
+              batchId: null,
+              notes: `صرف لأمر ${order.code}`,
+            });
+          }
+        }
         mutate(
           {
             stockMovements: [...rows, ...db.stockMovements],
@@ -2942,6 +3350,12 @@ function emptyShell(): Db {
     operations: [],
     routingSteps: [],
     stockMovements: [],
+    supplyOrders: [],
+    supplyOrderLines: [],
+    supplyReceipts: [],
+    supplyReceiptLines: [],
+    batches: [],
+    recalls: [],
     stageEntries: [],
     costItems: [],
     costEntries: [],

@@ -28,7 +28,7 @@
  */
 
 import type { CodeKind, Db } from "./types";
-import { KIND_LABEL, KIND_TAG } from "./types";
+import { BATCH_STATUS_LABEL, KIND_LABEL, KIND_TAG, SUPPLY_STATUS_LABEL } from "./types";
 import { DOC_DEFS } from "./documents";
 import type { PermModule } from "./permissions";
 
@@ -51,6 +51,8 @@ export const KIND_MODULE: Record<CodeKind, PermModule> = {
   worker: "workers",
   operation: "production",
   document: "reports",
+  batch: "inventory",
+  supply: "purchasing",
 };
 
 const TAG_TO_KIND = Object.fromEntries(Object.entries(KIND_TAG).map(([k, t]) => [t, k as CodeKind])) as Record<string, CodeKind>;
@@ -176,6 +178,12 @@ function readPlain(db: Db, text: string): Scanned | null {
   const sub = (db.subcontracts ?? []).find((s) => eq(s.code));
   if (sub) return describe(db, "subcontract", sub.id, "text");
 
+  const batch = (db.batches ?? []).find((b) => eq(b.code) || eq(b.supplierLot));
+  if (batch) return describe(db, "batch", batch.id, "text");
+
+  const supply = (db.supplyOrders ?? []).find((s) => eq(s.code));
+  if (supply) return describe(db, "supply", supply.id, "text");
+
   const material = db.materials.find((m) => eq(m.sku));
   if (material) return describe(db, "material", material.id, "text");
 
@@ -279,6 +287,41 @@ export function describe(db: Db, kind: CodeKind, id: string, via: Hit["via"] = "
         label: DOC_DEFS[d.type].label,
         sub: d.status === "cancelled" ? "ملغي" : "مستند في الدفتر",
         to: `/verify/${encodeURIComponent(d.number)}`,
+        via,
+      };
+    }
+    /*
+     * الدفعة أهم كود يتمسح في المخزن: الليبل على الرول بيوصّل لسجل بيقول
+     * جات من مين وامتى وراحت فين — وده اللي بيخلّي الاستدعاء ممكن.
+     */
+    case "batch": {
+      const b = (db.batches ?? []).find((x) => x.id === id);
+      if (!b) return null;
+      const item =
+        b.itemType === "material"
+          ? db.materials.find((m) => m.id === b.itemId)?.name
+          : db.products.find((p) => p.id === b.itemId)?.name;
+      const supplier = db.parties.find((p) => p.id === b.partyId)?.name;
+      return {
+        kind,
+        id,
+        code: b.code,
+        label: item ?? "دفعة",
+        sub: `${BATCH_STATUS_LABEL[b.status]}${supplier ? ` · ${supplier}` : ""}`,
+        to: `/supply/batch/${b.id}`,
+        via,
+      };
+    }
+    case "supply": {
+      const s = (db.supplyOrders ?? []).find((x) => x.id === id);
+      if (!s) return null;
+      return {
+        kind,
+        id,
+        code: s.code,
+        label: db.parties.find((p) => p.id === s.partyId)?.name ?? "مورّد",
+        sub: SUPPLY_STATUS_LABEL[s.status],
+        to: `/supply/${s.id}`,
         via,
       };
     }
