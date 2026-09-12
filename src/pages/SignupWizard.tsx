@@ -6,7 +6,7 @@ import { AuthShell, Field, PasswordInput, PasswordMeter } from "@/components/Aut
 import { Button } from "@/components/ui/button";
 import { Input, selectClass } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { cn, qty } from "@/lib/utils";
+import { cn, countLabel, qty } from "@/lib/utils";
 import {
   COUNTRIES,
   effectiveModules,
@@ -162,7 +162,7 @@ export function SignupWizard({ mode = "signup" }: { mode?: "signup" | "factory" 
       subtitle={
         existing
           ? "المصنع الجديد بياخد workspace وبيانات مستقلة بالكامل — عمال ومخزون وأوامر وعملاء وحسابات لوحدهم."
-          : "٦ خطوات: الحساب، المصنع، الـworkspace، التجهيز، الفريق. تقدر ترجع لأي خطوة من غير ما تضيّع اللي كتبته."
+          : "٦ خطوات: الحساب، المصنع، الـworkspace، التشغيل، الفريق، والمراجعة. تقدر ترجع لأي خطوة من غير ما تضيّع اللي كتبته."
       }
       footer={
         step === 1 ? (
@@ -888,17 +888,23 @@ function ReviewStep({ slug, onEnter }: { slug: string; onEnter: () => void }) {
     { label: "العملة", value: "الجنيه المصري" },
     {
       label: "الأقسام",
-      value: `${qty(picked.length, 0)} قسم مفتوح`,
-      to: "/staff",
+      value: `${countLabel(picked.length, "قسم واحد", "قسمين", "أقسام", "قسم")} مفتوح`,
+      to: "/settings",
     },
     {
       label: "الفريق",
-      value: invites.length ? `${qty(invites.length, 0)} دعوة مسجّلة` : "لسه مفيش — تقدر تضيف بعدين",
+      value: invites.length
+        ? `${countLabel(invites.length, "دعوة واحدة", "دعوتين", "دعوات", "دعوة")} مسجّلة`
+        : "لسه مفيش — تقدر تضيف بعدين",
       to: "/staff",
     },
     {
       label: "اللي اتجهّز مع النشاط",
-      value: `${qty(db.materials.length, 0)} خامة · ${qty(db.operations.length, 0)} عملية · ${qty(db.units.length, 0)} وحدة قياس`,
+      value: [
+        countLabel(db.materials.length, "خامة واحدة", "خامتين", "خامات", "خامة"),
+        countLabel(db.operations.length, "عملية واحدة", "عمليتين", "عمليات", "عملية"),
+        countLabel(db.units.length, "وحدة قياس واحدة", "وحدتين قياس", "وحدات قياس", "وحدة قياس"),
+      ].join(" · "),
     },
   ];
 

@@ -102,7 +102,7 @@ export function setupGaps(db: Db, workspace: Workspace | null): SetupGap[] {
   if (noBom.length) {
     out.push({
       key: "bom",
-      title: `${countLabel(noBom.length, "موديل واحد", "موديلين", "موديل")} من غير قائمة خامات`,
+      title: `${countLabel(noBom.length, "موديل واحد", "موديلين", "موديلات", "موديل")} من غير قائمة خامات`,
       why: "تكلفة القطعة وربح الموديل مش محسوبين، وبيطلعوا فاضيين في ملف العميل والربحية",
       to: "/products",
       level: "warn",
@@ -118,7 +118,7 @@ export function setupGaps(db: Db, workspace: Workspace | null): SetupGap[] {
   if (noRouting.length) {
     out.push({
       key: "routing",
-      title: `${countLabel(noRouting.length, "موديل واحد", "موديلين", "موديل")} من غير مسار تشغيل`,
+      title: `${countLabel(noRouting.length, "موديل واحد", "موديلين", "موديلات", "موديل")} من غير مسار تشغيل`,
       why: "تكلفته محسوبة بالخامات بس — الأجور مش داخلة، فالهامش بيبان أكبر من حقيقته",
       to: "/products",
       level: "warn",
@@ -130,7 +130,7 @@ export function setupGaps(db: Db, workspace: Workspace | null): SetupGap[] {
   if (noPrice.length) {
     out.push({
       key: "price",
-      title: `${countLabel(noPrice.length, "خامة واحدة", "خامتين", "خامة")} سعرها صفر`,
+      title: `${countLabel(noPrice.length, "خامة واحدة", "خامتين", "خامات", "خامة")} سعرها صفر`,
       why: "بتدخل في ورقة التكلفة بصفر، فالتكلفة بتطلع أقل من الحقيقة من غير ما حد ياخد باله",
       to: "/materials",
       level: "warn",
@@ -165,7 +165,7 @@ export function setupGaps(db: Db, workspace: Workspace | null): SetupGap[] {
   if (pending.length) {
     out.push({
       key: "invites",
-      title: `${countLabel(pending.length, "دعوة واحدة", "دعوتين", "دعوة")} لسه ماتقبلتش`,
+      title: `${countLabel(pending.length, "دعوة واحدة", "دعوتين", "دعوات", "دعوة")} لسه ماتقبلتش`,
       why: "الموظف مالوش حساب لحد ما يقبل، فشغله بيتسجّل باسمك",
       to: "/staff",
       level: "info",
@@ -177,7 +177,7 @@ export function setupGaps(db: Db, workspace: Workspace | null): SetupGap[] {
   if (unlinked.length && db.orders.length > 0) {
     out.push({
       key: "delivery-order",
-      title: `${countLabel(unlinked.length, "توريد واحد", "توريدين", "توريد")} مش مربوط بأمر إنتاج`,
+      title: `${countLabel(unlinked.length, "توريد واحد", "توريدين", "توريدات", "توريد")} مش مربوط بأمر إنتاج`,
       why: "موديله بيتعرف بمطابقة الاسم مش بالمعرّف، وربحه مش داخل في صافي مساهمة العميل",
       to: "/parties",
       level: "info",

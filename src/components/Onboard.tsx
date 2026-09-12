@@ -32,7 +32,11 @@ export function SetupGapsCard({ compact = false }: { compact?: boolean }) {
       <div className="flex items-start gap-2">
         <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
         <div className="min-w-0">
-          <h2 className="text-base">{countLabel(gaps.length, "حاجة واحدة", "حاجتين", "حاجات")} محتاجة اهتمامك في التجهيز</h2>
+          {/* المثنى بياخد «محتاجين» مش «محتاجة» — الصفة بتتبع العدد في العربي */}
+          <h2 className="text-base">
+            {countLabel(gaps.length, "حاجة واحدة", "حاجتين", "حاجات", "حاجة")}{" "}
+            {gaps.length === 2 ? "محتاجين" : "محتاجة"} اهتمامك في التجهيز
+          </h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
             {warn === 0
               ? "مفيش حاجة فيهم بتوقّف حساب — كلهم بيحسّنوا الدقة."

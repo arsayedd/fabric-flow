@@ -58,17 +58,17 @@ export function qty(value: number, maximumFractionDigits = 2): string {
 /**
  * عدد + معدود بصيغته الصح.
  *
- * العربي مالوهش صيغتين زي الإنجليزي — عنده تلاتة: الواحد، والاتنين،
- * والجمع من تلاتة لعشرة. فـ«٣ حاجة» غلط، و«١ دعوة» غلط، والاتنين
- * بيخلّوا الجملة تقرا كترجمة آلية.
+ * العربي مالوهش صيغتين زي الإنجليزي — عنده أربعة: الواحد، والاتنين،
+ * والجمع من تلاتة لعشرة، والمفرد تاني من إحداشر لفوق. فـ«٣ خامة» غلط
+ * و«١٥ خامات» غلط و«١ دعوة» غلط، وكلهم بيخلّوا الجملة تقرا كترجمة آلية.
  *
  * والواحد والاتنين بيتكتبوا بالكلمة مش بالرقم: «دعوة واحدة» أنضف من
  * «١ دعوة» وهي نفس المعلومة.
  */
-export function countLabel(n: number, one: string, two: string, many: string): string {
+export function countLabel(n: number, one: string, two: string, few: string, many: string): string {
   if (n === 1) return one;
   if (n === 2) return two;
-  return `${qty(n, 0)} ${many}`;
+  return `${qty(n, 0)} ${n <= 10 ? few : many}`;
 }
 
 export function moneyPlain(amount: number): string {
