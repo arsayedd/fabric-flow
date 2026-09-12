@@ -14,7 +14,7 @@
  * عشان كده كل باريتو هنا بيترتّب مرتين: مرة بالكمية ومرة بالتكلفة.
  */
 
-import { addDays, cairoToday } from "@/lib/utils";
+import { addDays, cairoToday, moneyPlain, qty as num } from "@/lib/utils";
 import { problemOfDefect } from "./floor";
 import { operationById } from "./manufacturing";
 import { costBreakdown, repairCost, returnImpact, unitCostOf } from "./returns";
@@ -629,24 +629,25 @@ export function qualityAlerts(db: Db, days = 30): QualityAlert[] {
     }
     const topLine = [...lines.entries()].sort((a, b) => b[1] - a[1])[0];
 
-    const why = [`${qty} قطعة في ${list.length} حالة من إجمالي ${totalQty} قطعة راجعة`];
-    if (topProblem) why.push(`أشهر مشكلة: ${PROBLEM_LABEL[topProblem[0]]} — ${topProblem[1]} قطعة`);
+    const why = [`${num(qty, 0)} قطعة في ${num(list.length, 0)} حالة من إجمالي ${num(totalQty, 0)} قطعة راجعة`];
+    if (topProblem) why.push(`أشهر مشكلة: ${PROBLEM_LABEL[topProblem[0]]} — ${num(topProblem[1], 0)} قطعة`);
     if (topLine) why.push(`أكتر خط متأثر: ${topLine[0]}`);
     if (rate !== null && prevRate !== null) {
-      why.push(`نسبة الإرجاع للموديل ده ${prevRate.toFixed(1)}٪ → ${rate.toFixed(1)}٪`);
+      why.push(`نسبة الإرجاع للموديل ده ${num(prevRate, 1)}٪ → ${num(rate, 1)}٪`);
     } else if (rate !== null) {
-      why.push(`نسبة الإرجاع للموديل ده ${rate.toFixed(1)}٪ في المدة دي`);
+      why.push(`نسبة الإرجاع للموديل ده ${num(rate, 1)}٪ في المدة دي`);
     }
 
     out.push({
       key: `model-${productId}`,
-      headline: `${product?.name ?? "موديل"} لوحده عامل ${Math.round(share)}٪ من مرتجعات آخر ${days} يوم.`,
+      headline: `${product?.name ?? "موديل"} لوحده عامل ${num(Math.round(share), 0)}٪ من مرتجعات آخر ${num(days, 0)} يوم.`,
       why,
       action: topProblem
         ? `ابص على ${PROBLEM_LABEL[topProblem[0]]} في ${topLine ? topLine[0] : "خط الإنتاج"} قبل ما تشغّل الدفعة الجاية.`
         : "اكتب المشكلة على الحالات دي عشان نعرف نوجّه الفحص.",
       cost: list.reduce((s, r) => s + returnImpact(db, r).total, 0),
-      to: `/quality?problem=all`,
+      /* تحليل الموديلات هو المكان اللي بيقول نسبة الإرجاع لكل موديل بمقامها */
+      to: "/returns?tab=models",
     });
   }
 
@@ -654,8 +655,11 @@ export function qualityAlerts(db: Db, days = 30): QualityAlert[] {
   for (const a of lineAlerts(db, 90)) {
     out.push({
       key: `line-${a.line}`,
-      headline: `${a.line}: نسبة العيب ${a.pct.toFixed(1)}٪ والمتوسط ${a.avg.toFixed(1)}٪.`,
-      why: [`الفرق ${(a.pct - a.avg).toFixed(1)} نقطة فوق متوسط باقي الخطوط`, `كلّف ${Math.round(a.cost)} ج في ٩٠ يوم`],
+      headline: `${a.line}: نسبة العيب ${num(a.pct, 1)}٪ والمتوسط ${num(a.avg, 1)}٪.`,
+      why: [
+        `الفرق ${num(a.pct - a.avg, 1)} نقطة فوق متوسط باقي الخطوط`,
+        `كلّف ${moneyPlain(a.cost)} في ٩٠ يوم`,
+      ],
       action: "قارن العمليات على الخط ده بنفس العمليات على خط تاني — الفرق بيبان في عملية واحدة غالبًا.",
       cost: a.cost,
       to: "/floor",
@@ -672,12 +676,12 @@ export function qualityAlerts(db: Db, days = 30): QualityAlert[] {
       key: "cost-vs-count",
       headline: `أكتر مشكلة بالعدد «${q.label}»، وأغلى مشكلة «${c.label}».`,
       why: [
-        `${q.label}: ${q.qty} قطعة وتكلفتها ${Math.round(q.cost)} ج`,
-        `${c.label}: ${c.qty} قطعة وتكلفتها ${Math.round(c.cost)} ج`,
+        `${q.label}: ${num(q.qty, 0)} قطعة وتكلفتها ${moneyPlain(q.cost)}`,
+        `${c.label}: ${num(c.qty, 0)} قطعة وتكلفتها ${moneyPlain(c.cost)}`,
       ],
       action: `لو هتشتغل على حاجة واحدة الشهر ده، «${c.label}» بتوفّر أكتر رغم إنها أقل في العدد.`,
       cost: c.cost,
-      to: "/quality",
+      to: "/quality?tab=problems",
     });
   }
 
