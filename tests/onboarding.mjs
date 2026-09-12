@@ -1,4 +1,13 @@
 import { chromium } from "playwright-core";
+import { readFileSync } from "node:fs";
+/* الدومين من المصدر، مش مكتوب هنا: التأكيد لازم يقيس العنوان اللي
+ * الواجهة بتبنيه فعلًا، مش قيمة اتكتبت في الاختبار وقت ما كانت صح */
+/* `import.meta.dirname` مش `new URL`: الملف ده بيعرّف `const URL` تحت،
+ * وده بيحجب الـURL العامة في الموديول كله */
+const ROOT_DOMAIN =
+  readFileSync(`${import.meta.dirname}/../src/store/account.ts`, "utf8").match(
+    /VITE_APP_DOMAIN\?\.trim\(\) \|\| "([^"]+)"/,
+  )?.[1] ?? "";
 
 const URL = "http://127.0.0.1:43127";
 let pass = 0;
@@ -78,7 +87,7 @@ console.log("\n— خطوة ٣: الـsubdomain —");
 await page.waitForTimeout(600);
 const slugInput = page.locator("input[placeholder='alnoor']");
 ok("slug derived from arabic name", (await slugInput.inputValue()) === "alnoor", await slugInput.inputValue());
-ok("url preview", (await page.locator("body").innerText()).includes("https://alnoor.sanaa.app"));
+ok("url preview", (await page.locator("body").innerText()).includes(`https://alnoor.${ROOT_DOMAIN}`));
 const go = page.getByRole("button", { name: /جهّز المصنع/ });
 await slugInput.fill("admin");
 await page.waitForTimeout(600);
@@ -137,7 +146,7 @@ await page.getByRole("button", { name: /دعوة الموظفين/ }).click();
 await page.waitForTimeout(400);
 const review = await page.locator("body").innerText();
 ok("review screen", review.includes("مصنعك جاهز على صنعة"));
-ok("workspace url shown", review.includes("https://alnoor.sanaa.app"));
+ok("workspace url shown", review.includes(`https://alnoor.${ROOT_DOMAIN}`));
 ok("review counts the open sections", /قسم مفتوح/.test(review));
 ok("review shows what the trade template seeded", /خام(ة|تين|ات)/.test(review) && /عملي(ة|تين|ات)/.test(review));
 ok("review records the invite", /(دعوة واحدة|دعوتين|دعوات|دعوة) مسجّلة/.test(review));

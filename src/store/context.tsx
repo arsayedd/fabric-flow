@@ -35,6 +35,7 @@ import {
   MODULES_VERSION,
   randomSalt,
   resolveTenant,
+  tenantSlug,
   roleIn,
   saveAccounts,
   saveCurrent,
@@ -70,7 +71,7 @@ import { RETURN_MODULE, nextComplaintCode, nextRepairCode, nextReturnCode, repai
 import { repairCostOf } from "./compute";
 import { allocateFifo, issuableQty, nextSerial, supplyView } from "./supply";
 import { buildDoc, canTransition, DOC_DEFS, findDoc, type IssueInput } from "./documents";
-import { DEMO_FACTORY, FID, demoDb, emptyDb, templateData } from "./seed";
+import { DEMO_FACTORY, DEMO_SLUG, FID, demoDb, emptyDb, templateData } from "./seed";
 import { PRODUCTION_LINES, REPAIR_DERIVED_COSTS, RETURN_SOURCE_LABEL } from "./types";
 import type {
   BatchStatus,
@@ -368,10 +369,47 @@ function boot(): Boot {
   const session = loadSession();
   const search = typeof location === "undefined" ? "" : location.search;
   const wanted = new URLSearchParams(search).get("factory");
-  const hit = resolveTenant(location.hostname, search, workspaces, current);
-  // الـslug اتطلب ومش موجود: بنقولها صريح بدل ما نفتح مصنع تاني بالغلط
-  if (!hit && wanted) {
-    return { workspaces, current, book: { key: "", data: emptyShell() }, missing: wanted, session: null };
+  let spaces = workspaces;
+  let hit = resolveTenant(location.hostname, search, spaces, current);
+
+  /*
+   * الـslug اتطلب ومش موجود: بنقولها صريح بدل ما نفتح مصنع تاني بالغلط.
+   *
+   * والعنوان نفسه طلب زي `?factory=`: اللي بيفتح `alnoor.sanaa.cloud`
+   * طالب مصنع بالاسم، فلو مالقيناهوش لازم نقول كده — مش نعرض الصفحة
+   * الرئيسية كأن الجهاز جديد ومحصلش حاجة.
+   */
+  const asked = wanted ?? tenantSlug(location.hostname);
+
+  /*
+   * العنوان التجريبي بيجهّز نفسه.
+   *
+   * اللي بيفتح `alnoor.sanaa.cloud` طالب المصنع التجريبي بالاسم، وبيانات
+   * التجربة أصلًا بتتولّد على الجهاز — ده نفس اللي بيحصل بالظبط لما تضغط
+   * «دخول تجريبي». فـ«المصنع مش موجود» جواب غلط على العنوان ده.
+   *
+   * ومهم: ده مايخصّش مصنع حقيقي. مصنع فعلي على صاب دومين محتاج بياناته
+   * تكون على السيرفر، لأن تخزين المتصفح منفصل لكل عنوان — فالمصنع اللي
+   * عملته على الدومين الأصلي مش موجود على الصاب دومين.
+   */
+  if (!hit && asked === DEMO_SLUG) {
+    const seeded = demoDb();
+    const id = seeded.factory!.id;
+    const key = dbKeyOf(id);
+    const row: Workspace = {
+      ...blankWorkspace(id, key, seeded.factory!.name, DEMO_SLUG),
+      industry: seeded.settings.industry,
+      lastAccessAt: new Date().toISOString(),
+    };
+    spaces = [row, ...workspaces.filter((w) => w.factoryId !== id)];
+    saveWorkspaces(spaces);
+    if (!readDb(key)) localStorage.setItem(key, JSON.stringify(seeded));
+    saveCurrent({ ...current, factoryId: id });
+    hit = { workspace: row, via: "hostname" };
+  }
+
+  if (!hit && asked) {
+    return { workspaces: spaces, current, book: { key: "", data: emptyShell() }, missing: asked, session: null };
   }
   const ws = hit?.workspace ?? null;
   const key = ws?.dbKey ?? LEGACY_DB_KEY;
@@ -402,7 +440,7 @@ function boot(): Boot {
   }
 
   return {
-    workspaces,
+    workspaces: spaces,
     current: ws ? { ...current, factoryId: ws.factoryId } : current,
     book: { key, data },
     missing: null,
@@ -1003,7 +1041,9 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
       ? workspaces.map((w) => (w.factoryId === f.id ? { ...w, dbKey: key, name: f.name, lastAccessAt: new Date().toISOString() } : w))
       : [
           {
-            ...blankWorkspace(f.id, key, f.name, freeSlug(f.name, workspaces)),
+            /* المصنع التجريبي عنوانه ثابت، عشان يبقى نفس العنوان أيًّا كان
+             * الباب اللي دخلت منه — زرار الدور أو الحساب أو الصاب دومين */
+            ...blankWorkspace(f.id, key, f.name, f.id === FID ? DEMO_SLUG : freeSlug(f.name, workspaces)),
             industry: data.settings.industry,
             ownerId: current.userId ?? "",
             lastAccessAt: new Date().toISOString(),

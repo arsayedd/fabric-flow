@@ -24,9 +24,18 @@ import {
 /** معرّف المصنع التجريبي — ثابت عشان الحساب التجريبي يربط عليه */
 export const FID = "factory-demo-1";
 
+/**
+ * عنوان المصنع التجريبي.
+ *
+ * ثابت واحد بقصد: قبل كده الـslug كان بيتولّد من الاسم لما تدخل بزرار
+ * الدور (`alnoor`) وبيتكتب بالإيد لما تدخل بالحساب (`alnoor-demo`) —
+ * يعني نفس المصنع بعنوانين، والصاب دومين بيشتغل مع واحد بس.
+ */
+export const DEMO_SLUG = "alnoor";
+
 /** اسم ونشاط المصنع التجريبي، مستقلّين عن `demoDb()` عشان سجل الـworkspace
  *  يتعمل من غير ما نبني ٧٩٢ سجل الأول */
-export const DEMO_FACTORY = { name: "مصنع النور للإنتاج", industry: "apparel" as Industry };
+export const DEMO_FACTORY = { name: "مصنع النور للإنتاج", industry: "apparel" as Industry, slug: DEMO_SLUG };
 
 export const DEMO_MEMBERS: Member[] = [
   { id: "m-owner", factoryId: FID, email: "owner@factory.demo", name: "صاحب المصنع", role: "owner" },

@@ -7,31 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input, selectClass } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn, countLabel, qty } from "@/lib/utils";
-import {
-  COUNTRIES,
-  effectiveModules,
-  EMPLOYEE_BANDS,
-  FACTORY_TYPES,
-  JOB_TITLES,
-  MODULE_ABOUT,
-  MODULE_GROUPS,
-  MODULE_KEYS,
-  MODULE_LABEL,
-  MODULE_READY,
-  ROLE_EXPLAIN,
-  SLUG_MESSAGE,
-  checkPassword,
-  isEmail,
-  isUrl,
-  slugState,
-  slugSuggestions,
-  slugify,
-  workspaceUrl,
-  type EmployeeBand,
-  type ModuleKey,
-  type SlugState,
-  type Workspace,
-} from "@/store/account";
+import { COUNTRIES, EMPLOYEE_BANDS, FACTORY_TYPES, JOB_TITLES, MODULE_ABOUT, MODULE_GROUPS, MODULE_KEYS, MODULE_LABEL, MODULE_READY, ROLE_EXPLAIN, ROOT_DOMAIN, SLUG_MESSAGE, checkPassword, effectiveModules, isEmail, isUrl, slugState, slugSuggestions, slugify, type EmployeeBand, type ModuleKey, type SlugState, type Workspace, workspaceUrl } from "@/store/account";
 import { useFactory, type FactoryInput, type TeamRow } from "@/store/context";
 import type { Role } from "@/store/types";
 
@@ -623,12 +599,12 @@ function WorkspaceStep({
             placeholder="alnoor"
             dir="ltr"
           />
-          <span className="latin shrink-0 text-sm text-muted-foreground">.sanaa.app</span>
+          <span className="latin shrink-0 text-sm text-muted-foreground">.{ROOT_DOMAIN}</span>
         </div>
       </Field>
 
       <p className={cn("text-sm", checking ? "text-muted-foreground" : STATE_TONE[state])}>
-        {checking ? "بيتأكد من الإتاحة..." : state === "free" ? `متاح: ${slug}.sanaa.app` : SLUG_MESSAGE[state]}
+        {checking ? "بيتأكد من الإتاحة..." : state === "free" ? `متاح: ${slug}.${ROOT_DOMAIN}` : SLUG_MESSAGE[state]}
       </p>
 
       {!checking && alts.length ? (

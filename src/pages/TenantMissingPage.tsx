@@ -20,13 +20,16 @@ export function TenantMissingPage({ slug }: { slug: string }) {
           يمكن الاسم اتغيّر، أو المصنع على جهاز تاني. ادخل بحسابك وهتلاقي مصانعك كلها.
         </p>
       </div>
-      {/* لينك عادي مش Link: لازم العنوان يتغيّر فعلًا عشان يسيب الـslug الغلط */}
+      {/*
+        لينكات مطلقة على الدومين الأصلي، مش `/`: الـslug الغلط جوه العنوان
+        نفسه، فأي مسار على نفس الـhost بيرجع لنفس الشاشة دي في لفة مقفولة.
+      */}
       <div className="mt-4 grid gap-2">
         <Button size="lg" asChild>
-          <a href="/login">تسجيل الدخول</a>
+          <a href={`https://${ROOT_DOMAIN}/login`}>تسجيل الدخول</a>
         </Button>
         <Button size="lg" variant="outline" asChild>
-          <a href="/">الصفحة الرئيسية</a>
+          <a href={`https://${ROOT_DOMAIN}/`}>الصفحة الرئيسية</a>
         </Button>
       </div>
     </AuthShell>

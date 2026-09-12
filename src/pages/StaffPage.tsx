@@ -8,16 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Input, selectClass } from "@/components/ui/input";
 import { formatDate } from "@/lib/utils";
 import { supabaseConfigured } from "@/lib/supabase";
-import {
-  effectiveModules,
-  MODULE_ABOUT,
-  MODULE_GROUPS,
-  MODULE_KEYS,
-  MODULE_LABEL,
-  MODULE_READY,
-  SLUG_MESSAGE,
-  slugState,
-} from "@/store/account";
+import { MODULE_ABOUT, MODULE_GROUPS, MODULE_KEYS, MODULE_LABEL, MODULE_READY, ROOT_DOMAIN, SLUG_MESSAGE, effectiveModules, slugState } from "@/store/account";
 import { useFactory } from "@/store/context";
 import { ExportMenu } from "@/components/export/ExportMenu";
 import { datasetOf } from "@/store/datasets";
@@ -429,7 +420,7 @@ function WorkspaceCard() {
             className="latin text-left"
             onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ""))}
           />
-          <span className="latin shrink-0 text-sm text-muted-foreground">.sanaa.app</span>
+          <span className="latin shrink-0 text-sm text-muted-foreground">.{ROOT_DOMAIN}</span>
         </div>
       </label>
       <div className="mt-2 flex items-center gap-3">

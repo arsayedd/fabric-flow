@@ -24,6 +24,7 @@ import { BrandRow } from "@/components/Brand";
 import { Button } from "@/components/ui/button";
 import { money, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
+import { ROOT_DOMAIN } from "@/store/account";
 
 const FEATURES = [
   { icon: Factory, title: "أوامر الإنتاج", body: "كل أمر بمراحله: قص، خياطة، مكوى، جودة، تعبئة — وكمية كل مرحلة لحظة بلحظة." },
@@ -114,7 +115,7 @@ export function LandingPage() {
               </Button>
             </div>
             <p className="mt-4 text-[13px] text-muted-foreground">
-              من غير كارت دفع. مصنعك بياخد عنوان مستقل زي <span className="latin">alnoor.sanaa.app</span>.
+              من غير كارت دفع. مصنعك بياخد عنوان مستقل زي <span className="latin">alnoor.{ROOT_DOMAIN}</span>.
             </p>
           </div>
           <DashboardPreview />
@@ -333,7 +334,7 @@ function DashboardPreview() {
       <div className="flex items-center justify-between border-b border-border pb-3">
         <div>
           <p className="text-sm">مصنع النور للملابس الجاهزة</p>
-          <p className="latin text-xs text-muted-foreground">alnoor.sanaa.app</p>
+          <p className="latin text-xs text-muted-foreground">alnoor.{ROOT_DOMAIN}</p>
         </div>
         <span className="rounded-full bg-ok-soft px-3 py-1 text-xs text-ok">سكور المصنع ٨٤</span>
       </div>

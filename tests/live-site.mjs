@@ -196,6 +196,51 @@ await open(page, "/health");
 const health = await page.textContent("body");
 ok("صفحة سلامة النظام بتفتح", (health ?? "").length > 200);
 
+/*
+ * الصاب دومين التجريبي — تحديد المصنع من العنوان.
+ *
+ * أهم تأكيد هنا هو التالت: الصاب دومين لازم يفتح المصنع **من غير** ما حد
+ * يضغط «دخول تجريبي»، لأن العنوان نفسه هو اللي طلب المصنع. ولو ده اتكسر،
+ * الشاشة اللي هتطلع هي «الـworkspace مش موجود» على عنوان سليم.
+ */
+const demoSlug =
+  readFileSync(new URL("../src/store/seed.ts", import.meta.url), "utf8").match(
+    /DEMO_SLUG = "([^"]+)"/,
+  )?.[1] ?? "";
+ok("عنوان المصنع التجريبي مقروء من الكود", Boolean(demoSlug), demoSlug);
+
+const apex = new URL(BASE).hostname;
+if (demoSlug && !apex.startsWith(`${demoSlug}.`)) {
+  const subBase = `https://${demoSlug}.${apex}`;
+  const sub = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  const subErrors = [];
+  sub.on("pageerror", (e) => subErrors.push(String(e)));
+  let reached = true;
+  await sub.goto(`${subBase}/`, { waitUntil: "domcontentloaded" }).catch((e) => {
+    reached = false;
+    ok(`${demoSlug}.${apex} بيفتح`, false, String(e).split("\n")[0]);
+  });
+  if (reached) {
+    await sub.locator("#root > *").first().waitFor({ timeout: 30_000 });
+    await sub
+      .getByText("مصنع النور")
+      .first()
+      .waitFor({ timeout: 20_000 })
+      .catch(() => {});
+    const subTxt = await sub.locator("body").innerText();
+    ok(`${demoSlug}.${apex} بيفتح بشهادة سليمة`, true);
+    ok("والعنوان لوحده بيفتح المصنع من غير أي ضغطة", subTxt.includes("مصنع النور"), subTxt.slice(0, 120));
+    ok("والعنوان المعروض هو نفس العنوان اللي إحنا عليه", subTxt.includes(`${demoSlug}.${apex}`));
+    ok("ومش بيقول «الـworkspace مش موجود»", !subTxt.includes("مش موجود"));
+    ok("ومافيش أخطاء على الصاب دومين", subErrors.length === 0, subErrors.slice(0, 2).join(" | "));
+    /* Refresh جوه مسار على الصاب دومين: try_files لازم يبقى مضبوط هنا كمان */
+    await sub.goto(`${subBase}/orders`, { waitUntil: "domcontentloaded" });
+    await sub.locator("#root > *").first().waitFor({ timeout: 30_000 });
+    ok("و/orders على الصاب دومين مش ٤٠٤", new URL(sub.url()).pathname === "/orders", sub.url());
+  }
+  await sub.close();
+}
+
 /* موبايل: أرض المصنع بتتفتح من التليفون */
 const mob = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 await open(mob, "/");

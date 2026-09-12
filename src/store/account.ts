@@ -497,7 +497,7 @@ export function ensureDemoLogin(
   workspaces: Workspace[],
   demoFactoryId: string,
   demoDbKey: string,
-  demo: { name: string; industry: string },
+  demo: { name: string; industry: string; slug: string },
 ): { accounts: UserAccount[]; workspaces: Workspace[] } {
   const taken = accounts.some((a) => a.email === DEMO_LOGIN.email && a.id !== DEMO_USER_ID);
   const hasAccount = accounts.some((a) => a.id === DEMO_USER_ID);
@@ -512,7 +512,7 @@ export function ensureDemoLogin(
     nextWorkspaces = [
       ...workspaces,
       {
-        ...blankWorkspace(demoFactoryId, demoDbKey, demo.name, "alnoor-demo"),
+        ...blankWorkspace(demoFactoryId, demoDbKey, demo.name, demo.slug),
         industry: demo.industry,
         ownerId: DEMO_USER_ID,
         access: [{ userId: DEMO_USER_ID, role: "owner" as const }],
@@ -550,7 +550,15 @@ export function isUrl(value: string): boolean {
 
 /* ── الـSubdomain ──────────────────────────────────────────── */
 
-export const ROOT_DOMAIN = "sanaa.app";
+/**
+ * دومين المنصة — كل مصنع بياخد `<slug>.<ROOT_DOMAIN>`.
+ *
+ * متغيّر مش ثابت لأن الدومين بيختلف بين الإنتاج والتجربة، والعنوان
+ * المعروض في الواجهة لازم يكون هو العنوان اللي بيفتح فعلًا. كان مكتوب
+ * `sanaa.app` في تسع حاجات متفرقة، والنظام مرفوع على `sanaa.cloud` —
+ * يعني كل عنوان معروض كان غلط.
+ */
+export const ROOT_DOMAIN = import.meta.env?.VITE_APP_DOMAIN?.trim() || "sanaa.cloud";
 
 /** كلمات محجوزة: مسارات المنصة نفسها */
 export const RESERVED_SLUGS = [
@@ -677,6 +685,26 @@ export function workspaceUrl(slug: string): string {
   return `https://${slug}.${ROOT_DOMAIN}`;
 }
 
+/**
+ * الـhostname → slug المصنع، أو null لو العنوان ده مش عنوان مصنع.
+ *
+ * لازم يكون `<slug>.<ROOT_DOMAIN>` بالظبط. الشرط ده مش تدقيق زيادة:
+ * لو اكتفينا بـ«أول جزء في أي عنوان فيه تلات أجزاء»، يبقى أي عنوان
+ * تجربة أو نفق — زي `abc-def.trycloudflare.com` — يتحوّل لطلب مصنع
+ * اسمه `abc-def`، والنظام يقول «المصنع مش موجود» على عنوان سليم.
+ *
+ * والكلمات المحجوزة (`www`، `app`، `api`…) مش مصانع، فبترجع null.
+ */
+export function tenantSlug(hostname: string): string | null {
+  const host = hostname.toLowerCase().replace(/\.$/, "");
+  const suffix = `.${ROOT_DOMAIN.toLowerCase()}`;
+  if (!host.endsWith(suffix)) return null;
+  const slug = host.slice(0, -suffix.length);
+  if (!slug || slug.includes(".")) return null;
+  if (RESERVED_SLUGS.includes(slug)) return null;
+  return slug;
+}
+
 /* ── تحديد الـTenant ───────────────────────────────────────── */
 
 export type TenantHit = { workspace: Workspace; via: "hostname" | "query" | "session" } | null;
@@ -692,10 +720,9 @@ export function resolveTenant(
   workspaces: Workspace[],
   current: CurrentState,
 ): TenantHit {
-  const labels = hostname.split(".");
-  const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(hostname);
-  if (!isIp && labels.length >= 3 && !hostname.startsWith("www.")) {
-    const found = workspaces.find((w) => w.subdomain === labels[0]);
+  const slug = tenantSlug(hostname);
+  if (slug) {
+    const found = workspaces.find((w) => w.subdomain === slug);
     if (found) return { workspace: found, via: "hostname" };
   }
   const wanted = new URLSearchParams(search).get("factory");

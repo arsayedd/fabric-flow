@@ -18,6 +18,7 @@ DOMAIN="${DOMAIN:?لازم تحدد DOMAIN — مثال: DOMAIN=sanaa.example.co
 SSH_TARGET="${SSH_TARGET:?لازم تحدد SSH_TARGET — مثال: SSH_TARGET=root@187.127.79.131}"
 SITE_USER="${SITE_USER:?لازم تحدد SITE_USER — اسم مستخدم الموقع من CloudPanel}"
 REMOTE_ROOT="/home/${SITE_USER}/htdocs/${DOMAIN}"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 say() { printf "\n\033[1m▸ %s\033[0m\n" "$1"; }
 
@@ -82,6 +83,27 @@ ls -dt '${REMOTE_ROOT}'.prev-* 2>/dev/null | tail -n +3 | xargs -r rm -rf
 nginx -t && systemctl reload nginx
 EOF
 )"
+
+#
+# قواعد نجينكس المشتركة بتتحدّث مع كل رفع.
+#
+# ليه هنا: الملف ده بيتضمّن جوه vhost الدومين الأصلي وجوه كل صاب دومين
+# مصنع. لو سيبناه يتحدّث بالإيد، أول تعديل فيه هيتنسى على السيرفر، وتبقى
+# النسخة المرفوعة بتتصرّف بشكل مختلف عن اللي في الكود.
+#
+say "تحديث قواعد نجينكس المشتركة"
+if [ "$LOCAL" = "1" ]; then
+  install -d -m 755 /etc/nginx/sanaa-subdomains.d
+  install -m 644 "${HERE}/nginx/sanaa-app.inc" /etc/nginx/sanaa-app.inc
+else
+  sh_run "install -d -m 755 /etc/nginx/sanaa-subdomains.d"
+  scp -q "${HERE}/nginx/sanaa-app.inc" "$SSH_TARGET:/etc/nginx/sanaa-app.inc"
+fi
+sh_run "nginx -t >/dev/null 2>&1 && systemctl reload nginx" || {
+  echo "✗ إعداد نجينكس مارضيش — الملفات مرفوعة بس مافيش reload"
+  sh_run "nginx -t" || true
+  exit 1
+}
 
 say "التأكد إن الموقع بيرد"
 CODE="$(curl -s -o /dev/null -w '%{http_code}' "https://${DOMAIN}/" || true)"

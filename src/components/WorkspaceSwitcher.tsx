@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Check, ChevronsUpDown, Factory as FactoryIcon, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { ROOT_DOMAIN } from "@/store/account";
 import { useFactory } from "@/store/context";
 
 /**
@@ -49,7 +50,7 @@ export function WorkspaceSwitcher({ tone = "dark" }: { tone?: "dark" | "light" }
         <span className="block truncate text-sm">{name}</span>
         {slug ? (
           <span className={cn("latin block truncate text-[11px]", dark ? "text-primary-foreground/50" : "text-muted-foreground")}>
-            {slug}.sanaa.app
+            {slug}.{ROOT_DOMAIN}
           </span>
         ) : null}
       </span>
@@ -90,7 +91,7 @@ export function WorkspaceSwitcher({ tone = "dark" }: { tone?: "dark" | "light" }
             >
               <span className="min-w-0">
                 <span className="block truncate">{w.name}</span>
-                <span className="latin block truncate text-[11px] text-muted-foreground">{w.subdomain}.sanaa.app</span>
+                <span className="latin block truncate text-[11px] text-muted-foreground">{w.subdomain}.{ROOT_DOMAIN}</span>
               </span>
               {w.factoryId === account.workspace?.factoryId ? <Check className="h-4 w-4 shrink-0 text-accent" /> : null}
             </button>
