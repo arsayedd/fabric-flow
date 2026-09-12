@@ -7,7 +7,7 @@
 -- من برّه نفس المشكلة.** قبل كده كان فيه قايمتين مختلفتين — نص حر على
 -- الباندل (`bundle_ops.defect`) وقايمة `reason` على المرتجع — فسؤال
 -- «أكتر مشكلة عندنا إيه؟» كان ليه إجابتين، وكل واحدة صح لوحدها
-    10|-- ومالهاش لازمة. بقى فيه تصنيف واحد (`problem`) بيوصل الاتنين، فباريتو
+-- ومالهاش لازمة. بقى فيه تصنيف واحد (`problem`) بيوصل الاتنين، فباريتو
 -- واحد يقدر يجمعهم.
 --
 -- والتفرقة التانية، وهي أهم حاجة في الملف: **تلات أسئلة مختلفة، تلات
@@ -17,7 +17,7 @@
 --   `root_cause` وليه حصلت — ضبط ماكينة، تدريب، جودة خامة، شد قماش
 -- «مشكلة من المورّد» و«مشكلة من العميل» مش أنواع مشاكل، دول **مصدر**.
 -- ولو خلطناهم في عمود واحد، المرتجع اللي فيه عيب قماش جاي من مورّد
-    20|-- بيضطر يختار واحد ويسيب التاني — وبعدها لا تحليل المشكلة ولا تحليل
+-- بيضطر يختار واحد ويسيب التاني — وبعدها لا تحليل المشكلة ولا تحليل
 -- المورّد يبقى مكتمل.
 
 -- ─────────────────────────────────────────────────────────────
@@ -28,7 +28,7 @@ alter table factory.returns
   -- فاضي مسموح، لأن **مش كل مرتجع فيه عيب**: العميل اللي غيّر رأيه
   -- رجّع قطعة سليمة. والفاضي معناه «لسه مافُحصتش أو مافيهاش مشكلة» —
   -- والشاشة بتعرضه فاضي، مش «مش معروف»
-    30|  add column if not exists problem text check (problem in (
+  add column if not exists problem text check (problem in (
     'sewing', 'cutting', 'finishing', 'ironing', 'printing', 'embroidery',
     'fabric', 'accessory', 'tear', 'size', 'color', 'wrong_item',
     'shortage', 'packing', 'transit', 'other_problem'
@@ -38,7 +38,7 @@ alter table factory.returns
   -- فيطلع باريتو بيتّهم العامل في مشاكل محدش عارف مصدرها
   add column if not exists origin text check (origin in (
     'supplier', 'material', 'machine', 'line', 'operation', 'worker',
-    40|    'qc', 'transport', 'customer', 'unknown'
+    'qc', 'transport', 'customer', 'unknown'
   )),
   add column if not exists root_cause text check (root_cause in (
     'calibration', 'training', 'material_quality', 'tension',
@@ -48,7 +48,7 @@ alter table factory.returns
   add column if not exists size text not null default '',
   add column if not exists line text not null default '',
   add column if not exists operation_id uuid,
-    50|  -- ربط العامل بالمشكلة **ادّعاء** له نتيجة على ملف جودته، فبيفضل
+  -- ربط العامل بالمشكلة **ادّعاء** له نتيجة على ملف جودته، فبيفضل
   -- فاضي لحد ما حد يقرر بصراحة إنه هو
   add column if not exists worker_id uuid,
   -- المسؤول عن متابعة الحالة — عضو في المصنع مش عامل
@@ -58,7 +58,7 @@ alter table factory.returns
   -- قطعة» مابيقولش حاجة، لكن مجموع البنود بيقول المشكلة كلّفت كام وفين
   add column if not exists costs jsonb not null default '[]'::jsonb,
   -- صور «قبل» و«بعد». الإثبات هو اللي بيخلي المطالبة على المورّد أو
-    60|  -- الرد على العميل ممكن بعد شهرين، و«اتصلحت» جملة عليها دليل
+  -- الرد على العميل ممكن بعد شهرين، و«اتصلحت» جملة عليها دليل
   add column if not exists attachments jsonb not null default '[]'::jsonb;
 
 -- نقل `extra_cost` القديم لبند «مصاريف إدارية» داخل `costs`.
@@ -69,7 +69,7 @@ alter table factory.returns
 update factory.returns
 set costs = jsonb_build_array(
       jsonb_build_object(
-    70|        'id', gen_random_uuid(),
+        'id', gen_random_uuid(),
         'kind', 'admin',
         'amount', extra_cost,
         'note', coalesce(nullif(extra_note, ''), 'منقول من مصاريف المرتجع')
@@ -79,7 +79,7 @@ where extra_cost > 0
   and costs = '[]'::jsonb;
 
 create index if not exists returns_problem_idx on factory.returns (factory_id, problem, date desc) where problem is not null;
-    80|create index if not exists returns_origin_idx on factory.returns (factory_id, origin, date desc) where origin is not null;
+create index if not exists returns_origin_idx on factory.returns (factory_id, origin, date desc) where origin is not null;
 create index if not exists returns_worker_idx on factory.returns (factory_id, worker_id, date desc) where worker_id is not null;
 create index if not exists returns_line_idx on factory.returns (factory_id, line, date desc) where line <> '';
 
@@ -89,7 +89,7 @@ create index if not exists returns_line_idx on factory.returns (factory_id, line
 -- وقت الوصول ممكن ييجي وهو تالف ومحدش بصّ عليه لسه، لكن بعد الفحص
 -- «تالف بدون مشكلة مكتوبة» سطر ضايع من تحليل الجودة — رجع ومحدش هيعرف
 -- ليه، وبعد شهر بيرجع تاني.
-    90|alter table factory.returns
+alter table factory.returns
   drop constraint if exists returns_defective_has_problem;
 alter table factory.returns
   add constraint returns_defective_has_problem check (
@@ -99,7 +99,7 @@ alter table factory.returns
 -- عشان النشر مايفشلش على مصنع عنده مرتجعات قديمة بدون مشكلة مكتوبة.
 -- تصحيحها شغل بيانات مش شغل schema.
 
-   100|-- ─────────────────────────────────────────────────────────────
+-- ─────────────────────────────────────────────────────────────
 -- 2) أوامر الإصلاح
 -- ─────────────────────────────────────────────────────────────
 --    المرتجع اللي قراره «إصلاح» بيفتح أمر إصلاح بدل ما تتكتب تكلفة
@@ -109,7 +109,7 @@ alter table factory.returns
 --    بيفضلوا في الرصيد على الورق وهم مصروفين فعلًا.
 --
 --    ودورة الحياة هنا **منفصلة عن حالة المرتجع** عن قصد: المرتجع دفتر
-   110|--    تجاري (رجع → اتفحص → اتسوّى)، وأمر الإصلاح دفتر تشغيلي (في
+--    تجاري (رجع → اتفحص → اتسوّى)، وأمر الإصلاح دفتر تشغيلي (في
 --    الطابور → بيتصلح → فحص → جاهز → اترجّع). لو دمجناهم في عمود حالة
 --    واحد كنا هنحتاج اتناشر حالة، والحالة اللي معناها «اتسوّى تجاريًا
 --    وبيتصلح تشغيليًا» مكانت هتلاقي خانة.
@@ -119,7 +119,7 @@ create table if not exists factory.repairs (
   id uuid not null default gen_random_uuid(),
   code text not null,
   return_id uuid not null,
-   120|  date date not null,
+  date date not null,
   qty numeric not null check (qty > 0),
   problem text check (problem in (
     'sewing', 'cutting', 'finishing', 'ironing', 'printing', 'embroidery',
@@ -129,7 +129,7 @@ create table if not exists factory.repairs (
   worker_id uuid,
   operation_id uuid,
   -- أجر إصلاح القطعة **قرار وقت فتح الأمر** فبيتخزّن، زي `rate` في
-   130|  -- `bundle_ops` بالظبط: السعر بيتغير، والأمر القديم لازم يفضل
+  -- `bundle_ops` بالظبط: السعر بيتغير، والأمر القديم لازم يفضل
   -- بتكلفته وقتها
   rate numeric not null default 0 check (rate >= 0),
   -- الوقت من الساعة مش من الكيبورد: بيتحسب من `started_at` و
@@ -139,7 +139,7 @@ create table if not exists factory.repairs (
   materials jsonb not null default '[]'::jsonb,
   status text not null default 'queued' check (status in (
     'queued', 'repairing', 'qc', 'ready', 'shipped', 'scrapped', 'cancelled'
-   140|  )),
+  )),
   started_at timestamptz,
   finished_at timestamptz,
   qty_passed numeric not null default 0 check (qty_passed >= 0),
@@ -149,7 +149,7 @@ create table if not exists factory.repairs (
   qc_note text not null default '',
   shipped_at timestamptz,
   cancel_reason text,
-   150|  created_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
   created_by uuid,
   notes text not null default '',
   primary key (factory_id, id),
@@ -159,7 +159,7 @@ create table if not exists factory.repairs (
   -- نتيجة الفحص لازم تجمع كل الكمية: مافيش قطعة تختفي من الدفتر
   constraint repairs_qc_totals check (
     qc_at is null or qty_passed + qty_failed = qty
-   160|  ),
+  ),
   -- القطع اللي سقطت لازم يتكتب ليه. دي المعلومة اللي بتقول إن الإصلاح
   -- نفسه مش شغّال — من غيرها بنكرّر نفس الإصلاح الفاشل
   constraint repairs_failed_has_note check (
@@ -169,7 +169,7 @@ create table if not exists factory.repairs (
     status <> 'cancelled' or coalesce(cancel_reason, '') <> ''
   )
 );
-   170|
+
 create index if not exists repairs_return_idx on factory.repairs (factory_id, return_id);
 create index if not exists repairs_open_idx on factory.repairs (factory_id, status)
   where status in ('queued', 'repairing', 'qc', 'ready');
@@ -179,7 +179,7 @@ create index if not exists repairs_date_idx on factory.repairs (factory_id, date
 -- ─────────────────────────────────────────────────────────────
 -- 3) تكلفة الحالة — مصدر واحد للمجموع
 -- ─────────────────────────────────────────────────────────────
-   180|--    المجموع **مابيتخزّنش** في عمود. بيتحسب من بندين: السطور المكتوبة
+--    المجموع **مابيتخزّنش** في عمود. بيتحسب من بندين: السطور المكتوبة
 --    في `costs`، وأمر الإصلاح اللي بيحسب أجره وخاماته لوحده. والبندين
 --    `repair_labor` و`spare_materials` ممنوعين من الكتابة بالإيد لما
 --    يبقى فيه أمر إصلاح — عشان نفس الجنيه مايتعدّش مرتين. والرقم
@@ -189,7 +189,7 @@ create or replace view factory.v_return_cost as
 with manual as (
   select
     r.factory_id,
-   190|    r.id as return_id,
+    r.id as return_id,
     coalesce(sum((c ->> 'amount')::numeric), 0) as manual_cost
   from factory.returns r
   left join lateral jsonb_array_elements(r.costs) as c on true
@@ -199,7 +199,7 @@ with manual as (
 ),
 repair as (
   select
-   200|    p.factory_id,
+    p.factory_id,
     p.return_id,
     coalesce(sum(
       p.qty * p.rate
@@ -209,7 +209,7 @@ repair as (
         ), 0)
     ), 0) as repair_cost
   from factory.repairs p
-   210|  where p.status <> 'cancelled'
+  where p.status <> 'cancelled'
   group by p.factory_id, p.return_id
 )
 select
@@ -219,7 +219,7 @@ select
   r.problem,
   r.origin,
   r.root_cause,
-   220|  coalesce(m.manual_cost, 0) as manual_cost,
+  coalesce(m.manual_cost, 0) as manual_cost,
   coalesce(p.repair_cost, 0) as repair_cost,
   coalesce(m.manual_cost, 0) + coalesce(p.repair_cost, 0) as total_cost
 from factory.returns r
@@ -229,7 +229,7 @@ where r.status <> 'cancelled';
 
 -- ─────────────────────────────────────────────────────────────
 -- 4) RLS — عزل المصنع
-   230|-- ─────────────────────────────────────────────────────────────
+-- ─────────────────────────────────────────────────────────────
 --    أمر الإصلاح بياخد صلاحية **الجودة**، مش صلاحية الطرف زي المرتجع.
 --    والسبب إن الإصلاح شغل داخلي: هو بيصرف خامات وبيدخّل بضاعة بعد
 --    الفحص، ومالوش علاقة بمين رجّع القطعة.
@@ -239,7 +239,7 @@ alter table factory.repairs enable row level security;
 do $$
 begin
   if not exists (select 1 from pg_policies where schemaname = 'factory' and tablename = 'repairs' and policyname = 'repairs_rw') then
-   240|    create policy repairs_rw on factory.repairs
+    create policy repairs_rw on factory.repairs
       for all using (factory.my_role(factory_id) is not null)
       with check (factory.my_role(factory_id) is not null);
   end if;
@@ -249,7 +249,7 @@ end $$;
 --
 -- والسبب مكتوب في التطبيق كمان: الأرقام دي بتاعة **أشخاص**، فمابتظهرش
 -- غير لصلاحية العمال. والرقم نفسه **قياس مش تقييم**: بيقول العيب في
-   250|-- شغله كام في المية، مش بيقول هو كويس ولا وحش — والعامل اللي على
+-- شغله كام في المية، مش بيقول هو كويس ولا وحش — والعامل اللي على
 -- عملية صعبة نسبة عيبه أعلى بطبيعتها، وعشان كده العملية بتتعرض جنب
 -- الرقم دايمًا.
 create or replace view factory.v_worker_quality as
@@ -259,7 +259,7 @@ select
   count(*) as cases,
   sum(r.qty) as qty,
   jsonb_object_agg(coalesce(r.problem, 'other_problem'), 1) as problems
-   260|from factory.returns r
+from factory.returns r
 where r.status <> 'cancelled'
   and r.worker_id is not null
   and r.origin = 'worker'
@@ -269,7 +269,7 @@ group by r.factory_id, r.worker_id;
 -- 5) اللي مش في الملف ده عن قصد
 -- ─────────────────────────────────────────────────────────────
 --    * **تصنيفات مشاكل يعرّفها المصنع بنفسه**: القايمة مقفولة دلوقتي.
-   270|--      التخصيص محتاج جدول `problem_categories` بـ`factory_id` وربط
+--      التخصيص محتاج جدول `problem_categories` بـ`factory_id` وربط
 --      بالتصنيف الأب، وترحيل القيم المقفولة له كبيانات افتراضية. مش
 --      عملناه لأن أول قيمة للسيستم إن كل المصانع تتكلم نفس اللغة —
 --      والتخصيص قبل ما تبقى فيه بيانات كفاية بيرجّعنا للنص الحر.
@@ -279,7 +279,7 @@ group by r.factory_id, r.worker_id;
 --      وبيحتاج المهام تبقى كيان أول.
 --    * **ربط `origin = 'machine'` بماكينة**: مافيش جدول ماكينات لسه،
 --      فالمصدر ده بيتسجّل بدون ربط. الربط بيتعمل مع CMMS.
-   280|--    * **فيديو وملفات كبيرة**: `attachments` صور مصغّرة inline
+--    * **فيديو وملفات كبيرة**: `attachments` صور مصغّرة inline
 --      بحد ست صور، لأن الدفتر المحلي مساحته محدودة. الأصل الكامل
 --      والفيديو محتاجين Supabase Storage.
 --    * **توقيع على الحالة**: التوقيع موجود في المستندات
@@ -289,5 +289,5 @@ group by r.factory_id, r.worker_id;
 --      «ناقل» يتعمل عليه مطالبة. محتاج الناقل يبقى جهة تعامل بدور
 --      جديد.
 --    * **تحويل الـpolicy دي لتسأل `has_perm`**: نفس الملاحظة المكتوبة
-   290|--      في آخر 0009 و0011 و0012 و0013 — بيتعمل في migration لوحده لكل
+--      في آخر 0009 و0011 و0012 و0013 — بيتعمل في migration لوحده لكل
 --      الجداول مرة واحدة.
