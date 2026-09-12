@@ -373,6 +373,8 @@ export function demoDb(): Db {
     ["قماش قطن", 300, 74, 60],
     ["قماش قطن", 350, 88, 14],
     ["قماش قطن", 200, 96, 5],
+    // شراء مخصوص لأمر القمصان الجديد (SN-1046) — الفرشة المخططة بتتقص منه
+    ["قماش قطن", 120, 98, 3],
     ["قماش كتان", 200, 120, 20],
     ["بطانة", 300, 30, 20],
     ["خيط بوليستر", 120, 18, 25],
@@ -833,7 +835,11 @@ export function demoDb(): Db {
     },
   ];
 
-  /** إذن تشغيل خارجي: ٣٠٠ قطعة خياطة برّه بأجر ٣٠ج، رجع منها ٢٨٠ سليم و١٢ تالف */
+  /**
+   * إذن تشغيل خارجي: ٣٠٠ قطعة خياطة برّه بأجر ٣٠ج، رجع منها ٢٤٠ سليم و١٢
+   * تالف، و٤٠ لسه عند الورشة بعد الميعاد — عشان الشاشة تبان عليها حالة
+   * «متأخر» الحقيقية بدل ما كل الأعمال تطلع مظبوطة.
+   */
   const subcontracts = [
     {
       id: "sub-1",
@@ -867,7 +873,7 @@ export function demoDb(): Db {
 
   const subReceipts = [
     { id: "sr-1", factoryId: FID, subcontractId: "sub-1", date: addDays(today, -8), qtyGood: 180, qtyRework: 0, qtyLost: 4, stageEntryId: null, notes: "دفعة أولى" },
-    { id: "sr-2", factoryId: FID, subcontractId: "sub-1", date: addDays(today, -5), qtyGood: 100, qtyRework: 8, qtyLost: 8, stageEntryId: null, notes: "دفعة تانية — رجعت بعد الميعاد" },
+    { id: "sr-2", factoryId: FID, subcontractId: "sub-1", date: addDays(today, -5), qtyGood: 60, qtyRework: 8, qtyLost: 8, stageEntryId: null, notes: "دفعة تانية — رجعت بعد الميعاد" },
   ];
 
   const subPayments = [

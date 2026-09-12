@@ -58,7 +58,7 @@ export function ProductionPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-2xl">متابعة المراحل</h2>
+          <h2 className="text-2xl">متابعة العمليات</h2>
           <p className="text-sm text-muted-foreground">
             القطعة وصلت لأي عملية، ومين شغّال عليها، وقعدت قد إيه. الكفاءة = الدقايق المعيارية ÷ الوقت الفعلي.
           </p>

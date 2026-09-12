@@ -212,7 +212,8 @@ export function StationPage() {
         </Card>
       ) : null}
 
-      <FinishPanel op={finishing} onClose={() => setFinishing(null)} />
+      {/* المفتاح بيعيد بناء الفورم لكل عملية، فالكميات بتبدأ من الباندل الجديد */}
+      <FinishPanel key={finishing?.id ?? "none"} op={finishing} onClose={() => setFinishing(null)} />
       <IssuePanel kind={issue} bundle={bundle} op={mine ?? null} workerId={workerId || null} onClose={() => setIssue(null)} />
     </div>
   );
@@ -221,7 +222,9 @@ export function StationPage() {
 function FinishPanel({ op, onClose }: { op: BundleOp | null; onClose: () => void }) {
   const { db, finishBundleOp } = useFactory();
   const bundle = op ? (db.bundles ?? []).find((b) => b.id === op.bundleId) : null;
-  const [good, setGood] = useState("");
+  // الحالة الغالبة إن الباندل بيخلص كامل، فالخانة بتيجي مليانة والعامل
+  // بيقلّلها لو حصل عيب — أسرع من إنه يكتب الرقم في كل باندل
+  const [good, setGood] = useState(String(bundle?.qty ?? ""));
   const [rework, setRework] = useState("0");
   const [scrap, setScrap] = useState("0");
   const [defect, setDefect] = useState("");
@@ -237,10 +240,6 @@ function FinishPanel({ op, onClose }: { op: BundleOp | null; onClose: () => void
       });
       toast.success("العملية اتقفلت واتسجّلت في دفتر الإنتاج.");
       onClose();
-      setGood("");
-      setRework("0");
-      setScrap("0");
-      setDefect("");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "مش قادر أقفل العملية.");
     }
