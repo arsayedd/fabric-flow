@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { Toaster, toast } from "sonner";
 import App from "./App";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { registerServiceWorker } from "./lib/service-worker";
 import { FactoryProvider } from "./store/context";
 import { PermissionError } from "./store/permissions";
@@ -30,10 +31,18 @@ registerServiceWorker();
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
-      <FactoryProvider>
-        <App />
-        <Toaster richColors position="top-center" dir="rtl" />
-      </FactoryProvider>
+      {/*
+        الحاجز الخارجي برّه `FactoryProvider` بقصد: لو الـprovider نفسه وقع
+        (دفتر غريب على الجهاز مثلًا) الحاجز اللي جواه بيقع معاه، وساعتها
+        نرجع لشاشة بيضا. ودي آخر شبكة — الحاجز اللي بيهم المستخدم يوميًا
+        هو اللي حوالين الصفحة جوه `AppShell`.
+      */}
+      <ErrorBoundary scope="app">
+        <FactoryProvider>
+          <App />
+          <Toaster richColors position="top-center" dir="rtl" />
+        </FactoryProvider>
+      </ErrorBoundary>
     </BrowserRouter>
   </StrictMode>,
 );

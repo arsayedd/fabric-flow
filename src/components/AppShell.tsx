@@ -3,6 +3,7 @@ import { ChevronDown, Home, LogOut, MoreHorizontal, X } from "lucide-react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { Mark } from "@/components/Brand";
 import { CommandPalette } from "@/components/CommandPalette";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useCommandKey } from "@/lib/useCommandKey";
 import { Topbar } from "@/components/Topbar";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
@@ -111,7 +112,10 @@ export function AppShell() {
         ) : null}
         <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-4 md:px-8 md:py-6">
           <Crumbs />
-          <Outlet />
+          {/* حاجز على مستوى الصفحة: قسم بيقع مابيوقّعش القائمة معاه */}
+          <ErrorBoundary scope="page">
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
 
