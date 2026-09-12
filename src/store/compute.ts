@@ -124,6 +124,7 @@ export function accountBalance(db: Db, accountId: string): number {
   for (const p of db.workerPayments) {
     if (p.accountId === accountId && (p.kind === "pay" || p.kind === "advance")) bal -= p.amount;
   }
+  for (const p of db.subPayments ?? []) if (p.accountId === accountId) bal -= p.amount;
   for (const t of db.manualTx) if (t.accountId === accountId) bal += t.amount;
   return bal;
 }
@@ -167,16 +168,39 @@ export function pnl(db: Db, from: string, to: string) {
   const labor = db.workerEarnings.filter((d) => inRange(d.date)).reduce((s, d) => s + d.amount, 0);
   const otherOut = db.manualTx.filter((d) => inRange(d.date) && d.amount < 0).reduce((s, d) => s + Math.abs(d.amount), 0);
   const otherIn = db.manualTx.filter((d) => inRange(d.date) && d.amount > 0).reduce((s, d) => s + d.amount, 0);
-  const expenses = costs + labor + otherOut;
+  // تشغيل الورش الخارجية: بيتحسب من **الاستلامات** لأن المستحق بينشأ لما
+  // الشغل يرجع، مش لما الكمية تطلع. ومابيدخلش في `labor` عشان `labor`
+  // معناها أجور عمال المصنع (دفتر مكاسب العمال) ومايختلطش بحساب الورشة.
+  const outsourcing = subcontractCharges(db).filter((c) => inRange(c.date)).reduce((s, c) => s + c.amount, 0);
+  const expenses = costs + labor + outsourcing + otherOut;
   return {
     revenue: revenue + otherIn,
     costs,
     labor,
+    outsourcing,
     otherOut,
     otherIn,
     expenses,
     net: revenue + otherIn - expenses,
   };
+}
+
+/** مستحقات الورش: كل استلام × أجر القطعة المتفق عليه في إذن التشغيل */
+export function subcontractCharges(db: Db): { date: string; partyId: string; subcontractId: string; amount: number }[] {
+  return (db.subReceipts ?? []).flatMap((r) => {
+    const sub = (db.subcontracts ?? []).find((s) => s.id === r.subcontractId);
+    if (!sub || sub.status === "cancelled") return [];
+    return [{ date: r.date, partyId: sub.partyId, subcontractId: sub.id, amount: (r.qtyGood + r.qtyRework) * sub.rate }];
+  });
+}
+
+/** رصيد الورشة = مستحقاتها − المدفوع لها */
+export function workshopBalance(db: Db, partyId: string): number {
+  const due = subcontractCharges(db)
+    .filter((c) => c.partyId === partyId)
+    .reduce((s, c) => s + c.amount, 0);
+  const paid = (db.subPayments ?? []).filter((p) => p.partyId === partyId).reduce((s, p) => s + p.amount, 0);
+  return due - paid;
 }
 
 export function payables(db: Db) {
@@ -191,7 +215,21 @@ export function payables(db: Db) {
   const workers = db.workers
     .map((w) => ({ worker: w, due: workerBalance(db, w.id) }))
     .filter((w) => w.due > 0.5);
-  return { vendor, workers, vendorTotal: vendor.reduce((s, v) => s + v.due, 0), workerTotal: workers.reduce((s, w) => s + w.due, 0) };
+  const workshops = [...new Set(subcontractCharges(db).map((c) => c.partyId))]
+    .map((partyId) => ({
+      partyId,
+      name: db.parties.find((p) => p.id === partyId)?.name ?? "ورشة",
+      due: workshopBalance(db, partyId),
+    }))
+    .filter((w) => w.due > 0.5);
+  return {
+    vendor,
+    workers,
+    workshops,
+    vendorTotal: vendor.reduce((s, v) => s + v.due, 0),
+    workerTotal: workers.reduce((s, w) => s + w.due, 0),
+    workshopTotal: workshops.reduce((s, w) => s + w.due, 0),
+  };
 }
 
 export function methodNeedsReceipt(method: PayMethod): boolean {

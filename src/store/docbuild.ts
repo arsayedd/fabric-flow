@@ -2,6 +2,9 @@ import { formatDate, qty } from "@/lib/utils";
 import { clientStatement, costEntryPaid, workerAdvance, workerBalance } from "./compute";
 import { materialStock, operationById, orderRequirements, orderStages, productById, unitName } from "./manufacturing";
 import { partyById } from "./parties";
+import { LAY_STATUS_LABEL, layMath } from "./cutting";
+import { bundleState, bundleTrail } from "./floor";
+import { subView, workshopStatement } from "./outsourcing";
 import { DOC_DEFS } from "./documents";
 import {
   METHOD_LABEL,
@@ -82,7 +85,208 @@ export function buildBody(db: Db, type: DocType, refId: string, refExtra?: strin
       return payslipDoc(db, refId, title, refExtra);
     case "stock":
       return stockDoc(db, title);
+    case "cutting":
+      return cuttingDoc(db, refId, title);
+    case "bundle":
+      return bundleDoc(db, refId, title);
+    case "subout":
+      return subOutDoc(db, refId, title);
+    case "subin":
+      return subInDoc(db, refId, title);
+    case "subaccount":
+      return subAccountDoc(db, refId, title);
   }
+}
+
+/* ── القص والباندل ─────────────────────────────────────────────── */
+
+function cuttingDoc(db: Db, id: string, title: string): DocBody {
+  const lay = (db.cutLays ?? []).find((l) => l.id === id);
+  if (!lay) return missing(title, "الفرشة مش موجودة.");
+  const m = layMath(db, lay);
+  if (!m.sizes.length) return missing(title, "الفرشة مالهاش مقاسات، فمفيش حاجة تتقص.");
+
+  return {
+    title,
+    party: {
+      label: "أمر الإنتاج",
+      name: m.order ? `${m.order.code} — ${m.order.model}` : "بدون أمر",
+      rows: [
+        { label: "القماش", value: `${m.materialName}${lay.color ? ` — ${lay.color}` : ""}` },
+        { label: "الطبقات", value: qty(lay.plies, 0) },
+      ],
+    },
+    meta: [
+      { label: "التاريخ", value: formatDate(lay.date) },
+      { label: "طول الماركر", value: `${qty(lay.markerLengthM, 2)} م` },
+      { label: "الحالة", value: LAY_STATUS_LABEL[lay.status] },
+    ],
+    cols: [
+      { label: "المقاس" },
+      { label: "في الطبقة", align: "end", width: "22mm" },
+      { label: "الطبقات", align: "end", width: "20mm" },
+      { label: "القطع", align: "end", width: "22mm" },
+    ],
+    rows: m.sizes.map((s) => [s.size, qty(s.perPly, 0), qty(lay.plies, 0), qty(s.pieces, 0)]),
+    totals: [
+      { label: "إجمالي القطع", value: m.pieces, strong: true },
+      { label: `القماش المطلوب (${m.unit})`, value: m.actualM ?? m.plannedM },
+    ],
+    amount: null,
+    note: [
+      `المتر للقطعة ${qty(m.perPieceM, 3)} ${m.unit}`,
+      m.standardM ? `والمعياري ${qty(m.standardM, 3)}` : "ومفيش معياري مسجّل للمقارنة",
+      lay.notes,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    ok: true,
+  };
+}
+
+function bundleDoc(db: Db, id: string, title: string): DocBody {
+  const bundle = (db.bundles ?? []).find((b) => b.id === id);
+  if (!bundle) return missing(title, "الباندل مش موجود.");
+  const st = bundleState(db, bundle);
+  const trail = bundleTrail(db, bundle.id);
+
+  return {
+    title,
+    party: {
+      label: "الباندل",
+      name: bundle.code,
+      rows: [
+        { label: "الأمر", value: st.orderCode },
+        { label: "المقاس", value: `${bundle.size}${bundle.color ? ` — ${bundle.color}` : ""}` },
+      ],
+    },
+    meta: [
+      { label: "الكمية", value: qty(bundle.qty, 0) },
+      { label: "الحالة", value: st.label },
+    ],
+    cols: [{ label: "العملية" }, { label: "العامل" }, { label: "سليم", align: "end", width: "18mm" }],
+    rows: trail.length
+      ? trail.map((s) => [s.operationName, s.workerName, s.op.state === "done" ? qty(s.op.qtyGood, 0) : "—"])
+      : [["لسه ماشتغلش عليه حد", "—", "—"]],
+    totals: [{ label: "قطع الباندل", value: bundle.qty, strong: true }],
+    amount: null,
+    note: "التيكت ده بيمشي مع الباندل نفسه لحد التعبئة.",
+    ok: true,
+  };
+}
+
+/* ── الورش الخارجية ────────────────────────────────────────────── */
+
+function subOutDoc(db: Db, id: string, title: string): DocBody {
+  const sub = (db.subcontracts ?? []).find((s) => s.id === id);
+  if (!sub) return missing(title, "إذن التشغيل مش موجود.");
+  const v = subView(db, sub);
+  const party = partyById(db, sub.partyId);
+  const value = sub.qtySent * sub.rate;
+
+  return {
+    title,
+    party: {
+      label: "الورشة",
+      name: v.partyName,
+      rows: [
+        { label: "الهاتف", value: party?.phone ?? "" },
+        { label: "العملية", value: v.operationName ?? "—" },
+      ],
+    },
+    meta: [
+      { label: "التاريخ", value: formatDate(sub.date) },
+      { label: "المتوقع رجوعه", value: formatDate(sub.expectedDate) },
+      { label: "الأمر", value: v.orderCode ?? "—" },
+    ],
+    cols: [
+      { label: "البند" },
+      { label: "الكمية", align: "end", width: "22mm" },
+      { label: "الأجر", align: "end", width: "22mm" },
+      { label: "الإجمالي", align: "end", width: "24mm" },
+    ],
+    rows: [
+      [v.operationName ?? "تشغيل", qty(sub.qtySent, 0), qty(sub.rate, 2), qty(value, 2)],
+      ...v.materials.map((m) => [`خامة: ${m.name}`, `${qty(m.sent, 2)} ${m.unit}`, "—", "—"]),
+    ],
+    totals: [{ label: "أجر التشغيل لو رجع كامل", value, strong: true }],
+    amount: value,
+    receiptBlock: true,
+    note: [sub.notes, "المستحق النهائي بيتحسب على الراجع فعلًا، مش على الكمية اللي طلعت."].filter(Boolean).join(" · "),
+    ok: true,
+  };
+}
+
+function subInDoc(db: Db, id: string, title: string): DocBody {
+  const receipt = (db.subReceipts ?? []).find((r) => r.id === id);
+  if (!receipt) return missing(title, "الاستلام مش موجود.");
+  const sub = (db.subcontracts ?? []).find((s) => s.id === receipt.subcontractId);
+  if (!sub) return missing(title, "إذن التشغيل بتاع الاستلام ده مش موجود.");
+  const v = subView(db, sub);
+  const charge = (receipt.qtyGood + receipt.qtyRework) * sub.rate;
+
+  return {
+    title,
+    party: {
+      label: "الورشة",
+      name: v.partyName,
+      rows: [
+        { label: "الإذن", value: sub.code },
+        { label: "العملية", value: v.operationName ?? "—" },
+      ],
+    },
+    meta: [
+      { label: "التاريخ", value: formatDate(receipt.date) },
+      { label: "الميعاد المتوقع", value: formatDate(sub.expectedDate) },
+    ],
+    cols: [{ label: "البند" }, { label: "الكمية", align: "end", width: "24mm" }],
+    rows: [
+      ["سليم", qty(receipt.qtyGood, 0)],
+      ["محتاج إعادة شغل", qty(receipt.qtyRework, 0)],
+      ["فاقد", qty(receipt.qtyLost, 0)],
+      ["لسه عند الورشة", qty(v.outstanding, 0)],
+    ],
+    totals: [{ label: "المستحق على الاستلام ده", value: charge, strong: true }],
+    amount: charge,
+    receiptBlock: true,
+    note: receipt.notes || undefined,
+    ok: true,
+  };
+}
+
+function subAccountDoc(db: Db, partyId: string, title: string): DocBody {
+  const party = partyById(db, partyId);
+  if (!party) return missing(title, "الورشة مش موجودة.");
+  const lines = workshopStatement(db, partyId);
+  if (!lines.length) return missing(title, "الورشة دي مالهاش حركة تشغيل لسه.");
+  const balance = lines[lines.length - 1].balance;
+
+  return {
+    title,
+    party: {
+      label: "الورشة",
+      name: party.name,
+      rows: [{ label: "الهاتف", value: party.phone }],
+    },
+    meta: [{ label: "عدد الحركات", value: qty(lines.length, 0) }],
+    cols: [
+      { label: "التاريخ", width: "26mm" },
+      { label: "الحركة" },
+      { label: "مستحق", align: "end", width: "24mm" },
+      { label: "مدفوع", align: "end", width: "24mm" },
+      { label: "الرصيد", align: "end", width: "26mm" },
+    ],
+    rows: lines.map((l) => [
+      formatDate(l.date),
+      l.label,
+      l.debit ? qty(l.debit, 2) : "—",
+      l.credit ? qty(l.credit, 2) : "—",
+      qty(l.balance, 2),
+    ]),
+    totals: [{ label: "الرصيد المستحق للورشة", value: balance, strong: true }],
+    amount: balance,
+    ok: true,
+  };
 }
 
 function orderDoc(db: Db, id: string, title: string): DocBody {

@@ -470,6 +470,177 @@ export type StageEntry = {
   rate: number;
 };
 
+/* ── أرض المصنع: القص والفرشة والباندلات ───────────────────────
+ *
+ * الحلقة الناقصة بين «صرفت قماش» و«خرج ٣٠٠ قطعة» هي **الفرشة**: القماش
+ * بيتفرش طبقات، الماركر بيتحدد، القص بيطلع قطع، والقطع بتتربط باندلات
+ * مرقّمة بمقاس ولون. من غير الباندل، تتبع العملية بيبقى رقم إجمالي على
+ * الأمر كله؛ ومع الباندل، كل ٢٥ قطعة ليها هوية بتتنقل من عملية لعملية.
+ */
+
+export type CutLay = {
+  id: string;
+  factoryId: string;
+  orderId: string;
+  /** القماش اللي بيتفرش — خامة من المخزن */
+  materialId: string;
+  /** عملية القص في مسار المنتج — منها بيتسجّل الإنتاج */
+  operationId: string | null;
+  color: string;
+  date: string;
+  /** عدد الطبقات في الفرشة */
+  plies: number;
+  /** طول الماركر لطبقة واحدة (متر) */
+  markerLengthM: number;
+  /** فاقد الأطراف والنهايات لكل طبقة (متر) */
+  endAllowanceM: number;
+  /** عرض الفرشة (متر) — للتوثيق ومقارنة عرض الرول */
+  markerWidthM: number;
+  status: "planned" | "cut" | "cancelled";
+  cutAt: string | null;
+  /** المستهلك فعلًا وقت القص — لو مختلف عن المخطّط، الفرق هو الهالك */
+  fabricUsedM: number | null;
+  cancelReason?: string | null;
+  notes: string;
+};
+
+/** سطر مقاس في الفرشة: كل طبقة بتطلع `perPly` قطعة من المقاس ده */
+export type CutLayLine = {
+  id: string;
+  factoryId: string;
+  layId: string;
+  size: string;
+  perPly: number;
+};
+
+export type Bundle = {
+  id: string;
+  factoryId: string;
+  /** الرقم المطبوع على تيكت الباندل */
+  code: string;
+  orderId: string;
+  layId: string | null;
+  size: string;
+  color: string;
+  qty: number;
+  createdAt: string;
+};
+
+export const BUNDLE_OP_STATES = ["running", "paused", "done"] as const;
+export type BundleOpState = (typeof BUNDLE_OP_STATES)[number];
+
+/**
+ * تسجيل عملية على باندل.
+ *
+ * ده اللي بيرد على «القطعة وصلت لأي عملية، ومين شغّال عليها، وقعدت
+ * قد إيه». الكميات لما العملية تخلص بتتسجّل كمان في دفتر الإنتاج
+ * (`StageEntry`) عن طريق `stageEntryId` — فمفيش رقمين للإنتاج: الدفتر
+ * واحد، وده بيضيف عليه **الهوية والوقت**.
+ */
+export type BundleOp = {
+  id: string;
+  factoryId: string;
+  bundleId: string;
+  orderId: string;
+  operationId: string;
+  seq: number;
+  workerId: string | null;
+  state: BundleOpState;
+  startedAt: string;
+  endedAt: string | null;
+  /** دقايق التوقف المتراكمة (راحة، عطل، نقص خامة) */
+  pausedMinutes: number;
+  pausedAt: string | null;
+  pauseNote: string;
+  qtyGood: number;
+  qtyRework: number;
+  qtyScrap: number;
+  /** أجر القطعة وقت التسجيل */
+  rate: number;
+  /** الزمن المعياري للقطعة وقت البدء — الكفاءة بتتقاس عليه */
+  stdMinutes: number;
+  defect: string;
+  stageEntryId: string | null;
+  notes: string;
+};
+
+export const FLOOR_ISSUE_KINDS = ["machine", "material", "quality", "other"] as const;
+export type FloorIssueKind = (typeof FLOOR_ISSUE_KINDS)[number];
+
+export const FLOOR_ISSUE_LABEL: Record<FloorIssueKind, string> = {
+  machine: "عطل ماكينة",
+  material: "طلب خامة",
+  quality: "مشكلة جودة",
+  other: "حاجة تانية",
+};
+
+/** بلاغ من أرض المصنع: عطل، نقص خامة، مشكلة جودة — بيظهر على شاشة الخط */
+export type FloorIssue = {
+  id: string;
+  factoryId: string;
+  kind: FloorIssueKind;
+  line: string;
+  orderId: string | null;
+  bundleId: string | null;
+  workerId: string | null;
+  note: string;
+  at: string;
+  status: "open" | "resolved";
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+};
+
+/* ── الورش الخارجية ────────────────────────────────────────────
+ *
+ * الورشة **جهة تعامل** بدور `workshop` — مش جدول تاني. اللي جديد هنا هو
+ * حركة التشغيل نفسها: طلعت كمية وخامات، والمتوقع يرجع كذا، ورجع كذا،
+ * والفرق هالك. وحساب الورشة بيتحسب من الاستلامات مش من فاتورة مكتوبة.
+ */
+
+export type Subcontract = {
+  id: string;
+  factoryId: string;
+  code: string;
+  partyId: string;
+  orderId: string | null;
+  operationId: string | null;
+  date: string;
+  expectedDate: string;
+  /** الكمية اللي طلعت للورشة */
+  qtySent: number;
+  /** أجر تشغيل القطعة */
+  rate: number;
+  status: "open" | "closed" | "cancelled";
+  closedAt?: string | null;
+  cancelReason?: string | null;
+  notes: string;
+};
+
+export type SubReceipt = {
+  id: string;
+  factoryId: string;
+  subcontractId: string;
+  date: string;
+  qtyGood: number;
+  qtyRework: number;
+  /** الناقص أو التالف اللي مارجعش سليم */
+  qtyLost: number;
+  stageEntryId: string | null;
+  notes: string;
+};
+
+export type SubPayment = {
+  id: string;
+  factoryId: string;
+  partyId: string;
+  subcontractId: string | null;
+  date: string;
+  amount: number;
+  accountId: string;
+  method: PayMethod;
+  notes: string;
+};
+
 export type ManualTx = {
   id: string;
   factoryId: string;
@@ -520,6 +691,11 @@ export type DocNumbering = {
 export const DOC_TYPES = [
   "order",
   "production",
+  "cutting",
+  "bundle",
+  "subout",
+  "subin",
+  "subaccount",
   "issue",
   "grn",
   "qc",
@@ -609,6 +785,14 @@ export type Db = {
   routingSteps: RoutingStep[];
   stockMovements: StockMovement[];
   stageEntries: StageEntry[];
+  cutLays: CutLay[];
+  cutLayLines: CutLayLine[];
+  bundles: Bundle[];
+  bundleOps: BundleOp[];
+  floorIssues: FloorIssue[];
+  subcontracts: Subcontract[];
+  subReceipts: SubReceipt[];
+  subPayments: SubPayment[];
   costItems: CostItem[];
   costEntries: CostEntry[];
   costPayments: CostPayment[];

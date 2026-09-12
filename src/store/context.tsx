@@ -11,6 +11,7 @@ import {
   receivables,
   workerAdvance,
   workerBalance,
+  workshopBalance,
 } from "./compute";
 import type { ScoreWeights } from "./intelligence";
 import type { CapacitySettings } from "./planning";
@@ -49,11 +50,17 @@ import {
   activeBom,
   bomLines,
   computedProgress,
+  materialById,
   materialStock,
+  operationById,
   orderRequirements,
   orderStages,
+  routingLines,
   stockQty,
 } from "./manufacturing";
+import { bundleCode, layMath, nextBundleSeq, orderCutSummary, planBundles } from "./cutting";
+import { bundleState } from "./floor";
+import { subMovement, subView } from "./outsourcing";
 import { buildDoc, canTransition, DOC_DEFS, findDoc, type IssueInput } from "./documents";
 import { demoDb, emptyDb, templateData } from "./seed";
 import { PRODUCTION_LINES } from "./types";
@@ -62,6 +69,15 @@ import type {
   AuditEntry,
   Bom,
   BomItem,
+  Bundle,
+  BundleOp,
+  CutLay,
+  CutLayLine,
+  FloorIssue,
+  FloorIssueKind,
+  Subcontract,
+  SubPayment,
+  SubReceipt,
   Industry,
   Material,
   Operation,
@@ -141,6 +157,14 @@ function migrate(db: Db): Db {
     stockMovements: db.stockMovements ?? [],
     stageEntries: db.stageEntries ?? [],
     documents: db.documents ?? [],
+    cutLays: db.cutLays ?? [],
+    cutLayLines: db.cutLayLines ?? [],
+    bundles: db.bundles ?? [],
+    bundleOps: db.bundleOps ?? [],
+    floorIssues: db.floorIssues ?? [],
+    subcontracts: db.subcontracts ?? [],
+    subReceipts: db.subReceipts ?? [],
+    subPayments: db.subPayments ?? [],
     orders: (db.orders ?? []).map((o) => {
       const status: OrderStatus = (o.status as OrderStatus | "open") === "open" ? "running" : o.status;
       return {
@@ -448,6 +472,27 @@ type FactoryApi = {
   updateOrder: (id: string, patch: Partial<Order>) => void;
   deleteOrder: (id: string) => void;
   addManualTx: (input: Omit<ManualTx, "id" | "factoryId">) => void;
+  /* ── القص والباندلات ── */
+  addLay: (input: LayInput) => string;
+  updateLay: (id: string, patch: Partial<CutLay>) => void;
+  setLaySizes: (layId: string, sizes: { size: string; perPly: number }[]) => void;
+  cancelLay: (id: string, reason: string) => void;
+  /** القص: بيصرف القماش، بيسجّل الإنتاج، وبيطلّع الباندلات بتيكتاتها */
+  cutLayNow: (id: string, input: { fabricUsedM: number; perBundle: number; workerId: string | null }) => void;
+  /* ── تتبع العملية ── */
+  startBundleOp: (input: { bundleId: string; operationId?: string; workerId: string | null }) => string;
+  pauseBundleOp: (id: string, note: string) => void;
+  resumeBundleOp: (id: string) => void;
+  finishBundleOp: (id: string, input: { qtyGood: number; qtyRework: number; qtyScrap: number; defect: string }) => void;
+  reportIssue: (input: { kind: FloorIssueKind; line: string; orderId: string | null; bundleId: string | null; workerId: string | null; note: string }) => void;
+  resolveIssue: (id: string) => void;
+  /* ── الورش الخارجية ── */
+  addSubcontract: (input: SubcontractInput) => string;
+  sendSubMaterials: (subcontractId: string, rows: { materialId: string; qty: number }[]) => void;
+  receiveSubcontract: (input: { subcontractId: string; date: string; qtyGood: number; qtyRework: number; qtyLost: number; notes: string }) => void;
+  paySubcontract: (input: { partyId: string; subcontractId: string | null; date: string; amount: number; accountId: string; method: PayMethod; notes: string }) => void;
+  closeSubcontract: (id: string) => void;
+  cancelSubcontract: (id: string, reason: string) => void;
   /**
    * بيرجّع المستند: لو السجل ده ليه مستند شغّال بيرجّعه بنفس رقمه بدل ما
    * يعمل رقم جديد — طبع تاني مش مستند تاني.
@@ -466,10 +511,46 @@ type FactoryApi = {
   computed: ReturnType<typeof buildComputed>;
 };
 
+export type LayInput = {
+  orderId: string;
+  materialId: string;
+  operationId: string | null;
+  color: string;
+  date: string;
+  plies: number;
+  markerLengthM: number;
+  endAllowanceM: number;
+  markerWidthM: number;
+  notes: string;
+  sizes: { size: string; perPly: number }[];
+};
+
+export type SubcontractInput = {
+  partyId: string;
+  orderId: string | null;
+  operationId: string | null;
+  date: string;
+  expectedDate: string;
+  qtySent: number;
+  rate: number;
+  notes: string;
+};
+
 const Ctx = createContext<FactoryApi | null>(null);
 
 function fid(db: Db): string {
   return db.factory?.id ?? "";
+}
+
+/** كمية بشكل مقروء في رسائل الرفض — الرفض لازم يقول الرقم مش «مش كفاية» */
+function qtyText(value: number): string {
+  return String(Math.round(value * 100) / 100);
+}
+
+/** ترقيم إذون التشغيل الخارجي: SUB-0001 وطالع، والرقم مابيتكرّرش */
+function nextSubCode(subs: Subcontract[]): string {
+  const last = subs.reduce((max, s) => Math.max(max, Number(s.code?.replace(/\D/g, "")) || 0), 0);
+  return `SUB-${String(last + 1).padStart(4, "0")}`;
 }
 
 /** ترقيم أوامر الإنتاج: SN-1001 وطالع، ومفيش رقم يتكرر */
@@ -1404,6 +1485,582 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         const row: ManualTx = { ...input, id: nid(), factoryId: fid(db) };
         mutate({ manualTx: [row, ...db.manualTx] }, { action: "create", table: "manual_tx", recordId: row.id, before: null, after: row });
       },
+
+      /* ── القص والفرشة ─────────────────────────────────────────── */
+
+      addLay: (input) => {
+        need("production", "create");
+        const order = db.orders.find((o) => o.id === input.orderId);
+        if (!order) throw new Error("أمر الإنتاج مش موجود.");
+        if (!materialById(db, input.materialId)) throw new Error("لازم تختار القماش من الخامات.");
+        if (input.plies < 1) throw new Error("عدد الطبقات لازم يكون واحد على الأقل.");
+        if (input.markerLengthM <= 0) throw new Error("طول الماركر مطلوب — منه بيتحسب القماش.");
+        const sizes = input.sizes.filter((s) => s.size.trim() && s.perPly > 0);
+        if (!sizes.length) throw new Error("لازم مقاس واحد على الأقل بعدد قطع في الطبقة.");
+
+        const lay: CutLay = {
+          id: nid(),
+          factoryId: fid(db),
+          orderId: input.orderId,
+          materialId: input.materialId,
+          operationId: input.operationId,
+          color: input.color.trim(),
+          date: input.date,
+          plies: input.plies,
+          markerLengthM: input.markerLengthM,
+          endAllowanceM: input.endAllowanceM,
+          markerWidthM: input.markerWidthM,
+          status: "planned",
+          cutAt: null,
+          fabricUsedM: null,
+          notes: input.notes.trim(),
+        };
+        const lines: CutLayLine[] = sizes.map((s) => ({
+          id: nid(),
+          factoryId: fid(db),
+          layId: lay.id,
+          size: s.size.trim(),
+          perPly: s.perPly,
+        }));
+        mutate(
+          { cutLays: [lay, ...db.cutLays], cutLayLines: [...lines, ...db.cutLayLines] },
+          { action: "create", table: "cut_lays", recordId: lay.id, before: null, after: { ...lay, sizes: lines.length } },
+        );
+        return lay.id;
+      },
+      updateLay: (id, patch) => {
+        need("production", "edit");
+        const before = db.cutLays.find((l) => l.id === id);
+        if (!before) throw new Error("الفرشة مش موجودة.");
+        // الفرشة المقصوصة مابتتعدّلش: القماش خرج والإنتاج اتسجّل، والتعديل
+        // بعد كده معناه ورق بيخالف المخزن. عايز تغيّر؟ ألغِ وافرش تاني.
+        if (before.status === "cut") throw new Error("الفرشة اتقصّت خلاص — التعديل بعد القص مايغيّرش القماش اللي خرج.");
+        if (before.status === "cancelled") throw new Error("الفرشة ملغية.");
+        mutate(
+          { cutLays: db.cutLays.map((l) => (l.id === id ? { ...l, ...patch } : l)) },
+          { action: "update", table: "cut_lays", recordId: id, before, after: patch },
+        );
+      },
+      setLaySizes: (layId, sizes) => {
+        need("production", "edit");
+        const lay = db.cutLays.find((l) => l.id === layId);
+        if (!lay) throw new Error("الفرشة مش موجودة.");
+        if (lay.status !== "planned") throw new Error("مقاسات الفرشة بتتعدّل قبل القص بس.");
+        const clean = sizes.filter((s) => s.size.trim() && s.perPly > 0);
+        if (!clean.length) throw new Error("لازم مقاس واحد على الأقل.");
+        const before = db.cutLayLines.filter((l) => l.layId === layId);
+        const lines: CutLayLine[] = clean.map((s) => ({
+          id: nid(),
+          factoryId: fid(db),
+          layId,
+          size: s.size.trim(),
+          perPly: s.perPly,
+        }));
+        mutate(
+          { cutLayLines: [...lines, ...db.cutLayLines.filter((l) => l.layId !== layId)] },
+          { action: "update", table: "cut_lay_lines", recordId: layId, before, after: lines },
+        );
+      },
+      cancelLay: (id, reason) => {
+        need("production", "edit");
+        const before = db.cutLays.find((l) => l.id === id);
+        if (!before) throw new Error("الفرشة مش موجودة.");
+        if (!reason.trim()) throw new Error("الإلغاء لازم له سبب مكتوب.");
+        if (before.status === "cut") throw new Error("مينفعش تلغي فرشة اتقصّت — القماش خرج والباندلات موجودة.");
+        mutate(
+          { cutLays: db.cutLays.map((l) => (l.id === id ? { ...l, status: "cancelled", cancelReason: reason.trim() } : l)) },
+          { action: "update", table: "cut_lays", recordId: id, before, after: { status: "cancelled", reason: reason.trim() } },
+        );
+      },
+      /**
+       * القص: أربع حاجات في حركة واحدة، وكلها بتنجح مع بعض أو تفشل مع بعض —
+       * القماش بيخرج من المخزن، الإنتاج بيتسجّل في الدفتر، الباندلات بتتولد
+       * بتيكتاتها، والفرشة بتتقفل. لأن «قصّيت بس القماش لسه في المخزن» مش
+       * حالة ينفع تحصل.
+       */
+      cutLayNow: (id, input) => {
+        need("production", "create");
+        need("inventory", "edit");
+        const lay = db.cutLays.find((l) => l.id === id);
+        if (!lay) throw new Error("الفرشة مش موجودة.");
+        if (lay.status !== "planned") throw new Error("الفرشة دي مش مخططة — يا مقصوصة يا ملغية.");
+        const order = db.orders.find((o) => o.id === lay.orderId);
+        if (!order) throw new Error("أمر الإنتاج مش موجود.");
+        const m = layMath(db, lay);
+        if (!m.pieces) throw new Error("الفرشة مالهاش قطع — راجع المقاسات والطبقات.");
+
+        const used = input.fabricUsedM > 0 ? input.fabricUsedM : m.plannedM;
+        const available = stockQty(db, "material", lay.materialId);
+        if (used > available + 0.0001) {
+          throw new Error(`رصيد ${m.materialName} ${qtyText(available)} بس، والفرشة عايزة ${qtyText(used)}.`);
+        }
+        const cut = orderCutSummary(db, order).cutPieces;
+        if (cut + m.pieces > order.quantity) {
+          throw new Error(`الأمر ${order.quantity} قطعة، ومقصوص منه ${cut} — الفرشة دي بتعدّي الكمية.`);
+        }
+
+        const date = cairoToday();
+        const now = new Date().toISOString();
+        const movement: StockMovement = {
+          id: nid(),
+          factoryId: fid(db),
+          date,
+          itemType: "material",
+          itemId: lay.materialId,
+          warehouseId: db.warehouses.find((w) => w.kind === "material")?.id ?? null,
+          kind: "issue",
+          qty: -used,
+          unitCost: materialById(db, lay.materialId)?.avgCost ?? 0,
+          refType: "lay",
+          refId: lay.id,
+          notes: `فرشة ${order.code} — ${lay.plies} طبقة`,
+        };
+
+        const seqStart = nextBundleSeq(db, order.id);
+        const plan = planBundles(m.sizes.map((s) => ({ size: s.size, pieces: s.pieces })), input.perBundle);
+        const bundles: Bundle[] = plan.map((p, i) => ({
+          id: nid(),
+          factoryId: fid(db),
+          code: bundleCode(order.code, seqStart + i),
+          orderId: order.id,
+          layId: lay.id,
+          size: p.size,
+          color: lay.color,
+          qty: p.qty,
+          createdAt: now,
+        }));
+
+        // الإنتاج بيتسجّل في نفس دفتر المراحل زي أي تسجيل تاني، فالتقدّم
+        // والتكلفة والأجور مابيحتاجوش يعرفوا إن ده جه من فرشة
+        const stage: StageEntry[] = [];
+        const earnings: WorkerEarning[] = [];
+        if (lay.operationId) {
+          const route = order.productId
+            ? routingLines(db, order.productId).find((r) => r.operationId === lay.operationId)
+            : undefined;
+          const rate = route?.rate ?? operationById(db, lay.operationId)?.defaultRate ?? 0;
+          const row: StageEntry = {
+            id: nid(),
+            factoryId: fid(db),
+            orderId: order.id,
+            operationId: lay.operationId,
+            date,
+            workerId: input.workerId,
+            qtyGood: m.pieces,
+            qtyRework: 0,
+            qtyScrap: 0,
+            rate,
+          };
+          stage.push(row);
+          const worker = input.workerId ? db.workers.find((w) => w.id === input.workerId) : null;
+          if (worker && worker.payType === "piece") {
+            earnings.push({
+              id: nid(),
+              factoryId: fid(db),
+              workerId: worker.id,
+              date,
+              kind: "piece",
+              amount: (rate || worker.rate) * m.pieces,
+              notes: `قص ${m.pieces} قطعة — ${order.code}`,
+            });
+          }
+        }
+
+        const stageEntries = [...stage, ...db.stageEntries];
+        const progress = computedProgress({ ...db, stageEntries }, order);
+        mutate(
+          {
+            cutLays: db.cutLays.map((l) => (l.id === id ? { ...l, status: "cut", cutAt: now, fabricUsedM: used } : l)),
+            bundles: [...bundles, ...db.bundles],
+            stockMovements: [movement, ...db.stockMovements],
+            stageEntries,
+            workerEarnings: earnings.length ? [...earnings, ...db.workerEarnings] : db.workerEarnings,
+            orders:
+              progress === null
+                ? db.orders
+                : db.orders.map((o) => (o.id === order.id ? { ...o, progress } : o)),
+          },
+          {
+            action: "update",
+            table: "cut_lays",
+            recordId: lay.id,
+            before: { status: lay.status },
+            after: { status: "cut", fabricUsedM: used, pieces: m.pieces, bundles: bundles.length },
+          },
+        );
+      },
+
+      /* ── تتبع العملية على الباندل ─────────────────────────────── */
+
+      startBundleOp: (input) => {
+        need("production", "create");
+        const bundle = db.bundles.find((b) => b.id === input.bundleId);
+        if (!bundle) throw new Error("الباندل مش موجود.");
+        const st = bundleState(db, bundle);
+        if (st.active) throw new Error(`الباندل ده ${st.label} — اقفل العملية اللي شغالة الأول.`);
+        const order = db.orders.find((o) => o.id === bundle.orderId);
+        if (!order) throw new Error("أمر الإنتاج مش موجود.");
+        const routes = order.productId ? routingLines(db, order.productId) : [];
+        if (!routes.length) throw new Error("المنتج مالوش مسار تصنيع — ضيف العمليات الأول.");
+        const wanted = input.operationId ?? st.nextOperationId;
+        if (!wanted) throw new Error("الباندل ده خلّص كل عمليات المسار.");
+        const route = routes.find((r) => r.operationId === wanted);
+        if (!route) throw new Error("العملية دي مش في مسار المنتج.");
+
+        const row: BundleOp = {
+          id: nid(),
+          factoryId: fid(db),
+          bundleId: bundle.id,
+          orderId: bundle.orderId,
+          operationId: route.operationId,
+          seq: route.seq,
+          workerId: input.workerId,
+          state: "running",
+          startedAt: new Date().toISOString(),
+          endedAt: null,
+          pausedMinutes: 0,
+          pausedAt: null,
+          pauseNote: "",
+          qtyGood: 0,
+          qtyRework: 0,
+          qtyScrap: 0,
+          rate: route.rate,
+          stdMinutes: route.stdMinutes,
+          defect: "",
+          stageEntryId: null,
+          notes: "",
+        };
+        mutate(
+          { bundleOps: [row, ...db.bundleOps] },
+          { action: "create", table: "bundle_ops", recordId: row.id, before: null, after: row },
+        );
+        return row.id;
+      },
+      pauseBundleOp: (id, note) => {
+        need("production", "edit");
+        const before = db.bundleOps.find((o) => o.id === id);
+        if (!before) throw new Error("التسجيل مش موجود.");
+        if (before.state !== "running") throw new Error("العملية دي مش شغالة.");
+        const after = { state: "paused" as const, pausedAt: new Date().toISOString(), pauseNote: note.trim() };
+        mutate(
+          { bundleOps: db.bundleOps.map((o) => (o.id === id ? { ...o, ...after } : o)) },
+          { action: "update", table: "bundle_ops", recordId: id, before, after },
+        );
+      },
+      resumeBundleOp: (id) => {
+        need("production", "edit");
+        const before = db.bundleOps.find((o) => o.id === id);
+        if (!before) throw new Error("التسجيل مش موجود.");
+        if (before.state !== "paused") throw new Error("العملية دي مش واقفة.");
+        // وقت التوقف بيتراكم في `pausedMinutes` عشان الكفاءة تتحسب على
+        // الوقت اللي الشغل كان ماشي فيه فعلًا، مش على الساعة من غير خصم
+        const added = before.pausedAt ? Math.max(0, (Date.now() - Date.parse(before.pausedAt)) / 60000) : 0;
+        const after = {
+          state: "running" as const,
+          pausedAt: null,
+          pausedMinutes: before.pausedMinutes + Math.round(added),
+        };
+        mutate(
+          { bundleOps: db.bundleOps.map((o) => (o.id === id ? { ...o, ...after } : o)) },
+          { action: "update", table: "bundle_ops", recordId: id, before, after },
+        );
+      },
+      finishBundleOp: (id, input) => {
+        need("production", "create");
+        const before = db.bundleOps.find((o) => o.id === id);
+        if (!before) throw new Error("التسجيل مش موجود.");
+        if (before.state === "done") throw new Error("العملية دي مقفولة خلاص.");
+        const bundle = db.bundles.find((b) => b.id === before.bundleId);
+        if (!bundle) throw new Error("الباندل مش موجود.");
+        const order = db.orders.find((o) => o.id === before.orderId);
+        if (!order) throw new Error("أمر الإنتاج مش موجود.");
+        const total = input.qtyGood + input.qtyRework + input.qtyScrap;
+        if (total <= 0) throw new Error("سجّل كمية واحدة على الأقل.");
+        if (total > bundle.qty) throw new Error(`الباندل ${bundle.qty} قطعة — مينفعش تسجّل ${total}.`);
+
+        const now = new Date().toISOString();
+        const paused = before.state === "paused" && before.pausedAt
+          ? before.pausedMinutes + Math.round(Math.max(0, (Date.now() - Date.parse(before.pausedAt)) / 60000))
+          : before.pausedMinutes;
+
+        // نفس حارس دفتر الإنتاج: مينفعش عملية تعدّي اللي قبلها. بنسأله
+        // الأول عشان الرفض ييجي قبل أي كتابة، مش بعد نصها.
+        const stages = orderStages(db, order);
+        const here = stages.find((s) => s.operationId === before.operationId);
+        const done = (here?.good ?? 0) + (here?.scrap ?? 0);
+        if (done + input.qtyGood + input.qtyScrap > order.quantity) {
+          throw new Error(`كمية الأمر ${order.quantity} والمرحلة دي خلّصت ${done} خلاص.`);
+        }
+        const idx = stages.findIndex((s) => s.operationId === before.operationId);
+        if (idx > 0) {
+          const prev = stages[idx - 1];
+          if (done + input.qtyGood + input.qtyScrap > prev.good) {
+            throw new Error(`مرحلة ${prev.name} خلّصت ${prev.good} بس — مينفعش اللي بعدها تعدّيها.`);
+          }
+        }
+
+        const stage: StageEntry = {
+          id: nid(),
+          factoryId: fid(db),
+          orderId: order.id,
+          operationId: before.operationId,
+          date: cairoToday(),
+          workerId: before.workerId,
+          qtyGood: input.qtyGood,
+          qtyRework: input.qtyRework,
+          qtyScrap: input.qtyScrap,
+          rate: before.rate,
+        };
+        const worker = before.workerId ? db.workers.find((w) => w.id === before.workerId) : null;
+        const earnings: WorkerEarning[] =
+          worker && worker.payType === "piece" && input.qtyGood > 0
+            ? [
+                {
+                  id: nid(),
+                  factoryId: fid(db),
+                  workerId: worker.id,
+                  date: stage.date,
+                  kind: "piece",
+                  amount: (before.rate || worker.rate) * input.qtyGood,
+                  notes: `${input.qtyGood} قطعة — ${bundle.code}`,
+                },
+              ]
+            : [];
+
+        const after = {
+          state: "done" as const,
+          endedAt: now,
+          pausedAt: null,
+          pausedMinutes: paused,
+          qtyGood: input.qtyGood,
+          qtyRework: input.qtyRework,
+          qtyScrap: input.qtyScrap,
+          defect: input.defect.trim(),
+          stageEntryId: stage.id,
+        };
+        const stageEntries = [stage, ...db.stageEntries];
+        const progress = computedProgress({ ...db, stageEntries }, order);
+        mutate(
+          {
+            bundleOps: db.bundleOps.map((o) => (o.id === id ? { ...o, ...after } : o)),
+            stageEntries,
+            workerEarnings: earnings.length ? [...earnings, ...db.workerEarnings] : db.workerEarnings,
+            orders:
+              progress === null ? db.orders : db.orders.map((o) => (o.id === order.id ? { ...o, progress } : o)),
+          },
+          { action: "update", table: "bundle_ops", recordId: id, before, after },
+        );
+      },
+      reportIssue: (input) => {
+        need("production", "create");
+        if (!input.note.trim()) throw new Error("اكتب المشكلة في سطر — البلاغ بلا وصف مالوش لازمة.");
+        const row: FloorIssue = {
+          id: nid(),
+          factoryId: fid(db),
+          kind: input.kind,
+          line: input.line,
+          orderId: input.orderId,
+          bundleId: input.bundleId,
+          workerId: input.workerId,
+          note: input.note.trim(),
+          at: new Date().toISOString(),
+          status: "open",
+          resolvedAt: null,
+          resolvedBy: null,
+        };
+        mutate(
+          { floorIssues: [row, ...db.floorIssues] },
+          { action: "create", table: "floor_issues", recordId: row.id, before: null, after: row },
+        );
+      },
+      resolveIssue: (id) => {
+        need("production", "edit");
+        const before = db.floorIssues.find((i) => i.id === id);
+        if (!before) throw new Error("البلاغ مش موجود.");
+        if (before.status === "resolved") return;
+        const after = { status: "resolved" as const, resolvedAt: new Date().toISOString(), resolvedBy: session?.memberId ?? "" };
+        mutate(
+          { floorIssues: db.floorIssues.map((i) => (i.id === id ? { ...i, ...after } : i)) },
+          { action: "update", table: "floor_issues", recordId: id, before, after },
+        );
+      },
+
+      /* ── الورش الخارجية ───────────────────────────────────────── */
+
+      addSubcontract: (input) => {
+        need("purchasing", "create");
+        const party = db.parties.find((p) => p.id === input.partyId);
+        if (!party) throw new Error("لازم تختار الورشة من جهات التعامل.");
+        if (input.qtySent <= 0) throw new Error("الكمية لازم تكون أكبر من صفر.");
+        if (input.rate <= 0) throw new Error("أجر القطعة مطلوب — منه بيتحسب حساب الورشة.");
+        if (input.expectedDate < input.date) throw new Error("ميعاد الرجوع مايكونش قبل تاريخ الخروج.");
+        const row: Subcontract = {
+          id: nid(),
+          factoryId: fid(db),
+          code: nextSubCode(db.subcontracts),
+          partyId: input.partyId,
+          orderId: input.orderId,
+          operationId: input.operationId,
+          date: input.date,
+          expectedDate: input.expectedDate,
+          qtySent: input.qtySent,
+          rate: input.rate,
+          status: "open",
+          notes: input.notes.trim(),
+        };
+        // الورشة بتاخد دور `workshop` لو مكانش معاها — سجل واحد بأدوار
+        // متعددة، مش سجل تاني لنفس الجهة
+        const parties = party.roles.includes("workshop")
+          ? db.parties
+          : db.parties.map((p) => (p.id === party.id ? { ...p, roles: [...p.roles, "workshop" as const] } : p));
+        mutate(
+          { subcontracts: [row, ...db.subcontracts], parties },
+          { action: "create", table: "subcontracts", recordId: row.id, before: null, after: row },
+        );
+        return row.id;
+      },
+      sendSubMaterials: (subcontractId, rows) => {
+        need("inventory", "edit");
+        const sub = db.subcontracts.find((s) => s.id === subcontractId);
+        if (!sub) throw new Error("إذن التشغيل مش موجود.");
+        if (sub.status !== "open") throw new Error("الإذن ده مقفول أو ملغي.");
+        const clean = rows.filter((r) => r.materialId && r.qty > 0);
+        if (!clean.length) throw new Error("اختار خامة وكمية.");
+        const warehouseId = db.warehouses.find((w) => w.kind === "material")?.id ?? null;
+        const date = cairoToday();
+        const movements: StockMovement[] = [];
+        for (const r of clean) {
+          const material = materialById(db, r.materialId);
+          const available = stockQty(db, "material", r.materialId);
+          if (r.qty > available + 0.0001) {
+            throw new Error(`رصيد ${material?.name ?? "الخامة"} ${qtyText(available)} بس.`);
+          }
+          movements.push(
+            subMovement(fid(db), nid(), sub.id, r.materialId, warehouseId, -r.qty, material?.avgCost ?? 0, date, sub.code),
+          );
+        }
+        mutate(
+          { stockMovements: [...movements, ...db.stockMovements] },
+          { action: "create", table: "stock_movements", recordId: movements[0].id, before: null, after: { sub: sub.code, lines: movements.length } },
+        );
+      },
+      receiveSubcontract: (input) => {
+        need("purchasing", "create");
+        const sub = db.subcontracts.find((s) => s.id === input.subcontractId);
+        if (!sub) throw new Error("إذن التشغيل مش موجود.");
+        if (sub.status === "cancelled") throw new Error("الإذن ملغي.");
+        const total = input.qtyGood + input.qtyRework + input.qtyLost;
+        if (total <= 0) throw new Error("سجّل كمية واحدة على الأقل.");
+        const v = subView(db, sub);
+        if (total > v.outstanding + 0.0001) {
+          throw new Error(`لسه عند الورشة ${v.outstanding} قطعة بس — مينفعش تستلم ${total}.`);
+        }
+
+        const receipt: SubReceipt = {
+          id: nid(),
+          factoryId: fid(db),
+          subcontractId: sub.id,
+          date: input.date,
+          qtyGood: input.qtyGood,
+          qtyRework: input.qtyRework,
+          qtyLost: input.qtyLost,
+          stageEntryId: null,
+          notes: input.notes.trim(),
+        };
+
+        // الشغل الراجع بيتسجّل في دفتر الإنتاج على العملية الخارجية —
+        // فتقدّم الأمر وتكلفته بيشوفوا شغل الورشة زي شغل المصنع بالظبط
+        const stage: StageEntry[] = [];
+        const order = sub.orderId ? db.orders.find((o) => o.id === sub.orderId) : null;
+        if (order && sub.operationId && input.qtyGood > 0) {
+          const stages = orderStages(db, order);
+          const here = stages.find((s) => s.operationId === sub.operationId);
+          const done = (here?.good ?? 0) + (here?.scrap ?? 0);
+          if (done + input.qtyGood <= order.quantity) {
+            const row: StageEntry = {
+              id: nid(),
+              factoryId: fid(db),
+              orderId: order.id,
+              operationId: sub.operationId,
+              date: input.date,
+              workerId: null,
+              qtyGood: input.qtyGood,
+              qtyRework: input.qtyRework,
+              qtyScrap: input.qtyLost,
+              rate: sub.rate,
+            };
+            stage.push(row);
+            receipt.stageEntryId = row.id;
+          }
+        }
+
+        const stageEntries = [...stage, ...db.stageEntries];
+        const progress = order ? computedProgress({ ...db, stageEntries }, order) : null;
+        const accounted = v.received + v.rework + v.lost + total;
+        mutate(
+          {
+            subReceipts: [receipt, ...db.subReceipts],
+            stageEntries,
+            subcontracts:
+              accounted >= sub.qtySent - 0.0001
+                ? db.subcontracts.map((s) => (s.id === sub.id ? { ...s, status: "closed" as const, closedAt: input.date } : s))
+                : db.subcontracts,
+            orders:
+              order && progress !== null
+                ? db.orders.map((o) => (o.id === order.id ? { ...o, progress } : o))
+                : db.orders,
+          },
+          { action: "create", table: "sub_receipts", recordId: receipt.id, before: null, after: receipt },
+        );
+      },
+      paySubcontract: (input) => {
+        need("finance", "create");
+        if (input.amount <= 0) throw new Error("المبلغ لازم يكون أكبر من صفر.");
+        if (!db.accounts.some((a) => a.id === input.accountId)) throw new Error("اختار حساب الخزينة.");
+        const due = workshopBalance(db, input.partyId);
+        if (input.amount > due + 0.0001) {
+          throw new Error(`المستحق للورشة ${Math.round(due)} جنيه — مينفعش تدفع أكتر من المستحق.`);
+        }
+        const row: SubPayment = {
+          id: nid(),
+          factoryId: fid(db),
+          partyId: input.partyId,
+          subcontractId: input.subcontractId,
+          date: input.date,
+          amount: input.amount,
+          accountId: input.accountId,
+          method: input.method,
+          notes: input.notes.trim(),
+        };
+        mutate(
+          { subPayments: [row, ...db.subPayments] },
+          { action: "create", table: "sub_payments", recordId: row.id, before: null, after: row },
+        );
+      },
+      closeSubcontract: (id) => {
+        need("purchasing", "edit");
+        const before = db.subcontracts.find((s) => s.id === id);
+        if (!before) throw new Error("إذن التشغيل مش موجود.");
+        if (before.status !== "open") throw new Error("الإذن مش مفتوح.");
+        mutate(
+          { subcontracts: db.subcontracts.map((s) => (s.id === id ? { ...s, status: "closed", closedAt: cairoToday() } : s)) },
+          { action: "update", table: "subcontracts", recordId: id, before, after: { status: "closed" } },
+        );
+      },
+      cancelSubcontract: (id, reason) => {
+        need("purchasing", "edit");
+        const before = db.subcontracts.find((s) => s.id === id);
+        if (!before) throw new Error("إذن التشغيل مش موجود.");
+        if (!reason.trim()) throw new Error("الإلغاء لازم له سبب مكتوب.");
+        if (db.subReceipts.some((r) => r.subcontractId === id)) {
+          throw new Error("فيه استلامات على الإذن ده — اقفله بدل ما تلغيه.");
+        }
+        mutate(
+          { subcontracts: db.subcontracts.map((s) => (s.id === id ? { ...s, status: "cancelled", cancelReason: reason.trim() } : s)) },
+          { action: "update", table: "subcontracts", recordId: id, before, after: { status: "cancelled", reason: reason.trim() } },
+        );
+      },
+
       issueDoc: (input) => {
         const def = DOC_DEFS[input.type];
         need(def.perm, "export");
@@ -1534,6 +2191,14 @@ function emptyShell(): Db {
     orders: [],
     manualTx: [],
     documents: [],
+    cutLays: [],
+    cutLayLines: [],
+    bundles: [],
+    bundleOps: [],
+    floorIssues: [],
+    subcontracts: [],
+    subReceipts: [],
+    subPayments: [],
     auditLog: [],
   };
 }

@@ -278,6 +278,14 @@ export function emptyDb(factoryName: string, industry: Industry = "custom"): Db 
     orders: [],
     manualTx: [],
     documents: [],
+    cutLays: [],
+    cutLayLines: [],
+    bundles: [],
+    bundleOps: [],
+    floorIssues: [],
+    subcontracts: [],
+    subReceipts: [],
+    subPayments: [],
     auditLog: [
       {
         id: nid(),
@@ -435,6 +443,12 @@ export function demoDb(): Db {
     mv("product", "p1", whFg, "receipt_fg", 190, 212, addDays(today, -3), "order", "o1", "تام جزئي"),
     mv("product", "p3", whFg, "receipt_fg", 160, 114, addDays(today, -5), "order", "o5"),
     mv("product", "p3", whFg, "delivery", -160, 114, addDays(today, -2), "delivery", "d5", "تسليم تيشيرت"),
+    // قماش الفرشة بيتصرف على الفرشة نفسها، مش على الأمر كله — فالمستهلك
+    // معروف لأي فرشة بالظبط، ومنه بتتحسب نسبة الاستغلال
+    mv("material", mat("قماش كتان"), whMat, "issue", -94, 120, addDays(today, -5), "lay", "lay-1", "فرشة فستان — 20 طبقة"),
+    // خامات طلعت مع إذن التشغيل الخارجي ورجع منها جزء
+    mv("material", mat("خيط بوليستر"), whMat, "issue", -9, 18, addDays(today, -12), "subcontract", "sub-1", "خامات طلعت لورشة — SUB-0001"),
+    mv("material", mat("خيط بوليستر"), whMat, "return", 1, 18, addDays(today, -5), "subcontract", "sub-1", "خامات رجعت من ورشة — SUB-0001"),
   ];
 
   const party = (
@@ -541,6 +555,13 @@ export function demoDb(): Db {
       notes: "خياطة خارجية بالقطعة",
       tags: ["تشغيل خارجي"],
     }),
+    party("ws-2", "ورشة النور للمكوى والتشطيب", ["workshop"], {
+      phone: "01288889999",
+      notes: "مكوى وتشطيب وتعليق",
+      governorate: "القاهرة",
+      city: "شبرا",
+      tags: ["تشغيل خارجي"],
+    }),
     party("rep-1", "أحمد سيد — مندوب", ["sales_rep", "collection_rep"], {
       kind: "person",
       phone: "01099998888",
@@ -631,7 +652,9 @@ export function demoDb(): Db {
     { id: "ce2", factoryId: FID, costItemId: "ci-14", date: addDays(today, -9), vendor: "المالك", partyId: "sup-4", quantity: 1, amount: 18000, notes: "إيجار سبتمبر" },
     { id: "ce3", factoryId: FID, costItemId: "ci-4", date: addDays(today, -5), vendor: "مكتبة الإكسسوار", partyId: "sup-2", quantity: 2000, amount: 4200, notes: "" },
     { id: "ce4", factoryId: FID, costItemId: "ci-15", date: addDays(today, -3), vendor: "شركة الكهرباء", partyId: "sup-3", quantity: 1, amount: 3100, notes: "" },
-    { id: "ce5", factoryId: FID, costItemId: "ci-10", date: addDays(today, -7), vendor: "ورشة عم شريف للخياطة", partyId: "ws-1", quantity: 300, amount: 9000, notes: "خياطة برة" },
+    // شغل الورشة الخارجية مابقاش فاتورة مشتريات: بقى إذن تشغيل SUB-0001
+    // وحسابه بيتحسب من الاستلامات (شوف `subcontracts` تحت). لو سجّلناه في
+    // الاتنين كان المصروف بيتعدّ مرتين.
   ];
 
   const costPayments = [
@@ -639,7 +662,6 @@ export function demoDb(): Db {
     { id: nid(), factoryId: FID, costEntryId: "ce1", date: addDays(today, -14), amount: 20000, accountId: bank, method: "bank" as const },
     { id: nid(), factoryId: FID, costEntryId: "ce2", date: addDays(today, -9), amount: 18000, accountId: cash, method: "cash" as const },
     { id: nid(), factoryId: FID, costEntryId: "ce4", date: addDays(today, -3), amount: 3100, accountId: wallet, method: "wallet" as const },
-    { id: nid(), factoryId: FID, costEntryId: "ce5", date: addDays(today, -6), amount: 4000, accountId: cash, method: "cash" as const },
   ];
 
   const orders = [
@@ -649,6 +671,7 @@ export function demoDb(): Db {
     { id: "o4", factoryId: FID, code: "SN-1039", clientId: "cl-2", model: "بدلة مكتبية", productId: null, bomId: null, materialsIssuedAt: null, line: "خط التشطيب", quantity: 40, progress: 100, pieceCost: 1180, piecePrice: 1525, dueDate: addDays(today, -6), status: "done" as const, notes: "" },
     { id: "o5", factoryId: FID, code: "SN-1041", clientId: "cl-3", model: "تيشيرت مطبوع", productId: "p3", bomId: "b3", materialsIssuedAt: null, line: "الخط الأول", quantity: 160, progress: 40, pieceCost: 114, piecePrice: 165, dueDate: addDays(today, -2), status: "late" as const, notes: "المطبعة متأخرة" },
     { id: "o6", factoryId: FID, code: "SN-1045", clientId: null, model: "جاكت شتوي", productId: null, bomId: null, materialsIssuedAt: null, line: "الخط الثاني", quantity: 120, progress: 12, pieceCost: 320, piecePrice: 460, dueDate: addDays(today, 30), status: "stopped" as const, notes: "مستني وصول القماش" },
+    { id: "o7", factoryId: FID, code: "SN-1046", clientId: "cl-2", model: "قميص قطني", productId: "p1", bomId: "b1", materialsIssuedAt: null, line: "الخط الأول", quantity: 200, progress: 0, pieceCost: 212, piecePrice: 272, dueDate: addDays(today, 6), status: "running" as const, notes: "الفرشة مخططة ولسه ماتقصّتش" },
   ];
 
   const stageEntries = [
@@ -661,6 +684,194 @@ export function demoDb(): Db {
     { id: nid(), factoryId: FID, orderId: "o2", operationId: op("خياطة"), date: addDays(today, -2), workerId: "w2", qtyGood: 36, qtyRework: 2, qtyScrap: 0, rate: 40 },
     { id: nid(), factoryId: FID, orderId: "o5", operationId: op("قص"), date: addDays(today, -8), workerId: "w1", qtyGood: 160, qtyRework: 0, qtyScrap: 3, rate: 4 },
     { id: nid(), factoryId: FID, orderId: "o5", operationId: op("خياطة"), date: addDays(today, -6), workerId: "w2", qtyGood: 64, qtyRework: 0, qtyScrap: 0, rate: 12 },
+    // شغل النهاردة — نفس الكميات اللي مسجّلة على الباندلات تحت بالحرف،
+    // فدفتر الإنتاج والباندل بيقولوا نفس الرقم مش رقمين
+    { id: nid(), factoryId: FID, orderId: "o1", operationId: op("مكوى"), date: today, workerId: "w4", qtyGood: 40, qtyRework: 0, qtyScrap: 0, rate: 5 },
+    { id: nid(), factoryId: FID, orderId: "o1", operationId: op("فحص جودة"), date: today, workerId: "w5", qtyGood: 44, qtyRework: 2, qtyScrap: 0, rate: 3 },
+    { id: nid(), factoryId: FID, orderId: "o1", operationId: op("تعبئة"), date: today, workerId: "w5", qtyGood: 44, qtyRework: 0, qtyScrap: 0, rate: 3 },
+    { id: "se-o2-mk", factoryId: FID, orderId: "o2", operationId: op("مكوى"), date: today, workerId: "w4", qtyGood: 20, qtyRework: 0, qtyScrap: 0, rate: 7 },
+    { id: "se-o2-pk", factoryId: FID, orderId: "o2", operationId: op("تعبئة"), date: today, workerId: "w5", qtyGood: 16, qtyRework: 4, qtyScrap: 0, rate: 4 },
+  ];
+
+  /**
+   * أرض المصنع في وضع العرض.
+   *
+   * أمر الفستان (o2) **متتبّع بالباندل بالكامل**: فرشة مقصوصة، باندلين،
+   * وكل عملية عليهم مسجّلة بوقت بدايتها ونهايتها — فالكفاءة والإنتاج
+   * بالساعة والشغل الجاري كلهم بيطلعوا من بيانات حقيقية. وأمر القمصان
+   * الجديد (o7) فرشته **مخططة ولسه ماتقصّتش**، عشان تشوف خطوة القص
+   * وهي بتحصل.
+   */
+  const at = (day: string, time: string) => `${day}T${time}:00.000Z`;
+
+  const cutLays = [
+    {
+      id: "lay-1",
+      factoryId: FID,
+      orderId: "o2",
+      materialId: mat("قماش كتان"),
+      operationId: op("قص"),
+      color: "أوف وايت",
+      date: addDays(today, -5),
+      plies: 20,
+      markerLengthM: 4.4,
+      endAllowanceM: 0.2,
+      markerWidthM: 1.5,
+      status: "cut" as const,
+      cutAt: at(addDays(today, -5), "11:20"),
+      fabricUsedM: 94,
+      notes: "فرشة فستان صيفي — مقاسين",
+    },
+    {
+      id: "lay-2",
+      factoryId: FID,
+      orderId: "o7",
+      materialId: mat("قماش قطن"),
+      operationId: op("قص"),
+      color: "أزرق فاتح",
+      date: today,
+      plies: 25,
+      markerLengthM: 12.6,
+      endAllowanceM: 0.3,
+      markerWidthM: 1.6,
+      status: "planned" as const,
+      cutAt: null,
+      fabricUsedM: null,
+      notes: "٨ قطع في الطبقة على ٤ مقاسات",
+    },
+  ];
+
+  const cutLayLines = [
+    { id: nid(), factoryId: FID, layId: "lay-1", size: "M", perPly: 1 },
+    { id: nid(), factoryId: FID, layId: "lay-1", size: "L", perPly: 1 },
+    { id: nid(), factoryId: FID, layId: "lay-2", size: "M", perPly: 3 },
+    { id: nid(), factoryId: FID, layId: "lay-2", size: "L", perPly: 3 },
+    { id: nid(), factoryId: FID, layId: "lay-2", size: "XL", perPly: 2 },
+  ];
+
+  const bundles = [
+    { id: "bn-1", factoryId: FID, code: "SN-1043-B001", orderId: "o2", layId: "lay-1", size: "M", color: "أوف وايت", qty: 20, createdAt: at(addDays(today, -5), "11:25") },
+    { id: "bn-2", factoryId: FID, code: "SN-1043-B002", orderId: "o2", layId: "lay-1", size: "L", color: "أوف وايت", qty: 20, createdAt: at(addDays(today, -5), "11:25") },
+  ];
+
+  const bundleOp = (
+    id: string,
+    bundleId: string,
+    operation: string,
+    seq: number,
+    workerId: string | null,
+    state: "running" | "paused" | "done",
+    startedAt: string,
+    endedAt: string | null,
+    pausedMinutes: number,
+    good: number,
+    rework: number,
+    scrap: number,
+    rate: number,
+    stdMinutes: number,
+    defect = "",
+  ) => ({
+    id,
+    factoryId: FID,
+    bundleId,
+    orderId: "o2",
+    operationId: op(operation),
+    seq,
+    workerId,
+    state,
+    startedAt,
+    endedAt,
+    pausedMinutes,
+    pausedAt: null,
+    pauseNote: "",
+    qtyGood: good,
+    qtyRework: rework,
+    qtyScrap: scrap,
+    rate,
+    stdMinutes,
+    defect,
+    stageEntryId: null,
+    notes: "",
+  });
+
+  const bundleOps = [
+    bundleOp("bo-1", "bn-1", "خياطة", 2, "w2", "done", at(addDays(today, -3), "08:00"), at(addDays(today, -3), "18:30"), 30, 20, 0, 0, 40, 30),
+    bundleOp("bo-2", "bn-2", "خياطة", 2, "w5", "done", at(addDays(today, -2), "08:15"), at(addDays(today, -2), "19:00"), 45, 16, 2, 0, 40, 30, "غرزة مفتوحة"),
+    bundleOp("bo-3", "bn-1", "مكوى", 3, "w4", "done", at(today, "09:00"), at(today, "10:20"), 0, 20, 0, 0, 7, 4),
+    bundleOp("bo-4", "bn-1", "تعبئة", 4, "w5", "done", at(today, "10:30"), at(today, "11:15"), 0, 16, 4, 0, 4, 2, "مقاس مش مطابق"),
+    bundleOp("bo-5", "bn-2", "مكوى", 3, "w4", "running", at(today, "11:30"), null, 0, 0, 0, 0, 7, 4),
+  ];
+
+  const floorIssues = [
+    {
+      id: "fi-1",
+      factoryId: FID,
+      kind: "machine" as const,
+      line: "الخط الثاني",
+      orderId: "o1",
+      bundleId: null,
+      workerId: "w2",
+      note: "ماكينة أوفر بتقطع الخيط كل شوية",
+      at: at(today, "09:40"),
+      status: "open" as const,
+      resolvedAt: null,
+      resolvedBy: null,
+    },
+    {
+      id: "fi-2",
+      factoryId: FID,
+      kind: "material" as const,
+      line: "الخط الأول",
+      orderId: "o7",
+      bundleId: null,
+      workerId: "w1",
+      note: "محتاجين بكر خيط أبيض على ترابيزة القص",
+      at: at(today, "10:05"),
+      status: "open" as const,
+      resolvedAt: null,
+      resolvedBy: null,
+    },
+  ];
+
+  /** إذن تشغيل خارجي: ٣٠٠ قطعة خياطة برّه بأجر ٣٠ج، رجع منها ٢٨٠ سليم و١٢ تالف */
+  const subcontracts = [
+    {
+      id: "sub-1",
+      factoryId: FID,
+      code: "SUB-0001",
+      partyId: "ws-1",
+      orderId: "o5",
+      operationId: op("خياطة"),
+      date: addDays(today, -12),
+      expectedDate: addDays(today, -7),
+      qtySent: 300,
+      rate: 30,
+      status: "open" as const,
+      notes: "خياطة تيشيرتات — الورشة عندها ٨ ماكينات",
+    },
+    {
+      id: "sub-2",
+      factoryId: FID,
+      code: "SUB-0002",
+      partyId: "ws-2",
+      orderId: "o1",
+      operationId: op("مكوى"),
+      date: addDays(today, -2),
+      expectedDate: addDays(today, 2),
+      qtySent: 120,
+      rate: 6,
+      status: "open" as const,
+      notes: "مكوى وتشطيب",
+    },
+  ];
+
+  const subReceipts = [
+    { id: "sr-1", factoryId: FID, subcontractId: "sub-1", date: addDays(today, -8), qtyGood: 180, qtyRework: 0, qtyLost: 4, stageEntryId: null, notes: "دفعة أولى" },
+    { id: "sr-2", factoryId: FID, subcontractId: "sub-1", date: addDays(today, -5), qtyGood: 100, qtyRework: 8, qtyLost: 8, stageEntryId: null, notes: "دفعة تانية — رجعت بعد الميعاد" },
+  ];
+
+  const subPayments = [
+    { id: nid(), factoryId: FID, partyId: "ws-1", subcontractId: "sub-1", date: addDays(today, -6), amount: 4000, accountId: cash, method: "cash" as const, notes: "دفعة تحت الحساب" },
   ];
 
   const manualTx = [
@@ -694,6 +905,14 @@ export function demoDb(): Db {
     routingSteps,
     stockMovements,
     stageEntries,
+    cutLays,
+    cutLayLines,
+    bundles,
+    bundleOps,
+    floorIssues,
+    subcontracts,
+    subReceipts,
+    subPayments,
     costItems: items,
     costEntries,
     costPayments,
