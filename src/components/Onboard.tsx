@@ -1,12 +1,77 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, MailCheck } from "lucide-react";
+import { ArrowLeft, Check, MailCheck, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
-import { setupProgress } from "@/store/setup";
+import { setupGaps, setupProgress } from "@/store/setup";
+
+/**
+ * مساعد التجهيز المستمر.
+ *
+ * مش wizard بيخلص. الفرق بين ده وبين قايمة الخطوات إن الخطوات بتسأل
+ * «بدأت؟» ودي بتسأل **«شغّال صح؟»** — وموديل جديد بعد سنة بيفتح ثقب
+ * جديد. فالقايمة بتتحسب كل مرة ومابتتأرشفش.
+ *
+ * وكل بند بيقول **إيه اللي بيتوقف بسببه**: «٤ موديلات من غير قائمة
+ * خامات» توصيف، و«تكلفتها وربحها مش محسوبين» هو السبب اللي بيخلي حد
+ * يقوم يعملها.
+ */
+export function SetupGapsCard({ compact = false }: { compact?: boolean }) {
+  const { db, account } = useFactory();
+  const gaps = setupGaps(db, account.workspace);
+  if (!gaps.length) return null;
+
+  const warn = gaps.filter((g) => g.level === "warn").length;
+  const shown = compact ? gaps.slice(0, 3) : gaps;
+
+  return (
+    <section className="rounded-lg border border-warn/30 bg-warn-soft p-5">
+      <div className="flex items-start gap-2">
+        <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
+        <div className="min-w-0">
+          <h2 className="text-base">{qty(gaps.length, 0)} حاجة محتاجة اهتمامك في التجهيز</h2>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            {warn > 0
+              ? `منهم ${qty(warn, 0)} بيوقّفوا حساب أو ورقة فعلًا — الباقي بيحسّن الدقة.`
+              : "مفيش حاجة فيهم بتوقّف حساب — كلهم بيحسّنوا الدقة."}
+          </p>
+        </div>
+      </div>
+
+      <ul className="mt-3 space-y-1.5">
+        {shown.map((g) => (
+          <li key={g.key}>
+            <Link
+              to={g.to}
+              className="flex items-start gap-2.5 rounded-md bg-card/60 px-3 py-2.5 transition-colors hover:bg-card"
+            >
+              <span
+                className={cn(
+                  "mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full",
+                  g.level === "warn" ? "bg-warn" : "bg-muted-foreground/50",
+                )}
+              />
+              <span className="min-w-0">
+                <span className="text-sm">{g.title}</span>
+                <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{g.why}</span>
+              </span>
+              <ArrowLeft className="mr-auto mt-1 h-3.5 w-3.5 shrink-0 text-accent" />
+            </Link>
+          </li>
+        ))}
+      </ul>
+
+      {compact && gaps.length > shown.length ? (
+        <Link to="/alerts" className="mt-3 inline-block text-xs text-accent underline underline-offset-4">
+          وكمان {qty(gaps.length - shown.length, 0)} — شوفهم كلهم
+        </Link>
+      ) : null}
+    </section>
+  );
+}
 
 /**
  * أول دخول: النسبة محسوبة من بيانات المصنع نفسها (مش رقم متخزّن)،

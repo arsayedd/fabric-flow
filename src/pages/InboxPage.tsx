@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { BellOff, CircleCheck, ListChecks } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
+import { SetupGapsCard } from "@/components/Onboard";
 import { Card } from "@/components/ui/card";
 import { cairoToday, cn, formatDate, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
@@ -13,6 +14,7 @@ import {
   saveNotifState,
   type NotifCategory,
 } from "@/store/notifications";
+import { setupGaps } from "@/store/setup";
 
 /**
  * «ما يحتاج اهتمامك» — نفس محرّك الاستثناءات اللي بيغذّي الجرس، في صفحة كاملة.
@@ -20,11 +22,12 @@ import {
  * (فلوس أو أيام تأخير)، مش بترتيب الكود ولا بتاريخ الإدخال.
  */
 export function AlertsPage() {
-  const { db } = useFactory();
+  const { db, account } = useFactory();
   const factoryId = db.factory?.id ?? "";
   const [state, setState] = useState(() => loadNotifState(factoryId));
   const [tab, setTab] = useState<NotifCategory | "all">("all");
   const rows = useMemo(() => notifications(db, state), [db, state]);
+  const gaps = setupGaps(db, account.workspace).length > 0;
   const cats = [...new Set(rows.map((r) => r.category))];
   const shown = tab === "all" ? rows : rows.filter((r) => r.category === tab);
 
@@ -42,11 +45,23 @@ export function AlertsPage() {
         </p>
       </div>
 
+      {/* ثقوب التجهيز فوق، ومفصولة عن التنبيهات التشغيلية عن قصد:
+          دي حاجة **إعداد** مش حادثة في اليوم. خلطهم كان بيخلي «٤
+          موديلات من غير قائمة خامات» تتزاحم مع «تحصيل فات ميعاده»
+          وهما مش نفس نوع القرار ولا نفس الإلحاح */}
+      <SetupGapsCard />
+
       {rows.length === 0 ? (
+        // الجملة بتتغيّر لو فيه ثقوب تجهيز فوق: «مفيش حاجة محتاجة
+        // تدخّل منك» تحت كارت بيقول «٥ حاجات» بتبقى تناقض في شاشة واحدة
         <EmptyState
           icon={BellOff}
-          title="مفيش حاجة محتاجة تدخّل منك"
-          body="مفيش أوامر متأخرة ولا خامة قربت تخلص ولا تحصيل فات ميعاده. لو دخلت بيانات أكتر، المتابعة هنا بتبقى أدق."
+          title={gaps ? "مفيش حادثة تشغيلية النهارده" : "مفيش حاجة محتاجة تدخّل منك"}
+          body={
+            gaps
+              ? "مفيش أوامر متأخرة ولا خامة قربت تخلص ولا تحصيل فات ميعاده. اللي فوق حاجات إعداد، مش حوادث في اليوم."
+              : "مفيش أوامر متأخرة ولا خامة قربت تخلص ولا تحصيل فات ميعاده. لو دخلت بيانات أكتر، المتابعة هنا بتبقى أدق."
+          }
         />
       ) : (
         <>
