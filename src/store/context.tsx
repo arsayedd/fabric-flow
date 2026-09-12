@@ -176,10 +176,74 @@ function readDb(key: string): Db | null {
 }
 
 /**
+ * أسامي كل المجموعات في الدفتر — مقروءة من الدفتر الفاضي نفسه، مش مكتوبة
+ * بالإيد. أي مجموعة جديدة تتضاف في `emptyDb` تبقى محميّة من غير ما حد
+ * يفتكر يضيفها هنا كمان.
+ */
+const COLLECTION_KEYS = Object.entries(emptyDb("—")).flatMap(([k, v]) => (Array.isArray(v) ? [k] : []));
+
+/**
+ * أي مجموعة ناقصة أو مش Array تبقى `[]`.
+ *
+ * ودي مش احتياط زيادة. الدفتر محفوظ على الجهاز، فدفتر اتحفظ بنسخة أقدم
+ * مافيهوش المجموعات اللي اتضافت بعديها — وكود زي `db.workers.map(...)`
+ * بيرمي `undefined is not a function` جوه الرندر. ومافيش رندر ناقص في
+ * ريأكت: أول استثناء بيفكّ الشجرة كلها، فالمستخدم بيشوف **شاشة بيضا**
+ * من غير أي رسالة، وماينفعش يرجع منها غير بـRefresh. اختبرناها: تسع
+ * مجموعات من ٥٢ كانت بتعمل كده لو ناقصة.
+ *
+ * والأرضية بتتحطّ على **ناتج** الترحيل مش مدخله، لأن `migrateParties`
+ * بتفرّق بين «مافيش `parties`» و«`parties` فاضية»: الأولى معناها دفتر
+ * قديم فيه `clients` لازم يتحوّلوا، والتانية معناها مصنع مافيهوش عملاء.
+ * لو حطّينا `parties: []` قبلها، عملاء الدفاتر القديمة مايظهروش خالص.
+ */
+function withCollections(db: Db): Db {
+  const out = { ...db } as unknown as Record<string, unknown>;
+  for (const key of COLLECTION_KEYS) if (!Array.isArray(out[key])) out[key] = [];
+  return out as unknown as Db;
+}
+
+/**
+ * أي صف مش كائن بيتشال من أي مجموعة موجودة.
+ *
+ * الحساب المشتق كله بيحصل في الـprovider فوق الشِل، فصف واحد متعطّب
+ * بيرمي هناك وبيوقّع **التطبيق كله** مش الصفحة بس — قِسناها: ٣١ مجموعة
+ * من ٥٢. وصف `null` مش «بيانات بنحميها»، هو بايت مالوش حقل واحد يتعرض،
+ * فشيله مش فقدان معلومة. والصف الناقص حقوله (كائن فاضي) بيفضل زي ما هو
+ * عن قصد — ده يمكن يكون سجل اتكتب نصّه، ومانمسحش بيانات من ورا المستخدم.
+ *
+ * وبتشتغل **قبل** `reshape` لأن `reshape` نفسها بتعمل `map` على
+ * `orders` و`deliveries` و`returns` — فصف متعطّب فيهم كان بيرمي جوه
+ * الترحيل نفسه، و`readDb` بتاكل الاستثناء وترجع `null`، فالنتيجة مصنع
+ * «مش موجود» مش رسالة عطل. ومابتضيفش مفاتيح ناقصة، عشان `migrateParties`
+ * محتاجة تفرّق بين «مافيش `parties`» و«`parties` فاضية».
+ */
+function cleanRows(db: Db): Db {
+  const out = { ...db } as unknown as Record<string, unknown>;
+  const dropped: string[] = [];
+  /* على المجموعات المعروفة بس، مش على أي Array في الدفتر: مجموعة من نوع
+     `string[]` كان التنضيف هيفضّيها بالكامل */
+  for (const key of COLLECTION_KEYS) {
+    const rows = out[key];
+    if (!Array.isArray(rows)) continue;
+    const clean = rows.filter((row) => typeof row === "object" && row !== null);
+    if (clean.length === rows.length) continue;
+    dropped.push(`${key}: ${rows.length - clean.length}`);
+    out[key] = clean;
+  }
+  if (dropped.length) console.warn("[sanaa] صفوف متعطّبة اتشالت من الدفتر —", dropped.join(", "));
+  return out as unknown as Db;
+}
+
+/**
  * ترحيل الدفاتر المحفوظة قبل نواة التصنيع — إضافي بالكامل:
  * يكمّل الحقول الناقصة ولا يمسح ولا يغيّر أي بيانات موجودة.
  */
 function migrate(db: Db): Db {
+  return withCollections(reshape(cleanRows(db)));
+}
+
+function reshape(db: Db): Db {
   let seq = 1040;
   const factoryId = db.factory?.id ?? "";
   const industry = db.settings?.industry ?? "apparel";
@@ -1914,10 +1978,14 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         }
         // النسخة بترجع في مفتاح المصنع بتاعها، فمش بتكتب فوق مصنع تاني على الجهاز
         const key = dbKeyOf(file.data.factory.id);
-        setBook({ key, data: file.data });
+        /* لازم يعدّي على نفس الترحيل اللي بيعدّي عليه الدفتر المقروء من
+           الجهاز. ملف النسخة الاحتياطية هو دفتر بنسخة قديمة بالتعريف —
+           فاسترجاعه خام كان بيدخّل دفتر ناقص مجموعات على طول في الـstate. */
+        const data = migrate(file.data);
+        setBook({ key, data });
         setMissing(null);
-        registerDeviceFactory(file.data, key);
-        const owner = file.data.members.find((m) => m.role === "owner") ?? file.data.members[0];
+        registerDeviceFactory(data, key);
+        const owner = data.members.find((m) => m.role === "owner") ?? data.members[0];
         if (owner) login(owner);
       },
       exportBackup: () => ({
