@@ -99,8 +99,56 @@ export function trace(db: Db, kind: CodeKind, id: string): Trace {
       kind: "material",
       done: !!last,
     });
-    gaps.push("التوريد مسجّل على الخامة مش على الرول، فالسلسلة بتقول «أنهي خامة» مش «أنهي رول».");
-    gaps.push("حركة المخزن مابتحملش المورّد، فاسم المورّد مش ظاهر في السلسلة — فاتورة الشراء هي اللي بتحمله.");
+
+    /*
+     * ٢) الدفعة: أنهي لوط بالتحديد اتصرف هنا.
+     *
+     * الخطوة دي هي اللي حوّلت السلسلة من «أنهي خامة» لـ«أنهي توريد من
+     * أنهي مورّد» — وبيها الاستدعاء بقى ممكن. وبتظهر بس لما الصرف يكون
+     * متسجّل على دفعة: المخزون القديم بلا لوط مش بيتلوّى له دفعة
+     * بالتخمين.
+     */
+    const consumedBatches = [
+      ...new Set(
+        db.stockMovements
+          .filter(
+            (m) =>
+              m.qty < 0 &&
+              !!m.batchId &&
+              ((theLay && m.refType === "lay" && m.refId === theLay.id) ||
+                (order && m.refType === "order" && m.refId === order.id)),
+          )
+          .map((m) => m.batchId as string),
+      ),
+    ];
+    const batchRows = consumedBatches
+      .map((bid) => (db.batches ?? []).find((b) => b.id === bid))
+      .filter((b): b is NonNullable<typeof b> => !!b);
+
+    if (batchRows.length) {
+      steps.push({
+        key: "batch",
+        title: "الدفعة",
+        when: day(batchRows[0].receivedDate),
+        body: [
+          batchRows
+            .map((b) => `${b.code}${b.supplierLot ? ` · لوط ${b.supplierLot}` : ""}`)
+            .join(" + "),
+          batchRows
+            .map((b) => db.parties.find((p) => p.id === b.partyId)?.name)
+            .filter(Boolean)
+            .join(" · ") || "دفعة بلا مورّد مسجّل",
+          batchRows.length > 1 ? `الصرف جه من ${qty(batchRows.length, 0)} دفعات` : "دفعة واحدة",
+        ],
+        to: `/supply/batch/${batchRows[0].id}`,
+        code: batchRows[0].code,
+        kind: "batch",
+        done: true,
+      });
+    } else {
+      gaps.push("الصرف هنا مش متسجّل على دفعة، فالسلسلة بتقول «أنهي خامة» مش «أنهي توريد» — الدفعات بتتعمل مع الاستلام.");
+    }
+    gaps.push("التوريد مسجّل على الدفعة مش على الرول، فالسلسلة بتوصل للوط ومابتوصلش لرول بعينه.");
   }
 
   /* ٢) الفرشة: القماش اتفرش واتقص */
@@ -223,18 +271,35 @@ export function trace(db: Db, kind: CodeKind, id: string): Trace {
       done: true,
     });
 
-    if (dels[0]) {
+    /*
+     * توريدات الأمر ده بعينه لو الربط موجود، وإلا آخر توريد للعميل.
+     *
+     * الفرق مهم والشاشة بتقوله: الأول حقيقة، والتاني تقريب. وقبل ما
+     * يبقى في `orderId` على التوريد، كان التقريب هو الوحيد المتاح.
+     */
+    const mine = order ? dels.filter((d) => d.orderId === order.id) : [];
+    const shown = mine.length ? mine : dels;
+    if (shown[0]) {
+      const exact = mine.length > 0;
       steps.push({
         key: "delivery",
-        title: "آخر توريد للعميل",
-        when: day(dels[0].date),
-        body: [dels[0].model, `${moneyPlain(dels[0].amount)} · استحقاق ${formatDate(dels[0].dueDate)}`],
+        title: exact ? "اتسلّم للعميل" : "آخر توريد للعميل",
+        when: day(shown[0].date),
+        body: [
+          shown[0].model,
+          `${moneyPlain(shown[0].amount)} · استحقاق ${formatDate(shown[0].dueDate)}`,
+          exact
+            ? `${qty(mine.length, 0)} توريد على الأمر ده · ${qty(mine.reduce((s, d) => s + (d.quantity ?? 0), 0), 0)} قطعة`
+            : "مش مربوط بأمر — ده آخر توريد للعميل",
+        ],
         to: "/collections",
         code: null,
         kind: null,
         done: true,
       });
-      gaps.push("التوريد مربوط بالعميل مش بأمر إنتاج، فاللي ظاهر هو آخر توريد للعميل مش توريد الأمر ده.");
+      if (!exact) {
+        gaps.push("التوريد ده مش مربوط بأمر إنتاج، فاللي ظاهر آخر توريد للعميل مش توريد الأمر ده بعينه.");
+      }
     }
 
     for (const d of docs.slice(0, 3)) {

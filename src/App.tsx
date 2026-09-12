@@ -27,6 +27,9 @@ import { StationPage } from "@/pages/StationPage";
 import { ScanPage } from "@/pages/ScanPage";
 import { LabelsPage } from "@/pages/LabelsPage";
 import { TracePage } from "@/pages/TracePage";
+import { SupplyPage } from "@/pages/SupplyPage";
+import { RecallPage } from "@/pages/RecallPage";
+import { BatchPage } from "@/pages/BatchPage";
 import { OutsourcingPage } from "@/pages/OutsourcingPage";
 import { ReturnsPage } from "@/pages/ReturnsPage";
 import { QualityPage } from "@/pages/QualityPage";
@@ -106,6 +109,13 @@ function appRoutes() {
         {guarded("/floor", "production", <FloorPage />)}
         {guarded("/station", "production", <StationPage />)}
         {guarded("/outsourcing", "purchasing", <OutsourcingPage />)}
+        {guarded("/supply", "purchasing", <SupplyPage />)}
+        {/*
+          الاستدعاء تحت الجودة مش المشتريات: هو قرار جودة على دفعة،
+          واللي بيمسكه هو اللي بيمسك المرتجعات والعيوب.
+        */}
+        {guarded("/supply/recall/:id", "quality", <RecallPage />)}
+        {guarded("/supply/batch/:id", "inventory", <BatchPage />)}
         {/*
           المرتجعات والاستنتاجات مفتوحين على مستوى المسار عشان الاتنين
           بيمسّوا أكتر من موديول: المرتجع بياخد صلاحية الطرف اللي جه منه،
