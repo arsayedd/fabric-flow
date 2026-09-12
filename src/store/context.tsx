@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { cairoToday, moneyPlain, nid } from "@/lib/utils";
+import { cairoToday, moneyPlain, nid, qty } from "@/lib/utils";
 import {
   accountBalance,
   allAccountBalances,
@@ -769,9 +769,14 @@ function fid(db: Db): string {
   return db.factory?.id ?? "";
 }
 
-/** كمية بشكل مقروء في رسائل الرفض — الرفض لازم يقول الرقم مش «مش كفاية» */
+/**
+ * كمية بشكل مقروء في رسائل الرفض — الرفض لازم يقول الرقم مش «مش كفاية».
+ *
+ * وبالأرقام العربية زي أي رقم تاني بيشوفه المستخدم: الرسالة دي بتتقرا
+ * جوه جملة عربية، ورقم لاتيني في وسطها بيبان زي خطأ في النظام.
+ */
 function qtyText(value: number): string {
-  return String(Math.round(value * 100) / 100);
+  return qty(value);
 }
 
 /** ترقيم إذون التشغيل الخارجي: SUB-0001 وطالع، والرقم مابيتكرّرش */
