@@ -13,6 +13,13 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: "autoUpdate",
+      /*
+       * التسجيل من عندنا مش من السكربت اللي البلوجن بيحقنه.
+       * السكربت الجاهز بيسجّل وبس، ومابيعملش Refresh لما نسخة جديدة
+       * تتولّى — فكل رفعة كانت بتسيب المستخدم على نصف نسخة قديمة لحد ما
+       * يحدّث بإيده. التفاصيل في `src/lib/service-worker.ts`.
+       */
+      injectRegister: null,
       includeAssets: ["favicon-32.png", "apple-touch-icon.png", "brand/sanaa-mark.png"],
       /*
        * الخطوط لازم تدخل الكاش مع باقي الملفات.

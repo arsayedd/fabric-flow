@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { Toaster, toast } from "sonner";
 import App from "./App";
+import { registerServiceWorker } from "./lib/service-worker";
 import { FactoryProvider } from "./store/context";
 import { PermissionError } from "./store/permissions";
 import "./index.css";
@@ -23,6 +24,8 @@ const showRefusal = (error: unknown, cancel: () => void) => {
 
 window.addEventListener("error", (e) => showRefusal(e.error, () => e.preventDefault()));
 window.addEventListener("unhandledrejection", (e) => showRefusal(e.reason, () => e.preventDefault()));
+
+registerServiceWorker();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
