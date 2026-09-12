@@ -417,7 +417,7 @@ function NewLayPanel({ open, onClose }: { open: boolean; onClose: () => void }) 
       </div>
 
       <Field label="ملاحظات">
-        <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="مثلًا: ٨ قطع في الطبقة على ٤ مقاسات" />
+        <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="مثلًا: ٨ قطع في الطبقة على ٣ مقاسات" />
       </Field>
     </Panel>
   );

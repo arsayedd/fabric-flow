@@ -207,13 +207,33 @@ export type Requirement = {
   unitCost: number;
 };
 
+/**
+ * حركات المخزن اللي تخص أمر واحد.
+ *
+ * الصرف مش دايمًا بيتسجّل على الأمر مباشرة: قماش الفرشة بيخرج **على
+ * الفرشة** عشان نسبة الاستغلال تتحسب لفرشة بعينها، وخامات الورشة بتخرج
+ * **على إذن التشغيل** عشان نعرف اللي عندهم. الاتنين شغل الأمر ده، فلو
+ * قرينا الحركات المسجّلة على الأمر بس، الأمر هيبان كإنه ماستهلكش خامة.
+ */
+export function orderMovements(db: Db, order: Order): StockMovement[] {
+  const lays = new Set((db.cutLays ?? []).filter((l) => l.orderId === order.id).map((l) => l.id));
+  const subs = new Set((db.subcontracts ?? []).filter((s) => s.orderId === order.id).map((s) => s.id));
+  return db.stockMovements.filter(
+    (m) =>
+      (m.refType === "order" && m.refId === order.id) ||
+      (m.refType === "lay" && m.refId !== null && lays.has(m.refId)) ||
+      (m.refType === "subcontract" && m.refId !== null && subs.has(m.refId)),
+  );
+}
+
 /** احتياج أمر الإنتاج من الخامات، والمصروف منها فعليًا، والعجز */
 export function orderRequirements(db: Db, order: Order): Requirement[] {
   const bomId = order.bomId ?? (order.productId ? activeBom(db, order.productId)?.id : null);
+  const moves = orderMovements(db, order);
   return bomLines(db, bomId).map((l) => {
     const required = l.effectiveQty * order.quantity;
-    const issued = db.stockMovements
-      .filter((m) => m.refType === "order" && m.refId === order.id && m.itemId === l.materialId && m.kind === "issue")
+    const issued = moves
+      .filter((m) => m.itemId === l.materialId && m.kind === "issue")
       .reduce((s, m) => s + Math.abs(m.qty), 0);
     const remaining = Math.max(0, required - issued);
     const available = stockQty(db, "material", l.materialId);
@@ -306,9 +326,10 @@ export function orderCost(db: Db, order: Order): OrderCost {
   const overheadRate = db.settings?.overheadPerUnit ?? 0;
   const estOverhead = overheadRate * order.quantity;
 
-  const actMaterials = db.stockMovements
-    .filter((m) => m.refType === "order" && m.refId === order.id && (m.kind === "issue" || m.kind === "waste"))
-    .reduce((s, m) => s + Math.abs(m.qty) * m.unitCost, 0);
+  // الخامة اللي رجعت من الورشة بتتخصم، عشان اللي اتحسب هو المستهلك فعلًا
+  const actMaterials = orderMovements(db, order)
+    .filter((m) => m.kind === "issue" || m.kind === "waste" || m.kind === "return")
+    .reduce((s, m) => s - m.qty * m.unitCost, 0);
   const actLabor = db.stageEntries
     .filter((e) => e.orderId === order.id)
     .reduce((s, e) => s + e.qtyGood * e.rate, 0);

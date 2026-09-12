@@ -739,7 +739,7 @@ export function demoDb(): Db {
       status: "planned" as const,
       cutAt: null,
       fabricUsedM: null,
-      notes: "٨ قطع في الطبقة على ٤ مقاسات",
+      notes: "٨ قطع في الطبقة على ٣ مقاسات",
     },
   ];
 
