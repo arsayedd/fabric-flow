@@ -1975,9 +1975,9 @@ export const DASH_MODE_HINT: Record<DashMode, string> = {
 
 /** الترتيب بيتغيّر بالوضع: كل دور بيشوف اللي بيهمه فوق */
 export const MODE_SECTIONS: Record<DashMode, string[]> = {
-  exec: ["health", "decisions", "kpis", "quick", "finance", "margin", "waterfall", "cash", "aging", "production", "pipeline", "customers", "models", "forecast", "targets", "timeline"],
-  manager: ["health", "decisions", "kpis", "quick", "production", "pipeline", "live", "quality", "inventory", "suppliers", "workforce", "targets", "timeline"],
-  floor: ["production", "live", "pipeline", "workforce", "quality", "inventory", "quick"],
+  exec: ["health", "decisions", "kpis", "quick", "finance", "margin", "waterfall", "cash", "aging", "production", "machines", "pipeline", "customers", "models", "forecast", "targets", "timeline"],
+  manager: ["health", "decisions", "kpis", "quick", "production", "pipeline", "live", "quality", "machines", "inventory", "suppliers", "workforce", "targets", "timeline"],
+  floor: ["production", "live", "machines", "pipeline", "workforce", "quality", "inventory", "quick"],
 };
 
 export function modeForRole(role: string, seesFinance: boolean): DashMode {
@@ -2016,7 +2016,6 @@ export type Gap = { label: string; needs: string };
  * مابتسمحش بيها لسه. بنسمّيها بدل ما نعرض أرقام ملفّقة.
  */
 export const DASHBOARD_GAPS: Gap[] = [
-  { label: "الماكينات: التشغيل والتوقف والصيانة", needs: "سجل ماكينات + أسباب توقف بالساعات" },
   // سبب العيب بقى متسجّل على الباندل (شوف «العيوب» في متابعة العمليات)، لكن
   // التسجيل اليدوي للمرحلة لسه بيدخل كمية بلا سبب — فالباريتو ناقص الجزء ده
   { label: "سبب العيب في التسجيل اليدوي للمرحلة", needs: "تصنيف عيوب على تسجيل المرحلة زي اللي على الباندل — باريتو العيوب دلوقتي بيقرأ الشغل المتتبّع بالباندل بس" },

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { AlertTriangle, Maximize2, Pause, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -219,11 +220,21 @@ export function FloorPage() {
                     </div>
                     <p className="mt-0.5 text-sm text-muted-foreground">{i.note}</p>
                   </div>
-                  {can.do("production", "edit") ? (
-                    <Button size="sm" variant="outline" onClick={() => resolveIssue(i.id)}>
-                      اتحلّت
-                    </Button>
-                  ) : null}
+                  <div className="flex shrink-0 gap-2">
+                    {/* بلاغ الماكينة مش بيتقفل بزرار «اتحلّت» وخلاص — لازم
+                        يبقى له تذكرة، عشان التوقف يتقاس وقطع الغيار تخرج
+                        من المخزن. وقفل التذكرة بيقفل البلاغ نفسه. */}
+                    {i.kind === "machine" && can.do("machines", "create") ? (
+                      <Button asChild size="sm" variant="gold">
+                        <Link to={`/machines/tickets?new=1&issue=${i.id}`}>حوّله لتذكرة</Link>
+                      </Button>
+                    ) : null}
+                    {can.do("production", "edit") ? (
+                      <Button size="sm" variant="outline" onClick={() => resolveIssue(i.id)}>
+                        اتحلّت
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               ))}
             </div>

@@ -6,6 +6,7 @@ import { batchView } from "./supply";
 import type { PermModule } from "./permissions";
 import { isThermal, type Paper } from "@/lib/print";
 import type { CodeKind, Db } from "./types";
+import { MACHINE_STATE_LABEL } from "./types";
 
 /**
  * مركز الطباعة.
@@ -146,6 +147,25 @@ export const LABEL_TYPES: LabelType[] = [
         code: s.code,
         title: db.parties.find((p) => p.id === s.partyId)?.name ?? "ورشة",
         sub: `${qty(s.qtySent, 0)} قطعة · رجوع ${formatDate(s.expectedDate)}`,
+      })),
+  },
+  {
+    key: "machine",
+    /**
+     * ليبل الماكينة بيلزق عليها نفسها. فايدته الحقيقية وقت العطل:
+     * العامل واقف جنبها، بيمسح، فيفتح ملفها وزر «بلّغ عطل» — بدل ما
+     * يدور على اسمها في قايمة وهو في نص وردية.
+     */
+    label: "ليبل ماكينة",
+    about: "بيتلزق على الماكينة — المسح بيفتح ملفها وتاريخ أعطالها وزر بلاغ عطل.",
+    kind: "machine",
+    module: "machines",
+    rows: (db) =>
+      (db.machines ?? []).map((m) => ({
+        id: m.id,
+        code: m.code,
+        title: m.name,
+        sub: [MACHINE_STATE_LABEL[m.state], m.line || null, m.brand || null].filter(Boolean).join(" · "),
       })),
   },
   {

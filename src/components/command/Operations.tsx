@@ -7,6 +7,7 @@ import { ChartFrame, ColumnChart, Donut, DonutLegend, Gauge, Heatmap, RankBars }
 import { money, qty } from "@/lib/utils";
 import { useFactory } from "@/store/context";
 import { materialStock } from "@/store/manufacturing";
+import { downtimeCauses, machineSummary, machinesDownNow } from "@/store/machines";
 import {
   attendanceToday,
   deadStock,
@@ -464,6 +465,129 @@ export function QualitySection({ range }: { range: Range }) {
               }}
             />
           </ChartFrame>
+        </Card>
+      </div>
+    </Section>
+  );
+}
+
+/* ── ٣٥) الماكينات والصيانة ───────────────────────────────────── */
+
+/**
+ * القسم ده بيجاوب سؤال واحد: الطاقة اللي ضاعت النهارده بسبب ماكينة.
+ *
+ * فالكارت الأول بيقول الواقف دلوقتي (وواقف من امتى)، والتاني بيقول
+ * أكتر سبب أكل وقت في الفترة. **الجاهزية ونسبة التشغيل رقمين مختلفين**
+ * وبأسمائهم — ونسبة التشغيل بتختفي لو العمليات مش متسجّلة على ماكينة،
+ * مش بتتحوّل لصفر.
+ */
+export function MachinesSection({ range }: { range: Range }) {
+  const { db } = useFactory();
+  const sum = machineSummary(db, range);
+  const down = machinesDownNow(db);
+  const causes = downtimeCauses(db, range);
+
+  if (!sum.total) {
+    return (
+      <Section title="الماكينات والصيانة" to="/machines" toLabel="افتح الماكينات">
+        <Card>
+          <Needs what="ماكينات مسجّلة بدقايق شغل يومية" />
+        </Card>
+      </Section>
+    );
+  }
+
+  return (
+    <Section
+      title="الماكينات والصيانة"
+      hint="الطاقة اللي ضاعت بسبب توقف — وليه"
+      to="/machines"
+      toLabel="افتح الماكينات"
+    >
+      <div className="grid gap-3 lg:grid-cols-2">
+        <Card>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h4 className="text-base">واقف دلوقتي</h4>
+            <Badge tone={down.length ? "danger" : "ok"}>
+              {down.length ? `${qty(down.length, 0)} من ${qty(sum.total, 0)}` : "كله شغّال"}
+            </Badge>
+          </div>
+
+          {down.length ? (
+            <ul className="mt-2 list-none divide-y divide-border">
+              {down.slice(0, 4).map((d) => (
+                <li key={d.machine.id} className="flex items-baseline justify-between gap-2 py-1.5 first:pt-0 last:pb-0">
+                  <Link
+                    to={`/machines/${d.machine.id}`}
+                    className="min-w-0 truncate text-sm underline-offset-4 hover:underline"
+                  >
+                    {d.machine.name}
+                    <span className="text-xs text-muted-foreground"> · {d.machine.line || "مش على خط"}</span>
+                  </Link>
+                  <span className="shrink-0 text-sm tabular text-muted-foreground">
+                    {d.downMinutes >= 60
+                      ? `${qty(Math.round(d.downMinutes / 60), 0)} ساعة`
+                      : `${qty(Math.round(d.downMinutes), 0)} دقيقة`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1.5 text-sm text-ok">مفيش ماكينة عطلانة ولا في الصيانة دلوقتي.</p>
+          )}
+
+          <dl className="mt-2 space-y-1 border-t border-border pt-2 text-sm">
+            <div className="flex justify-between gap-2">
+              <dt className="flex items-center gap-1 text-muted-foreground">
+                الجاهزية
+                <Explain
+                  label="الجاهزية"
+                  text="(الزمن المخطط − زمن التوقف) ÷ الزمن المخطط. الزمن المخطط = دقايق اليوم على كل ماكينة × أيام العمل في الفترة من تقويم الطاقة. التوقف بيتحسب من التذاكر، والتذكرة المفتوحة وقتها بيجري."
+                />
+              </dt>
+              <dd className="tabular">
+                {sum.availabilityPct === null ? "مش محسوبة" : `${qty(Math.round(sum.availabilityPct), 0)}٪`}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-2">
+              <dt className="text-muted-foreground">ساعات توقف في الفترة</dt>
+              <dd className="tabular">{qty(Math.round(sum.downHours), 0)}</dd>
+            </div>
+            <div className="flex justify-between gap-2">
+              <dt className="text-muted-foreground">تكلفة الصيانة</dt>
+              <dd className="tabular">{money(sum.cost)}</dd>
+            </div>
+            {sum.overdueServices.length ? (
+              <div className="flex justify-between gap-2 border-t border-border pt-1">
+                <dt className="text-warn">صيانة فاتت ميعادها</dt>
+                <dd className="tabular text-warn">{qty(sum.overdueServices.length, 0)}</dd>
+              </div>
+            ) : null}
+          </dl>
+        </Card>
+
+        <Card>
+          <ChartFrame
+            title="أكتر سبب وقّف المصنع"
+            hint="مرتّب بالدقايق مش بعدد التذاكر — التذكرة الواحدة الطويلة أغلى من تلاتة قصيرين"
+            empty={causes.length ? null : "مفيش توقف مسجّل في الفترة."}
+          >
+            <RankBars
+              format="qty"
+              rows={causes.slice(0, 6).map((c) => ({
+                key: c.cause,
+                label: c.cause,
+                value: Math.round(c.minutes),
+                sub: `${qty(Math.round(c.sharePct), 0)}٪ من التوقف · ${qty(c.count, 0)} تذكرة · ${money(c.cost)}`,
+                tone: "var(--danger)",
+              }))}
+            />
+          </ChartFrame>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {sum.opCoveragePct === null
+              ? "نسبة التشغيل لكل ماكينة مش محسوبة: مفيش عمليات مسجّلة في الفترة."
+              : `نسبة التشغيل محسوبة على ${qty(Math.round(sum.opCoveragePct), 0)}٪ من العمليات — دي اللي اتسجّلت وعليها ماكينة. الباقي بيظهر «مش محسوبة» بدل صفر.`}
+          </p>
         </Card>
       </div>
     </Section>

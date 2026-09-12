@@ -94,6 +94,10 @@ import type {
   ComplaintKind,
   FloorIssue,
   FloorIssueKind,
+  Machine,
+  MachineKind,
+  MachineTicket,
+  TicketKind,
   ProblemKind,
   ProblemOrigin,
   RepairMaterial,
@@ -202,6 +206,8 @@ function migrate(db: Db): Db {
     bundles: db.bundles ?? [],
     bundleOps: db.bundleOps ?? [],
     floorIssues: db.floorIssues ?? [],
+    machines: db.machines ?? [],
+    machineTickets: db.machineTickets ?? [],
     scans: db.scans ?? [],
     subcontracts: db.subcontracts ?? [],
     subReceipts: db.subReceipts ?? [],
@@ -549,12 +555,22 @@ type FactoryApi = {
   /** القص: بيصرف القماش، بيسجّل الإنتاج، وبيطلّع الباندلات بتيكتاتها */
   cutLayNow: (id: string, input: { fabricUsedM: number; perBundle: number; workerId: string | null }) => void;
   /* ── تتبع العملية ── */
-  startBundleOp: (input: { bundleId: string; operationId?: string; workerId: string | null }) => string;
+  startBundleOp: (input: { bundleId: string; operationId?: string; workerId: string | null; machineId?: string | null }) => string;
   pauseBundleOp: (id: string, note: string) => void;
   resumeBundleOp: (id: string) => void;
   finishBundleOp: (id: string, input: { qtyGood: number; qtyRework: number; qtyScrap: number; defect: string }) => void;
   reportIssue: (input: { kind: FloorIssueKind; line: string; orderId: string | null; bundleId: string | null; workerId: string | null; note: string }) => void;
   resolveIssue: (id: string) => void;
+  /* ── الماكينات والصيانة ── */
+  addMachine: (input: MachineInput) => string;
+  updateMachine: (id: string, patch: Partial<Machine>) => void;
+  /** خروج الماكينة من الخدمة قرار مش حذف: السجل والتذاكر بيفضلوا */
+  retireMachine: (id: string, reason: string) => void;
+  openTicket: (input: TicketInput) => string;
+  /** بدء الإصلاح: بيقيس وقت الاستجابة، والماكينة بتتحوّل لحالتها */
+  startTicket: (id: string) => void;
+  closeTicket: (id: string, input: CloseTicketInput) => void;
+  cancelTicket: (id: string, reason: string) => void;
   /* ── المسح ── */
   recordScan: (input: {
     kind: CodeKind;
@@ -674,6 +690,45 @@ export type LayInput = {
   markerWidthM: number;
   notes: string;
   sizes: { size: string; perPly: number }[];
+};
+
+export type MachineInput = {
+  name: string;
+  kind: MachineKind;
+  brand: string;
+  serial: string;
+  line: string;
+  warehouseId: string | null;
+  boughtOn: string | null;
+  cost: number;
+  dailyMinutes: number;
+  serviceEveryDays: number;
+  lastServiceOn: string | null;
+  notes: string;
+};
+
+export type TicketInput = {
+  machineId: string;
+  kind: TicketKind;
+  reportedOn: string;
+  cause: string;
+  workerId: string | null;
+  partyId: string | null;
+  /** بلاغ من أرض المصنع بيتحوّل لتذكرة، وبيتقفل معاها */
+  issueId: string | null;
+  notes: string;
+};
+
+export type CloseTicketInput = {
+  action: string;
+  /** دقايق التوقف — بتتقترح من الساعة وينفع تتعدّل */
+  downMinutes: number;
+  laborCost: number;
+  outsideCost: number;
+  /** قطع الغيار بتخرج من المخزن فعلًا، مش رقم تكلفة بيتكتب */
+  parts: { materialId: string; qty: number }[];
+  /** الصيانة الدورية بتحدّث تاريخ آخر صيانة، فالميعاد الجاي بيتحرّك */
+  serviceDone: boolean;
 };
 
 export type ReturnInput = {
@@ -1617,7 +1672,8 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
       addStockMovement: (input) => {
         need("inventory", "create");
         if (!input.qty) throw new Error("الكمية لازم تكون أكبر من صفر.");
-        const out = input.kind === "issue" || input.kind === "waste" || input.kind === "delivery";
+        const out =
+          input.kind === "issue" || input.kind === "waste" || input.kind === "delivery" || input.kind === "maintenance";
         const qty = out ? -Math.abs(input.qty) : input.kind === "adjust" ? input.qty : Math.abs(input.qty);
         if (out && Math.abs(qty) > stockQty(db, input.itemType, input.itemId) + 0.0001) {
           throw new Error("الكمية أكبر من الرصيد المتاح في المخزن.");
@@ -2313,6 +2369,12 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
           defect: "",
           stageEntryId: null,
           notes: "",
+          /*
+           * الماكينة اختيارية: الإنتاج لازم يتسجّل سواء العامل اختارها أو
+           * لأ. اللي بيختار بياخد نسبة تشغيل حقيقية للماكينة، واللي
+           * مابيختارش بياخد جاهزية من التوقف — والشاشة بتقول التغطية كام.
+           */
+          machineId: input.machineId ?? null,
         };
         mutate(
           { bundleOps: [row, ...db.bundleOps] },
@@ -2466,6 +2528,244 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         mutate(
           { floorIssues: db.floorIssues.map((i) => (i.id === id ? { ...i, ...after } : i)) },
           { action: "update", table: "floor_issues", recordId: id, before, after },
+        );
+      },
+
+      /* ── الماكينات والصيانة ──────────────────────────────────── */
+
+      addMachine: (input) => {
+        need("machines", "create");
+        if (!input.name.trim()) throw new Error("اكتب اسم الماكينة.");
+        if (input.dailyMinutes < 0) throw new Error("دقايق التشغيل في اليوم ماتكونش بالسالب.");
+        if (input.serviceEveryDays < 0) throw new Error("مدة الصيانة الدورية ماتكونش بالسالب.");
+        /*
+         * الكود بيتولّد بالتسلسل ومابيتكرّرش: هو اللي بيتطبع على الماكينة
+         * نفسها ويتمسح، فلو اتكرّر كان بيوصّل الفني لملف ماكينة تانية.
+         */
+        const used = new Set((db.machines ?? []).map((m) => m.code));
+        let n = (db.machines ?? []).length + 1;
+        let code = `MCH-${String(n).padStart(3, "0")}`;
+        while (used.has(code)) code = `MCH-${String(++n).padStart(3, "0")}`;
+
+        const row: Machine = {
+          id: nid(),
+          factoryId: fid(db),
+          code,
+          name: input.name.trim(),
+          kind: input.kind,
+          brand: input.brand.trim(),
+          serial: input.serial.trim(),
+          line: input.line,
+          warehouseId: input.warehouseId,
+          state: "running",
+          boughtOn: input.boughtOn,
+          cost: input.cost,
+          dailyMinutes: input.dailyMinutes,
+          serviceEveryDays: input.serviceEveryDays,
+          lastServiceOn: input.lastServiceOn,
+          notes: input.notes.trim(),
+        };
+        mutate(
+          { machines: [row, ...(db.machines ?? [])] },
+          { action: "create", table: "machines", recordId: row.id, before: null, after: row },
+        );
+        return row.id;
+      },
+      updateMachine: (id, patch) => {
+        need("machines", "edit");
+        const before = (db.machines ?? []).find((m) => m.id === id);
+        if (!before) throw new Error("الماكينة مش موجودة.");
+        /*
+         * الحالة مابتتغيّرش بالإيد لماكينة عندها تذكرة مفتوحة: التذكرة هي
+         * اللي بتحكم الحالة. لو سمحنا بالاتنين، الشاشة كانت تقول «شغّالة»
+         * والتذكرة لسه مفتوحة عليها — وساعتها التوقف مش بيتحسب.
+         */
+        if (patch.state && patch.state !== before.state) {
+          const open = (db.machineTickets ?? []).some(
+            (t) => t.machineId === id && (t.state === "open" || t.state === "working"),
+          );
+          if (open && patch.state !== "down" && patch.state !== "maintenance") {
+            throw new Error("الماكينة عليها تذكرة مفتوحة — اقفل التذكرة الأول وحالتها بتترجع لوحدها.");
+          }
+        }
+        mutate(
+          { machines: (db.machines ?? []).map((m) => (m.id === id ? { ...m, ...patch } : m)) },
+          { action: "update", table: "machines", recordId: id, before, after: patch },
+        );
+      },
+      retireMachine: (id, reason) => {
+        need("machines", "edit");
+        const before = (db.machines ?? []).find((m) => m.id === id);
+        if (!before) throw new Error("الماكينة مش موجودة.");
+        if (!reason.trim()) throw new Error("اكتب سبب خروجها من الخدمة.");
+        const open = (db.machineTickets ?? []).filter(
+          (t) => t.machineId === id && (t.state === "open" || t.state === "working"),
+        );
+        if (open.length) throw new Error("فيها تذكرة مفتوحة — اقفلها أو الغيها الأول.");
+        const after = {
+          state: "retired" as const,
+          dailyMinutes: 0,
+          notes: [before.notes, `خرجت من الخدمة: ${reason.trim()}`].filter(Boolean).join(" — "),
+        };
+        mutate(
+          { machines: (db.machines ?? []).map((m) => (m.id === id ? { ...m, ...after } : m)) },
+          { action: "update", table: "machines", recordId: id, before, after },
+        );
+      },
+      openTicket: (input) => {
+        need("machines", "create");
+        const machine = (db.machines ?? []).find((m) => m.id === input.machineId);
+        if (!machine) throw new Error("الماكينة مش موجودة.");
+        if (machine.state === "retired") throw new Error("الماكينة خارج الخدمة — رجّعها للخدمة الأول.");
+        if (!input.cause.trim()) throw new Error("اكتب العطل أو سبب الصيانة.");
+        const dup = (db.machineTickets ?? []).find(
+          (t) => t.machineId === input.machineId && (t.state === "open" || t.state === "working"),
+        );
+        if (dup) throw new Error(`الماكينة عليها تذكرة مفتوحة بالفعل (${dup.code}).`);
+
+        const year = Number(input.reportedOn.slice(0, 4));
+        const seq =
+          (db.machineTickets ?? []).filter((t) => t.code.startsWith(`MNT-${year}-`)).length + 1;
+        const row: MachineTicket = {
+          id: nid(),
+          factoryId: fid(db),
+          code: `MNT-${year}-${String(seq).padStart(6, "0")}`,
+          machineId: input.machineId,
+          kind: input.kind,
+          state: "open",
+          reportedOn: input.reportedOn,
+          issueId: input.issueId,
+          startedAt: null,
+          endedAt: null,
+          downMinutes: 0,
+          cause: input.cause.trim(),
+          action: "",
+          workerId: input.workerId,
+          partyId: input.partyId,
+          laborCost: 0,
+          outsideCost: 0,
+          notes: input.notes.trim(),
+        };
+        /*
+         * فتح تذكرة **بيوقّف الماكينة فعلًا**: العطل بيخليها `down`
+         * والصيانة الدورية `maintenance`. من غير ده، «الماكينة عطلانة»
+         * كانت بتبقى كلام في تذكرة وحالة الماكينة بتقول شغّالة.
+         */
+        mutate(
+          {
+            machineTickets: [row, ...(db.machineTickets ?? [])],
+            machines: (db.machines ?? []).map((m) =>
+              m.id === input.machineId ? { ...m, state: input.kind === "breakdown" ? "down" : "maintenance" } : m,
+            ),
+          },
+          { action: "create", table: "machine_tickets", recordId: row.id, before: null, after: row },
+        );
+        return row.id;
+      },
+      startTicket: (id) => {
+        need("machines", "edit");
+        const before = (db.machineTickets ?? []).find((t) => t.id === id);
+        if (!before) throw new Error("التذكرة مش موجودة.");
+        if (before.state !== "open") throw new Error("التذكرة دي مش مفتوحة.");
+        const after = { state: "working" as const, startedAt: new Date().toISOString() };
+        mutate(
+          { machineTickets: (db.machineTickets ?? []).map((t) => (t.id === id ? { ...t, ...after } : t)) },
+          { action: "update", table: "machine_tickets", recordId: id, before, after },
+        );
+      },
+      closeTicket: (id, input) => {
+        need("machines", "edit");
+        const before = (db.machineTickets ?? []).find((t) => t.id === id);
+        if (!before) throw new Error("التذكرة مش موجودة.");
+        if (before.state === "done") throw new Error("التذكرة مقفولة بالفعل.");
+        if (before.state === "cancelled") throw new Error("التذكرة ملغاة.");
+        if (!input.action.trim()) throw new Error("اكتب اللي اتعمل — التذكرة اللي بتتقفل بلا إجراء مابتعلّمش حاجة.");
+        if (input.downMinutes < 0) throw new Error("وقت التوقف ماينفعش بالسالب.");
+        const machine = (db.machines ?? []).find((m) => m.id === before.machineId);
+        if (!machine) throw new Error("الماكينة مش موجودة.");
+
+        /*
+         * قطع الغيار بتخرج بحركة مخزون حقيقية بنوع «صيانة».
+         *
+         * فالرصيد بيقل، والتكلفة بتطلع من الدفتر — ومابتدخلش تكلفة
+         * القطعة المنتَجة (نوع الحركة مختلف عن الصرف لأمر إنتاج)، لأن
+         * صيانة ماكينة تكلفة تشغيل عامة مش خامة في القطعة.
+         */
+        const parts = input.parts.filter((p) => p.materialId && p.qty > 0);
+        const moves: StockMovement[] = [];
+        const today = cairoToday();
+        for (const p of parts) {
+          const material = db.materials.find((m) => m.id === p.materialId);
+          if (!material) throw new Error("قطعة غيار مش موجودة في الخامات.");
+          const available = stockQty(db, "material", p.materialId);
+          if (p.qty > available + 0.0001) {
+            throw new Error(`رصيد ${material.name} مش كفاية: المتاح ${available}.`);
+          }
+          moves.push({
+            id: nid(),
+            factoryId: fid(db),
+            date: today,
+            itemType: "material",
+            itemId: p.materialId,
+            warehouseId: db.warehouses.find((w) => w.kind === "material")?.id ?? null,
+            kind: "maintenance",
+            qty: -Math.abs(p.qty),
+            unitCost: material.avgCost,
+            refType: "ticket",
+            refId: id,
+            batchId: null,
+            notes: `صيانة ${machine.code}`,
+          });
+        }
+
+        const after = {
+          state: "done" as const,
+          endedAt: new Date().toISOString(),
+          action: input.action.trim(),
+          downMinutes: input.downMinutes,
+          laborCost: input.laborCost,
+          outsideCost: input.outsideCost,
+        };
+        const serviced = input.serviceDone || before.kind === "service";
+        mutate(
+          {
+            machineTickets: (db.machineTickets ?? []).map((t) => (t.id === id ? { ...t, ...after } : t)),
+            machines: (db.machines ?? []).map((m) =>
+              m.id === before.machineId
+                ? { ...m, state: "running" as const, lastServiceOn: serviced ? today : m.lastServiceOn }
+                : m,
+            ),
+            stockMovements: moves.length ? [...moves, ...db.stockMovements] : db.stockMovements,
+            /* البلاغ اللي فتح التذكرة بيتقفل معاها — مش بيفضل مفتوح على الخط */
+            floorIssues: before.issueId
+              ? db.floorIssues.map((i) =>
+                  i.id === before.issueId
+                    ? { ...i, status: "resolved" as const, resolvedAt: new Date().toISOString(), resolvedBy: session?.memberId ?? "" }
+                    : i,
+                )
+              : db.floorIssues,
+          },
+          { action: "update", table: "machine_tickets", recordId: id, before, after },
+        );
+      },
+      cancelTicket: (id, reason) => {
+        need("machines", "edit");
+        const before = (db.machineTickets ?? []).find((t) => t.id === id);
+        if (!before) throw new Error("التذكرة مش موجودة.");
+        if (before.state === "done") throw new Error("التذكرة مقفولة — ماينفعش تتلغي بعد الإقفال.");
+        if (!reason.trim()) throw new Error("اكتب سبب الإلغاء.");
+        const after = {
+          state: "cancelled" as const,
+          notes: [before.notes, `ملغاة: ${reason.trim()}`].filter(Boolean).join(" — "),
+        };
+        mutate(
+          {
+            machineTickets: (db.machineTickets ?? []).map((t) => (t.id === id ? { ...t, ...after } : t)),
+            machines: (db.machines ?? []).map((m) =>
+              m.id === before.machineId ? { ...m, state: "running" as const } : m,
+            ),
+          },
+          { action: "update", table: "machine_tickets", recordId: id, before, after },
         );
       },
 
@@ -3392,6 +3692,8 @@ function emptyShell(): Db {
     bundles: [],
     bundleOps: [],
     floorIssues: [],
+    machines: [],
+    machineTickets: [],
     scans: [],
     subcontracts: [],
     subReceipts: [],

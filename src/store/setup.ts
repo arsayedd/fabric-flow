@@ -10,7 +10,7 @@
 import { countLabel } from "@/lib/utils";
 import { activeBom, bomLines, routingLines } from "./manufacturing";
 import type { Db } from "./types";
-import type { Workspace } from "./account";
+import { effectiveModules, type Workspace } from "./account";
 
 export type SetupStep = {
   key: string;
@@ -195,7 +195,23 @@ export function setupGaps(db: Db, workspace: Workspace | null): SetupGap[] {
     });
   }
 
-  // ٩) الـworkspace: بيتشيك عليه هنا عشان القايمة تبقى مكان واحد
+  // ٩) ماكينات من غير خطة صيانة — والبند ده بيظهر بس للمصنع اللي فتح
+  //    قسم الماكينات. اللي ماختارهوش مايتقالّهوش إن عنده ناقص في حاجة
+  //    مش بيديرها من الأساس
+  if (effectiveModules(workspace).includes("machines")) {
+    const noPlan = (db.machines ?? []).filter((m) => m.state !== "retired" && m.serviceEveryDays <= 0);
+    if (noPlan.length) {
+      out.push({
+        key: "machine-plan",
+        title: `${countLabel(noPlan.length, "ماكينة واحدة", "ماكينتين", "ماكينات", "ماكينة")} من غير خطة صيانة`,
+        why: "صيانتها الدورية مالهاش ميعاد، فمحدش بيتنبّه لها غير لما تقف",
+        to: "/machines?tab=plan",
+        level: "info",
+      });
+    }
+  }
+
+  // ١٠) الـworkspace: بيتشيك عليه هنا عشان القايمة تبقى مكان واحد
   if (!workspace) {
     out.push({
       key: "workspace",

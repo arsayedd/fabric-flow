@@ -6,12 +6,15 @@ import { LAY_STATUS_LABEL, layMath } from "./cutting";
 import { bundleState, bundleTrail } from "./floor";
 import { subView, workshopStatement } from "./outsourcing";
 import { supplyItemName, supplyItemUnit } from "./supply";
+import { machineById, ticketCost, ticketDownMinutes, ticketParts } from "./machines";
 import { DOC_DEFS } from "./documents";
 import {
   METHOD_LABEL,
   ORDER_STATUS_LABEL,
   PAY_TYPE_LABEL,
   STOCK_KIND_LABEL,
+  TICKET_KIND_LABEL,
+  TICKET_STATE_LABEL,
   type Db,
   type DocType,
   type SupplyReceipt,
@@ -97,6 +100,8 @@ export function buildBody(db: Db, type: DocType, refId: string, refExtra?: strin
       return subInDoc(db, refId, title);
     case "subaccount":
       return subAccountDoc(db, refId, title);
+    case "maintenance":
+      return maintenanceDoc(db, refId, title);
   }
 }
 
@@ -173,6 +178,62 @@ function bundleDoc(db: Db, id: string, title: string): DocBody {
     totals: [{ label: "قطع الباندل", value: bundle.qty, strong: true }],
     amount: null,
     note: "التيكت ده بيمشي مع الباندل نفسه لحد التعبئة.",
+    ok: true,
+  };
+}
+
+/* ── الصيانة ───────────────────────────────────────────────────── */
+
+/**
+ * أمر الصيانة بيتطبع مرتين في حياة التذكرة: وهي مفتوحة عشان يمشي مع
+ * الفني، وبعد الإقفال عشان يتحفظ مع فاتورة الورشة. عشان كده السطور
+ * قطع الغيار (بتكلفتها من الدفتر) والإجمالي بيضيف الأجر والورشة —
+ * ورقة بتقول العطل كلّف كام، مش إنه حصل وبس.
+ */
+function maintenanceDoc(db: Db, id: string, title: string): DocBody {
+  const t = (db.machineTickets ?? []).find((x) => x.id === id);
+  if (!t) return missing(title, "تذكرة الصيانة مش موجودة.");
+  const machine = machineById(db, t.machineId);
+  if (!machine) return missing(title, "الماكينة مش موجودة.");
+  const parts = ticketParts(db, t.id);
+  const cost = ticketCost(db, t);
+  const tech = db.workers.find((w) => w.id === t.workerId)?.name ?? partyById(db, t.partyId)?.name ?? "";
+
+  return {
+    title,
+    party: {
+      label: "الماكينة",
+      name: `${machine.code} — ${machine.name}`,
+      rows: [
+        { label: "الخط", value: machine.line || "—" },
+        { label: "الماركة والسيريال", value: [machine.brand, machine.serial].filter(Boolean).join(" · ") },
+      ],
+    },
+    meta: [
+      { label: "التذكرة", value: t.code },
+      { label: "النوع", value: TICKET_KIND_LABEL[t.kind] },
+      { label: "تاريخ البلاغ", value: formatDate(t.reportedOn) },
+      { label: "الحالة", value: TICKET_STATE_LABEL[t.state] },
+      { label: "التوقف", value: `${qty(ticketDownMinutes(t) / 60, 1)} ساعة` },
+      { label: "الفني", value: tech || "لسه محدش" },
+    ],
+    cols: [
+      { label: "قطعة الغيار" },
+      { label: "الكمية", align: "end", width: "18mm" },
+      { label: "سعر الوحدة", align: "end" },
+      { label: "القيمة", align: "end" },
+    ],
+    rows: parts.length
+      ? parts.map((p) => [p.name, qty(p.qty, 2), qty(p.unitCost, 2), qty(p.cost, 2)])
+      : [["مفيش قطع غيار اتصرفت", "—", "—", "—"]],
+    totals: [
+      { label: "قطع غيار", value: cost.parts },
+      { label: "أجر فني", value: cost.labor },
+      { label: "ورشة خارجية", value: cost.outside },
+      { label: "إجمالي تكلفة التذكرة", value: cost.total, strong: true },
+    ],
+    amount: cost.total,
+    note: [t.cause && `السبب: ${t.cause}`, t.action && `اللي اتعمل: ${t.action}`, t.notes].filter(Boolean).join(" — ") || undefined,
     ok: true,
   };
 }

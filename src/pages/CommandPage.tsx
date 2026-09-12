@@ -48,6 +48,7 @@ import {
   DeadStockCard,
   InventoryCenter,
   LowStockCard,
+  MachinesSection,
   QualitySection,
   SupplierCard,
   TurnoverCard,
@@ -274,6 +275,12 @@ const SECTIONS: Record<string, SectionDef> = {
     perm: "quality",
     wave: 2,
     render: ({ range }) => <QualitySection range={range} />,
+  },
+
+  machines: {
+    perm: "machines",
+    wave: 2,
+    render: ({ range }) => <MachinesSection range={range} />,
   },
 
   inventory: {

@@ -195,6 +195,15 @@ export const DOC_DEFS: Record<DocType, DocTypeDef> = {
     paper: "a5",
     financial: true,
   },
+  maintenance: {
+    label: "أمر صيانة",
+    purpose: "العطل أو الصيانة الدورية: الماكينة والسبب واللي اتعمل وقطع الغيار والتكلفة.",
+    area: "production",
+    perm: "machines",
+    prefix: "MNT",
+    paper: "a5",
+    financial: true,
+  },
   stock: {
     label: "كشف جرد",
     purpose: "أرصدة المخزن وقت الطبع، للجرد الفعلي جنبها.",

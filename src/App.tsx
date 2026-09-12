@@ -34,6 +34,8 @@ import { OutsourcingPage } from "@/pages/OutsourcingPage";
 import { ReturnsPage } from "@/pages/ReturnsPage";
 import { QualityPage } from "@/pages/QualityPage";
 import { RepairsPage } from "@/pages/RepairsPage";
+import { MachinesPage } from "@/pages/MachinesPage";
+import { MachineProfilePage } from "@/pages/MachineProfilePage";
 import { InsightsPage } from "@/pages/InsightsPage";
 import { CostingPage } from "@/pages/CostingPage";
 import { CommandPage } from "@/pages/CommandPage";
@@ -124,6 +126,9 @@ function appRoutes() {
         */}
         <Route path="/returns" element={<ReturnsPage />} />
         <Route path="/insights" element={<InsightsPage />} />
+        {guarded("/machines", "machines", <MachinesPage />)}
+        {guarded("/machines/tickets", "machines", <MachinesPage initialTab="tickets" />)}
+        {guarded("/machines/:id", "machines", <MachineProfilePage />)}
         {guarded("/quality", "quality", <QualityPage />)}
         {guarded("/repairs", "quality", <RepairsPage />)}
         {guarded("/planning", "planning", <PlanningPage />)}

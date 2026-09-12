@@ -11,6 +11,8 @@ import {
   type PartyTask,
   type Db,
   type Industry,
+  type Machine,
+  type MachineTicket,
   type Material,
   type Member,
   type Operation,
@@ -296,6 +298,8 @@ export function emptyDb(factoryName: string, industry: Industry = "custom"): Db 
     bundles: [],
     bundleOps: [],
     floorIssues: [],
+    machines: [],
+    machineTickets: [],
     scans: [],
     subcontracts: [],
     subReceipts: [],
@@ -429,6 +433,41 @@ export function demoDb(): Db {
     };
   });
 
+  /**
+   * قطع الغيار خامات في نفس المخزن — مش جدول تاني.
+   *
+   * لو عملنا لها جدول مستقل، كان بيبقى عندنا رصيدين ومنطق صرف
+   * ومتوسط تكلفة متكرّرين. قطعة الغيار بتخرج بحركة صرف عادية،
+   * والفرق الوحيد إن نوع الحركة «صيانة» مش «صرف لأمر إنتاج» —
+   * فتكلفتها مابتنزلش على تكلفة القطعة، بتقعد في الصيانة.
+   */
+  const spareParts: Material[] = [
+    {
+      id: "mat-sp-1",
+      factoryId: FID,
+      sku: "M-901",
+      name: "قطع غيار ماكينات",
+      categoryId: null,
+      unitId: unitPiece,
+      avgCost: 220,
+      reorderPoint: 8,
+      leadTimeDays: 5,
+      defaultVendor: "مركز خدمة الماكينات",
+    },
+    {
+      id: "mat-sp-2",
+      factoryId: FID,
+      sku: "M-902",
+      name: "زيوت وشحوم ماكينات",
+      categoryId: null,
+      unitId: unitPiece,
+      avgCost: 95,
+      reorderPoint: 4,
+      leadTimeDays: 5,
+      defaultVendor: "مركز خدمة الماكينات",
+    },
+  ];
+
   const mv = (
     itemType: "material" | "product",
     itemId: string,
@@ -476,6 +515,12 @@ export function demoDb(): Db {
     mv("material", mat("قماش قطن"), whMat, "purchase", 400, 82, addDays(today, -13), "cost_entry", "ce5", "قماش قطن — أقمشة الدلتا", "bt-5"),
     // هالك الكتان: المصبغة هي مورّده الوحيد، فالهالك ده يتحمّل عليها
     mv("material", mat("قماش كتان"), whMat, "waste", -12, 120, addDays(today, -4), "lay", "lay-1", "هالك فرشة الفستان"),
+    // قطع الغيار: شراء، وبعدين صرف على تذاكر الصيانة بالظبط
+    mv("material", "mat-sp-1", whMat, "purchase", 24, 220, addDays(today, -45), "", null, "قطع غيار ماكينات"),
+    mv("material", "mat-sp-2", whMat, "purchase", 12, 95, addDays(today, -45), "", null, "زيوت وشحوم"),
+    mv("material", "mat-sp-1", whMat, "maintenance", -1, 220, addDays(today, -6), "ticket", "mt-2", "سير موتور — MCH-001"),
+    mv("material", "mat-sp-2", whMat, "maintenance", -1, 95, addDays(today, -12), "ticket", "mt-4", "تزييت المكبس — MCH-004"),
+    mv("material", "mat-sp-1", whMat, "maintenance", -2, 220, addDays(today, -18), "ticket", "mt-5", "مسار خيط وإبر — MCH-003"),
     // صرف خامات أمر SN-1042
     /*
      * صرف قماش الأمر ده **مقسوم على دفعتين**، وده أهم سطر في الديمو:
@@ -773,6 +818,12 @@ export function demoDb(): Db {
       notes: "مسؤول القاهرة والجيزة",
     }),
     party("shp-1", "شركة سريع للشحن", ["shipping"], { phone: "01066660000" }),
+    party("mnt-1", "مركز خدمة الماكينات", ["maintenance", "supplier"], {
+      phone: "01155558888",
+      notes: "صيانة ماكينات القص والأوفر",
+      governorate: "القاهرة",
+      city: "شبرا",
+    }),
   ];
 
   const contacts: PartyContact[] = [
@@ -980,6 +1031,7 @@ export function demoDb(): Db {
     rate: number,
     stdMinutes: number,
     defect = "",
+    machineId: string | null = null,
   ) => ({
     id,
     factoryId: FID,
@@ -1002,12 +1054,13 @@ export function demoDb(): Db {
     defect,
     stageEntryId: null,
     notes: "",
+    machineId,
   });
 
   const bundleOps = [
-    bundleOp("bo-1", "bn-1", "خياطة", 2, "w2", "done", at(addDays(today, -3), "08:00"), at(addDays(today, -3), "18:30"), 30, 20, 0, 0, 40, 30),
-    bundleOp("bo-2", "bn-2", "خياطة", 2, "w5", "done", at(addDays(today, -2), "08:15"), at(addDays(today, -2), "19:00"), 45, 16, 2, 0, 40, 30, "غرزة مفتوحة"),
-    bundleOp("bo-3", "bn-1", "مكوى", 3, "w4", "done", at(today, "09:00"), at(today, "10:20"), 0, 20, 0, 0, 7, 4),
+    bundleOp("bo-1", "bn-1", "خياطة", 2, "w2", "done", at(addDays(today, -3), "08:00"), at(addDays(today, -3), "18:30"), 30, 20, 0, 0, 40, 30, "", "mc-1"),
+    bundleOp("bo-2", "bn-2", "خياطة", 2, "w5", "done", at(addDays(today, -2), "08:15"), at(addDays(today, -2), "19:00"), 45, 16, 2, 0, 40, 30, "غرزة مفتوحة", "mc-2"),
+    bundleOp("bo-3", "bn-1", "مكوى", 3, "w4", "done", at(today, "09:00"), at(today, "10:20"), 0, 20, 0, 0, 7, 4, "", "mc-4"),
     bundleOp("bo-4", "bn-1", "تعبئة", 4, "w5", "done", at(today, "10:30"), at(today, "11:15"), 0, 16, 4, 0, 4, 2, "مقاس مش مطابق"),
     bundleOp("bo-5", "bn-2", "مكوى", 3, "w4", "running", at(today, "11:30"), null, 0, 0, 0, 0, 7, 4),
   ];
@@ -1041,6 +1094,171 @@ export function demoDb(): Db {
       resolvedAt: null,
       resolvedBy: null,
     },
+  ];
+
+  /**
+   * ماكينات الديمو.
+   *
+   * الحالات مقصودة: ماكينة عطلانة دلوقتي بتذكرة مفتوحة (فوقت التوقف
+   * بيجري على الشاشة)، وماكينة صيانتها الدورية فاتت ميعادها، وماكينة
+   * خارج الخدمة، وماكينة من غير خطة صيانة — عشان كل حالة في الشاشة
+   * يبان ليها مثال حقيقي بدل ما تبقى فرضية.
+   */
+  const machine = (
+    id: string,
+    code: string,
+    name: string,
+    kind: Machine["kind"],
+    line: string,
+    state: Machine["state"],
+    extra: Partial<Machine> = {},
+  ): Machine => ({
+    id,
+    factoryId: FID,
+    code,
+    name,
+    kind,
+    brand: "",
+    serial: "",
+    line,
+    warehouseId: null,
+    state,
+    boughtOn: null,
+    cost: 0,
+    dailyMinutes: 480,
+    serviceEveryDays: 90,
+    lastServiceOn: addDays(today, -40),
+    notes: "",
+    ...extra,
+  });
+
+  const machines: Machine[] = [
+    machine("mc-1", "MCH-001", "سنجر مستقيمة ١", "sewing", "الخط الأول", "running", {
+      brand: "Juki",
+      serial: "JK-88121",
+      boughtOn: addDays(today, -900),
+      cost: 34000,
+    }),
+    machine("mc-2", "MCH-002", "سنجر مستقيمة ٢", "sewing", "الخط الأول", "running", {
+      brand: "Juki",
+      serial: "JK-88122",
+      lastServiceOn: addDays(today, -120),
+      boughtOn: addDays(today, -880),
+      cost: 34000,
+    }),
+    machine("mc-3", "MCH-003", "أوفر ٥ خيوط", "overlock", "الخط الثاني", "down", {
+      brand: "Siruba",
+      serial: "SR-4410",
+      lastServiceOn: addDays(today, -25),
+      boughtOn: addDays(today, -640),
+      cost: 41000,
+      notes: "بتقطع الخيط وقت السرعة العالية",
+    }),
+    machine("mc-4", "MCH-004", "مكبس مكوى بخار", "press", "خط التشطيب", "running", {
+      brand: "Veit",
+      serial: "VT-2210",
+      boughtOn: addDays(today, -430),
+      cost: 27500,
+      dailyMinutes: 420,
+    }),
+    machine("mc-5", "MCH-005", "ترابيزة قص أوتوماتيك", "cutting", "الخط الأول", "maintenance", {
+      brand: "Bullmer",
+      serial: "BM-7702",
+      lastServiceOn: addDays(today, -95),
+      boughtOn: addDays(today, -1200),
+      cost: 96000,
+      serviceEveryDays: 60,
+    }),
+    machine("mc-6", "MCH-006", "ماكينة تطريز ٤ رؤوس", "embroidery", "خط التشطيب", "idle", {
+      brand: "Tajima",
+      serial: "TJ-1904",
+      serviceEveryDays: 0,
+      lastServiceOn: null,
+      boughtOn: addDays(today, -260),
+      cost: 155000,
+      notes: "مافيش خطة صيانة لسه",
+    }),
+    machine("mc-7", "MCH-007", "سنجر قديمة", "sewing", "", "retired", {
+      serviceEveryDays: 0,
+      lastServiceOn: null,
+      dailyMinutes: 0,
+      boughtOn: addDays(today, -2400),
+      cost: 12000,
+      notes: "اتشالت من الخط، بتتسحب لقطع الغيار",
+    }),
+  ];
+
+  const ticket = (
+    id: string,
+    n: number,
+    machineId: string,
+    kind: MachineTicket["kind"],
+    state: MachineTicket["state"],
+    reportedOn: string,
+    extra: Partial<MachineTicket> = {},
+  ): MachineTicket => ({
+    id,
+    factoryId: FID,
+    code: `MNT-${today.slice(0, 4)}-${String(n).padStart(6, "0")}`,
+    machineId,
+    kind,
+    state,
+    reportedOn,
+    issueId: null,
+    startedAt: null,
+    endedAt: null,
+    downMinutes: 0,
+    cause: "",
+    action: "",
+    workerId: null,
+    partyId: null,
+    laborCost: 0,
+    outsideCost: 0,
+    notes: "",
+    ...extra,
+  });
+
+  const machineTickets: MachineTicket[] = [
+    ticket("mt-1", 1, "mc-3", "breakdown", "working", today, {
+      issueId: "fi-1",
+      startedAt: at(today, "10:10"),
+      cause: "قطع خيط متكرر",
+      workerId: "w4",
+      notes: "الفني شايف إن الإبرة والمسار محتاجين تغيير",
+    }),
+    ticket("mt-2", 2, "mc-1", "breakdown", "done", addDays(today, -6), {
+      startedAt: at(addDays(today, -6), "09:20"),
+      endedAt: at(addDays(today, -6), "12:05"),
+      downMinutes: 165,
+      cause: "سير موتور مقطوع",
+      action: "تغيير السير وضبط الشد",
+      workerId: "w4",
+      laborCost: 150,
+    }),
+    ticket("mt-3", 3, "mc-5", "service", "working", addDays(today, -1), {
+      startedAt: at(addDays(today, -1), "16:00"),
+      cause: "صيانة دورية فاتت ميعادها",
+      partyId: "mnt-1",
+      notes: "ورشة خارجية — تنضيف وضبط رأس القص",
+    }),
+    ticket("mt-4", 4, "mc-4", "service", "done", addDays(today, -12), {
+      startedAt: at(addDays(today, -12), "14:00"),
+      endedAt: at(addDays(today, -12), "15:30"),
+      downMinutes: 90,
+      cause: "صيانة دورية",
+      action: "تغيير فلتر البخار وتزييت",
+      workerId: "w4",
+      laborCost: 100,
+    }),
+    ticket("mt-5", 5, "mc-3", "breakdown", "done", addDays(today, -18), {
+      startedAt: at(addDays(today, -18), "11:00"),
+      endedAt: at(addDays(today, -18), "17:40"),
+      downMinutes: 400,
+      cause: "قطع خيط متكرر",
+      action: "تغيير مسار الخيط، والعطل رجع تاني بعد أسبوعين",
+      partyId: "mnt-1",
+      outsideCost: 850,
+    }),
   ];
 
   /**
@@ -1588,7 +1806,7 @@ export function demoDb(): Db {
     units: tpl.units,
     categories: tpl.categories,
     warehouses: tpl.warehouses,
-    materials,
+    materials: [...materials, ...spareParts],
     products,
     boms,
     bomItems,
@@ -1607,6 +1825,8 @@ export function demoDb(): Db {
     bundles,
     bundleOps,
     floorIssues,
+    machines,
+    machineTickets,
     scans,
     subcontracts,
     subReceipts,

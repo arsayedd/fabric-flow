@@ -39,6 +39,8 @@ function categoryOf(key: string): NotifCategory {
   if (head === "mat" || head === "mrp") return "inventory";
   if (head === "due" || head === "pending" || head === "profit") return "finance";
   if (head === "quality") return "quality";
+  /* الماكينة الواقفة استثناء إنتاج: هي طاقة ناقصة على خط، مش بند نظام */
+  if (head === "machine") return "production";
   if (head === "attendance") return "workers";
   if (head === "party") return "finance";
   return "system";

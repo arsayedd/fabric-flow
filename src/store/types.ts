@@ -437,6 +437,7 @@ export const STOCK_KINDS = [
   "waste",
   "receipt_fg",
   "delivery",
+  "maintenance",
 ] as const;
 export type StockKind = (typeof STOCK_KINDS)[number];
 
@@ -450,6 +451,7 @@ export const STOCK_KIND_LABEL: Record<StockKind, string> = {
   waste: "هالك",
   receipt_fg: "استلام إنتاج تام",
   delivery: "تسليم للعميل",
+  maintenance: "صرف قطع غيار للصيانة",
 };
 
 /** دفتر المخزون: الرصيد محسوب من الحركات ولا يُخزَّن أبدًا */
@@ -790,8 +792,142 @@ export type BundleOp = {
   rate: number;
   /** الزمن المعياري للقطعة وقت البدء — الكفاءة بتتقاس عليه */
   stdMinutes: number;
+  /**
+   * الماكينة اللي العملية اتعملت عليها.
+   *
+   * اختياري عن قصد: مصنع بيسجّل من الموبايل مش دايمًا هيختار ماكينة،
+   * والإنتاج لازم يتسجّل سواء اختار أو لأ. اللي بيختار بياخد نسبة
+   * تشغيل حقيقية للماكينة، واللي مابيختارش بياخد جاهزية من التوقف بس
+   * — والشاشة بتقول التغطية كام بالظبط.
+   */
+  machineId?: string | null;
   defect: string;
   stageEntryId: string | null;
+  notes: string;
+};
+
+/* ══ الماكينات والصيانة (M-M1) ══════════════════════════════════
+ *
+ * الماكينة مش أصل في كشف جرد — هي **سبب توقف**. عشان كده الجدول ده
+ * مش «سجل ماكينات» وبس: هو الماكينة + تذاكرها + وقت توقفها، لأن السؤال
+ * اللي المصنع بيسأله مش «عندي كام ماكينة» — هو «الخط وقف ليه، وقد إيه،
+ * وكلّفني كام، وهيوقف تاني امتى».
+ *
+ * والتكلفة مش رقم بيتكتب بالإيد: قطع الغيار بتخرج من المخزن **بحركة
+ * مخزون حقيقية** (`kind: "maintenance"`) زي أي صرف تاني، فرصيد قطع
+ * الغيار بيقل فعلًا وتكلفة الصيانة بتطلع من الدفتر.
+ */
+
+export const MACHINE_STATES = ["running", "idle", "maintenance", "down", "retired"] as const;
+export type MachineState = (typeof MACHINE_STATES)[number];
+
+export const MACHINE_STATE_LABEL: Record<MachineState, string> = {
+  running: "شغّالة",
+  idle: "واقفة",
+  maintenance: "في الصيانة",
+  down: "عطلانة",
+  retired: "خارج الخدمة",
+};
+
+export const MACHINE_KINDS = [
+  "sewing",
+  "overlock",
+  "cutting",
+  "press",
+  "embroidery",
+  "printing",
+  "packing",
+  "woodwork",
+  "utility",
+  "other",
+] as const;
+export type MachineKind = (typeof MACHINE_KINDS)[number];
+
+/** نوع الماكينة عام عن قصد: صنعة مش للملابس بس */
+export const MACHINE_KIND_LABEL: Record<MachineKind, string> = {
+  sewing: "خياطة",
+  overlock: "أورليه وحبك",
+  cutting: "قص",
+  press: "مكبس ومكوى",
+  embroidery: "تطريز",
+  printing: "طباعة",
+  packing: "تعبئة وتغليف",
+  woodwork: "نجارة وتشكيل",
+  utility: "خدمات (كهرباء وهوا)",
+  other: "نوع تاني",
+};
+
+export type Machine = {
+  id: string;
+  factoryId: string;
+  /** كود مطبوع على الماكينة نفسها، زي MCH-004 */
+  code: string;
+  name: string;
+  kind: MachineKind;
+  brand: string;
+  serial: string;
+  /** خط الإنتاج بنفس نص الخط اللي في الأوامر — مش جدول تاني */
+  line: string;
+  /** المخزن/الموقع اللي الماكينة فيه */
+  warehouseId: string | null;
+  state: MachineState;
+  boughtOn: string | null;
+  cost: number;
+  /** دقايق التشغيل المخططة في اليوم — أساس نسبة الجاهزية */
+  dailyMinutes: number;
+  /** كل كام يوم صيانة دورية. صفر = مفيش خطة صيانة */
+  serviceEveryDays: number;
+  lastServiceOn: string | null;
+  notes: string;
+};
+
+export const TICKET_KINDS = ["breakdown", "service"] as const;
+export type TicketKind = (typeof TICKET_KINDS)[number];
+
+export const TICKET_KIND_LABEL: Record<TicketKind, string> = {
+  breakdown: "عطل",
+  service: "صيانة دورية",
+};
+
+export const TICKET_STATES = ["open", "working", "done", "cancelled"] as const;
+export type TicketState = (typeof TICKET_STATES)[number];
+
+export const TICKET_STATE_LABEL: Record<TicketState, string> = {
+  open: "مفتوحة — لسه محدش بدأ",
+  working: "تحت الإصلاح",
+  done: "اتصلحت",
+  cancelled: "ملغاة",
+};
+
+/**
+ * تذكرة ماكينة: عطل أو صيانة دورية.
+ *
+ * وقت التوقف بيتحسب من الساعة (`startedAt` → `endedAt`) وينفع يتعدّل
+ * بالإيد وقت الإقفال، لأن الماكينة ساعات بتقف قبل ما حد يفتح تذكرة.
+ * واللي بيتخزّن هو **الدقايق** مش النسبة — النسبة بتتحسب وقت العرض.
+ */
+export type MachineTicket = {
+  id: string;
+  factoryId: string;
+  code: string;
+  machineId: string;
+  kind: TicketKind;
+  state: TicketState;
+  reportedOn: string;
+  /** بلاغ أرض المصنع اللي فتح التذكرة، لو اتفتحت من الخط */
+  issueId: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  /** دقايق التوقف الفعلية */
+  downMinutes: number;
+  cause: string;
+  action: string;
+  /** فني داخلي */
+  workerId: string | null;
+  /** ورشة خارجية كجهة تعامل */
+  partyId: string | null;
+  laborCost: number;
+  outsideCost: number;
   notes: string;
 };
 
@@ -842,6 +978,7 @@ export const CODE_KINDS = [
   "document",
   "batch",
   "supply",
+  "machine",
 ] as const;
 
 export type CodeKind = (typeof CODE_KINDS)[number];
@@ -861,6 +998,7 @@ export const KIND_TAG: Record<CodeKind, string> = {
   document: "DOC",
   batch: "LOT",
   supply: "SUP",
+  machine: "MCH",
 };
 
 export const KIND_LABEL: Record<CodeKind, string> = {
@@ -877,6 +1015,7 @@ export const KIND_LABEL: Record<CodeKind, string> = {
   document: "مستند",
   batch: "دفعة خامة",
   supply: "أمر توريد",
+  machine: "ماكينة",
 };
 
 /** الإجراءات اللي المسح بيوصّل لها — كل واحدة مربوطة بميوتيشن موجودة */
@@ -1560,6 +1699,7 @@ export const DOC_TYPES = [
   "payvoucher",
   "payslip",
   "stock",
+  "maintenance",
 ] as const;
 export type DocType = (typeof DOC_TYPES)[number];
 
@@ -1649,6 +1789,8 @@ export type Db = {
   bundles: Bundle[];
   bundleOps: BundleOp[];
   floorIssues: FloorIssue[];
+  machines: Machine[];
+  machineTickets: MachineTicket[];
   scans: ScanEvent[];
   subcontracts: Subcontract[];
   subReceipts: SubReceipt[];

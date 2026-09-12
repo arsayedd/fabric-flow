@@ -33,6 +33,10 @@ export function StationPage() {
   const [workerId, setWorkerId] = useState("");
   const [finishing, setFinishing] = useState<BundleOp | null>(null);
   const [issue, setIssue] = useState<FloorIssueKind | null>(null);
+  const [machineId, setMachineId] = useState("");
+
+  // الماكينات اللي في الخدمة بس: العطلانة مش هتشتغل عليها عملية جديدة
+  const machines = (db.machines ?? []).filter((m) => m.state === "running" || m.state === "idle");
 
   const active = useMemo(() => myActiveOps(db, workerId || null), [db, workerId]);
   const st = bundle ? bundleState(db, bundle) : null;
@@ -50,7 +54,7 @@ export function StationPage() {
   const start = () => {
     if (!bundle) return;
     try {
-      startBundleOp({ bundleId: bundle.id, workerId: workerId || null });
+      startBundleOp({ bundleId: bundle.id, workerId: workerId || null, machineId: machineId || null });
       toast.success("العملية بدأت — الوقت ماشي.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "مش قادر أبدأ.");
@@ -77,6 +81,23 @@ export function StationPage() {
             ))}
           </select>
         </Field>
+
+        {machines.length ? (
+          // اختياري عن قصد: العامل اللي مستعجل بيسيبها فاضية والعملية
+          // تتسجّل زي الأول. اللي بيختار بيخلّي «نسبة تشغيل» الماكينة
+          // محسوبة من شغل فعلي مش من تقدير
+          <Field label="الماكينة (اختياري)">
+            <select className={selectClass} value={machineId} onChange={(e) => setMachineId(e.target.value)}>
+              <option value="">من غير تحديد ماكينة</option>
+              {machines.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.code} — {m.name}
+                  {m.line ? ` · ${m.line}` : ""}
+                </option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
 
         <Field label="رقم الباندل">
           <div className="flex gap-2">
@@ -387,6 +408,9 @@ function IssuePanel({
       <p className="text-xs text-muted-foreground">
         الأنواع المتاحة: {FLOOR_ISSUE_KINDS.map((k) => FLOOR_ISSUE_LABEL[k]).join(" · ")}. البلاغ بيظهر على شاشة أرض
         المصنع لحد ما حد يقول «اتحلّت».
+        {kind === "machine"
+          ? " وبلاغ الماكينة الصيانة بتحوّله لتذكرة من شاشة الصالة، وساعتها التوقف بيبقى له وقت وقطع غيار وتكلفة."
+          : ""}
       </p>
     </Panel>
   );

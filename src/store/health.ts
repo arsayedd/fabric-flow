@@ -3,8 +3,10 @@ import { allAccountBalances, payables, receivables } from "./compute";
 import { costSheet, profitAlerts, profitDashboard } from "./costing";
 import { customerScore, riskScore } from "./intelligence";
 import { orderStages, routingLines, materialStock, productById } from "./manufacturing";
+import { machineSummary, machinesDownNow } from "./machines";
 import { capacityBase, isWorkDay, mrp, openOrders, schedule, workDaysBetween } from "./planning";
 import type { Db } from "./types";
+import { MACHINE_STATE_LABEL } from "./types";
 
 /**
  * صحة المصنع والإدارة بالاستثناء.
@@ -685,6 +687,43 @@ export function exceptions(db: Db): Exception[] {
         impact: (dayWorkers.length - present) * 300,
       });
     }
+  }
+
+  /*
+   * ماكينة واقفة دلوقتي.
+   *
+   * الماكينة الواقفة مش تنبيه صيانة — دي **طاقة ناقصة على خط بعينه**،
+   * وعشان كده بتدخل نفس قايمة الاستثناءات اللي فيها الأوامر المتأخرة.
+   * والوقت بيجري: تذكرة مفتوحة من امبارح بتبان بساعاتها، مش بصفر.
+   */
+  for (const d of machinesDownNow(db)) {
+    const hours = d.downMinutes / 60;
+    out.push({
+      key: `machine-${d.machine.id}`,
+      tone: hours >= 4 ? "danger" : "warn",
+      title: `${d.machine.name} واقفة ${num(hours, 1)} ساعة`,
+      why: d.ticket
+        ? `${d.ticket.cause || "من غير سبب مكتوب"}${d.machine.line ? ` — ${d.machine.line}` : ""} · تذكرة ${d.ticket.code}`
+        : `حالتها ${MACHINE_STATE_LABEL[d.machine.state]} ومافيش تذكرة مفتوحة عليها`,
+      action: d.ticket ? "اقفل التذكرة بعد الإصلاح أو صعّدها لورشة خارجية" : "افتح تذكرة عشان التوقف يتحسب",
+      to: `/machines/${d.machine.id}`,
+      impact: hours * 200,
+    });
+  }
+
+  /* صيانة دورية فاتت ميعادها — قبل العطل، مش بعده */
+  for (const r of machineSummary(db).overdueServices) {
+    out.push({
+      key: `machine-service-${r.machine.id}`,
+      tone: (r.serviceOverdueDays ?? 0) >= 14 ? "warn" : "info",
+      title: `صيانة ${r.machine.code} فاتت بـ${num(r.serviceOverdueDays ?? 0, 0)} يوم`,
+      why: `خطتها كل ${num(r.machine.serviceEveryDays, 0)} يوم، وآخر صيانة ${
+        r.machine.lastServiceOn ? formatDate(r.machine.lastServiceOn) : "مش مسجّلة"
+      }`,
+      action: "افتح تذكرة صيانة دورية قبل ما تقف في نص وردية",
+      to: `/machines/${r.machine.id}`,
+      impact: (r.serviceOverdueDays ?? 0) * 40,
+    });
   }
 
   /* أوامر برّه الجدولة — مش استثناء تشغيلي، ده نقص بيانات */

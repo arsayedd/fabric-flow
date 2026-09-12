@@ -193,7 +193,10 @@ export const NAV: NavSection[] = [
     key: "machines",
     label: "الماكينات والصيانة",
     icon: Wrench,
-    items: [item("/machines", "الماكينات", "machines", "machines", false)],
+    items: [
+      item("/machines", "الماكينات وحالتها", "machines", "machines"),
+      item("/machines/tickets", "أعطال وصيانة", "machines", "machines"),
+    ],
   },
   {
     key: "documents",
@@ -268,6 +271,9 @@ export const ROUTE_LABEL: Record<string, string> = {
   "/outsourcing": "الورش الخارجية",
   "/supply": "التوريد والدفعات",
   "/planning": "التخطيط والطاقة",
+  // القسم اسمه «الماكينات والصيانة»، فالشاشة اسمها «الماكينات» — غير كده
+  // خط المسار بيكرّر نفس الجملة مرتين ورا بعضها
+  "/machines": "الماكينات",
   "/products": "الموديلات",
   "/materials": "الخامات",
   "/workers": "العمال",
@@ -343,6 +349,7 @@ export const QUICK_ACTIONS: QuickAction[] = [
   { key: "tx", label: "حركة خزينة", to: "/treasury?new=1", icon: Wallet, perm: "finance", action: "create" },
   // المرتجع بياخد صلاحية الطرف، وأقربها للمرتجع الغالب: مرتجع العميل
   { key: "return", label: "مرتجع", to: "/returns?new=1", icon: Undo2, perm: "sales", action: "create" },
+  { key: "ticket", label: "بلاغ عطل", to: "/machines/tickets?new=1", icon: Wrench, perm: "machines", action: "create" },
 ];
 
 /** أيقونات الكيانات في البحث الشامل — نفس الأيقونة في كل مكان */

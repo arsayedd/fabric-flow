@@ -28,7 +28,7 @@
  */
 
 import type { CodeKind, Db } from "./types";
-import { BATCH_STATUS_LABEL, KIND_LABEL, KIND_TAG, SUPPLY_STATUS_LABEL } from "./types";
+import { BATCH_STATUS_LABEL, KIND_LABEL, KIND_TAG, MACHINE_STATE_LABEL, SUPPLY_STATUS_LABEL } from "./types";
 import { DOC_DEFS } from "./documents";
 import type { PermModule } from "./permissions";
 
@@ -53,6 +53,7 @@ export const KIND_MODULE: Record<CodeKind, PermModule> = {
   document: "reports",
   batch: "inventory",
   supply: "purchasing",
+  machine: "machines",
 };
 
 const TAG_TO_KIND = Object.fromEntries(Object.entries(KIND_TAG).map(([k, t]) => [t, k as CodeKind])) as Record<string, CodeKind>;
@@ -183,6 +184,9 @@ function readPlain(db: Db, text: string): Scanned | null {
 
   const supply = (db.supplyOrders ?? []).find((s) => eq(s.code));
   if (supply) return describe(db, "supply", supply.id, "text");
+
+  const machine = (db.machines ?? []).find((m) => eq(m.code) || (m.serial && eq(m.serial)));
+  if (machine) return describe(db, "machine", machine.id, "text");
 
   const material = db.materials.find((m) => eq(m.sku));
   if (material) return describe(db, "material", material.id, "text");
@@ -325,6 +329,24 @@ export function describe(db: Db, kind: CodeKind, id: string, via: Hit["via"] = "
         via,
       };
     }
+    /*
+     * كود الماكينة بيتمسح من الموبايل وقت العطل بالظبط: العامل واقف
+     * جنبها، فالكود بيوصّله لملفها وزر «بلّغ عطل» من غير ما يدور على
+     * اسمها في قايمة.
+     */
+    case "machine": {
+      const m = (db.machines ?? []).find((x) => x.id === id);
+      if (!m) return null;
+      return {
+        kind,
+        id,
+        code: m.code,
+        label: m.name,
+        sub: `${MACHINE_STATE_LABEL[m.state]}${m.line ? ` · ${m.line}` : ""}`,
+        to: `/machines/${m.id}`,
+        via,
+      };
+    }
   }
 }
 
@@ -340,5 +362,4 @@ export const CODES_NOT_YET: { label: string; needs: string }[] = [
   { label: "رول قماش (Fabric Roll)", needs: "جدول رولات بطولها، وحركة مخزن على مستوى الرول — الدفعة بقت موجودة، لكن القماش لسه بيتحرّك بالمتر مش بالرول" },
   { label: "كرتونة وصندوق وبالتة", needs: "تسجيل التغليف كوحدة — التسلسل دلوقتي بيقف عند الباندل" },
   { label: "موقع ورف في المخزن", needs: "مواقع جوه المخزن — المخزن دلوقتي وحدة واحدة" },
-  { label: "ماكينة وأصل", needs: "سجل ماكينات (CMMS)" },
 ];
