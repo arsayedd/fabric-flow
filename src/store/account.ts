@@ -207,7 +207,11 @@ export const MODULE_ABOUT: Record<ModuleKey, string> = {
   automation: "اسأل صنعة بالعامية والجواب من دفترك، وقواعد حساسية التنبيهات",
 };
 
-/** الموديولات اللي لسه مش مبنية — بنقولها صريح في الاختيار بدل ما نوعد */
+/**
+ * مبني فعلًا؟ — والـتمانتاشر كلهم `true` النهارده. الخريطة باقية عشان أي قسم
+ * جديد يتضاف يبقى `false` لحد ما يشتغل end-to-end، فيترشّح من شاشة التجهيز
+ * بدل ما يتعرض كارت مطفي بوعد.
+ */
 export const MODULE_READY: Record<ModuleKey, boolean> = {
   production: true,
   cutting: true,

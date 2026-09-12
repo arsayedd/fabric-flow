@@ -85,13 +85,18 @@ export function HelpPage() {
         <p className="mt-3 text-sm leading-relaxed">{ready.map((i) => i.label).join(" · ")}</p>
       </Card>
 
-      <Card className="p-4">
-        <h3 className="text-base">اللي لسه مش مبني</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          بيبان في القائمة مكتوب عليه «قريب» بدل ما يكون لينك بيوصّل لصفحة فاضية.
-        </p>
-        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{soon.map((i) => i.label).join(" · ")}</p>
-      </Card>
+      {/* الكارت ده بيظهر بس لو فعلًا فيه شاشة مش مبنية. النهارده القايمة فاضية،
+          وكارت بعنوان «اللي لسه مش مبني» وتحته سطر فاضي بيوحي إن فيه حاجة ناقصة
+          مش عارف هي إيه. */}
+      {soon.length ? (
+        <Card className="p-4">
+          <h3 className="text-base">اللي لسه مش مبني</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            بيبان في القائمة مكتوب عليه «قريب» بدل ما يكون لينك بيوصّل لصفحة فاضية.
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{soon.map((i) => i.label).join(" · ")}</p>
+        </Card>
+      ) : null}
 
       <Card className="p-4">
         <h3 className="text-base">حاجات محتاجة سيرفر</h3>
