@@ -21,19 +21,60 @@
 import { addDays, cairoToday } from "@/lib/utils";
 import { operationById, orderStages, routingLines } from "./manufacturing";
 import { capacityBase, isWorkDay, workDaysBetween } from "./planning";
-import type { Bundle, BundleOp, Db, FloorIssue, Order } from "./types";
+import { PROBLEM_DEFS, PROBLEM_KINDS } from "./types";
+import type { Bundle, BundleOp, Db, FloorIssue, Order, ProblemKind } from "./types";
 
-/** أسباب العيب الشائعة — قائمة مساعدة، والمشرف يقدر يكتب سبب تاني */
-export const DEFECT_REASONS = [
-  "غرزة مفتوحة",
-  "قص غلط",
-  "مقاس مش مطابق",
-  "بقعة أو وسخ",
-  "لون مختلف",
-  "زرار أو سوستة",
-  "خرم أو شرخ",
-  "مكوى",
-] as const;
+/**
+ * أسباب العيب على الخط = **نفس تصنيف المشاكل** اللي بيتسجّل على المرتجع.
+ *
+ * قبل كده كانت قايمة مستقلة، ونتيجتها إن «أكتر مشكلة في المصنع» كان ليها
+ * إجابتين: واحدة من باريتو الخط وواحدة من باريتو المرتجعات، وماينفعش
+ * تجمعهم. دلوقتي الاتنين بيتكلموا نفس اللغة، فالعيب اللي اتمسك جوه
+ * والعيب اللي رجع من العميل بيتحطوا في نفس السطر.
+ *
+ * والمستبعد هنا مقصود: «منتج غلط» و«كمية ناقصة» مشاكل توريد مش عيب
+ * تشغيل، ومالهمش معنى على باندل بيخلص عملية.
+ */
+const FLOOR_PROBLEMS: ProblemKind[] = [
+  "sewing",
+  "cutting",
+  "finishing",
+  "ironing",
+  "printing",
+  "embroidery",
+  "fabric",
+  "accessory",
+  "tear",
+  "size",
+  "color",
+  "other_problem",
+];
+
+export const DEFECT_REASONS = FLOOR_PROBLEMS.map((k) => PROBLEM_DEFS[k].label);
+
+/**
+ * الأسماء القديمة اللي اتسجّلت قبل توحيد التصنيف.
+ *
+ * البيانات المكتوبة مابتتغيرش بأثر رجعي — بتتقرا. فالتسجيل القديم
+ * «غرزة مفتوحة» بيتحسب عيب خياطة في الباريتو من غير ما نلمس السطر نفسه.
+ */
+const LEGACY_DEFECT_ALIAS: Record<string, ProblemKind> = {
+  "غرزة مفتوحة": "sewing",
+  "قص غلط": "cutting",
+  "بقعة أو وسخ": "fabric",
+  "زرار أو سوستة": "accessory",
+  "خرم أو شرخ": "tear",
+  مكوى: "ironing",
+};
+
+const LABEL_TO_KIND = new Map<string, ProblemKind>(PROBLEM_KINDS.map((k) => [PROBLEM_DEFS[k].label, k]));
+
+/** بيحوّل نص العيب المكتوب على الباندل لنوع مشكلة — أو `null` لو مش معروف */
+export function problemOfDefect(text: string): ProblemKind | null {
+  const t = text.trim();
+  if (!t) return null;
+  return LABEL_TO_KIND.get(t) ?? LEGACY_DEFECT_ALIAS[t] ?? null;
+}
 
 /* ── وقت العملية ─────────────────────────────────────────────── */
 

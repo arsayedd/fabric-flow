@@ -10,16 +10,18 @@
  */
 
 import { addDays, cairoToday } from "@/lib/utils";
-import { customerCredits, customerRefunds, deliveriesOfModel, isEffective } from "./compute";
+import { customerCredits, customerRefunds, deliveriesOfModel, isEffective, repairCostOf } from "./compute";
 import type {
   Complaint,
   ComplaintKind,
   Db,
+  RepairOrder,
+  ReturnCostKind,
   ReturnEntry,
   ReturnReason,
   ReturnSource,
 } from "./types";
-import { RETURN_REASON_DEFS } from "./types";
+import { RETURN_COST_LABEL, RETURN_REASON_DEFS } from "./types";
 import type { PermModule } from "./permissions";
 
 /**
@@ -87,6 +89,78 @@ export function unitCostOf(db: Db, r: ReturnEntry): number {
     .filter((m) => m.itemType === "product" && m.itemId === r.itemId && m.kind === "receipt_fg" && m.unitCost > 0)
     .sort((a, b) => b.date.localeCompare(a.date));
   return moves.length ? moves[0].unitCost : 0;
+}
+
+/* ── تكلفة الإصلاح وتكلفة الحالة ───────────────────────────────
+ *
+ * تكلفة أمر الإصلاح **محسوبة مش مكتوبة**: أجر القطعة × الكمية، زائد
+ * الخامات اللي اتصرفت بتكلفتها وقت الصرف. واللي اتخزّن هو القرارين بس
+ * (`rate` و`unitCost`) لأنهم اتفاق وقتها، مش حساب.
+ */
+
+export type RepairCost = {
+  labor: number;
+  materials: number;
+  total: number;
+  /** تكلفة إصلاح القطعة الواحدة — الرقم اللي بيتقارن بتكلفة إنتاجها */
+  perPiece: number;
+};
+
+export const repairCost = repairCostOf;
+
+export function repairsOf(db: Db, returnId: string): RepairOrder[] {
+  return (db.repairs ?? []).filter((x) => x.returnId === returnId && x.status !== "cancelled");
+}
+
+export function nextRepairCode(rows: RepairOrder[], today = cairoToday()): string {
+  const year = Number(today.slice(0, 4));
+  const last = rows
+    .filter((r) => r.code.includes(`-${year}-`))
+    .reduce((max, r) => Math.max(max, Number(r.code.split("-").pop()) || 0), 0);
+  return `REP-${year}-${String(last + 1).padStart(6, "0")}`;
+}
+
+export type CostBreakdown = { kind: ReturnCostKind; label: string; amount: number; note: string; fromRepair: boolean };
+
+/**
+ * تكلفة الحالة مفصّلة.
+ *
+ * السطور المكتوبة بالإيد + اللي أوامر الإصلاح حسبتها. وأجر الإصلاح
+ * وخاماته **مابيتقبلوش كتابة يدوية** طول ما فيه أمر إصلاح، عشان نفس
+ * الجنيه مايتعدّش مرتين — مرة في الأمر ومرة في سطر مكتوب.
+ */
+export function costBreakdown(db: Db, r: ReturnEntry): { lines: CostBreakdown[]; total: number } {
+  const lines: CostBreakdown[] = (r.costs ?? []).map((c) => ({
+    kind: c.kind,
+    label: RETURN_COST_LABEL[c.kind],
+    amount: c.amount,
+    note: c.note,
+    fromRepair: false,
+  }));
+
+  for (const rep of repairsOf(db, r.id)) {
+    const c = repairCost(rep);
+    if (c.labor > 0) {
+      lines.push({
+        kind: "repair_labor",
+        label: RETURN_COST_LABEL.repair_labor,
+        amount: c.labor,
+        note: `${rep.code} — ${rep.qty} قطعة × ${Math.round(rep.rate)} ج`,
+        fromRepair: true,
+      });
+    }
+    if (c.materials > 0) {
+      lines.push({
+        kind: "spare_materials",
+        label: RETURN_COST_LABEL.spare_materials,
+        amount: c.materials,
+        note: `${rep.code} — ${rep.materials.length} صنف`,
+        fromRepair: true,
+      });
+    }
+  }
+
+  return { lines, total: lines.reduce((s, l) => s + l.amount, 0) };
 }
 
 /* ── أثر المرتجع على الربح ─────────────────────────────────────── */
@@ -191,8 +265,9 @@ export function returnImpact(db: Db, r: ReturnEntry): ReturnImpact {
     }
   }
 
-  if (r.extraCost > 0) {
-    lines.push({ label: r.extraNote.trim() || "مصاريف المرتجع", amount: r.extraCost, why: "شحن رجوع أو إصلاح أو إعادة تعبئة" });
+  for (const c of costBreakdown(db, r).lines) {
+    if (c.amount <= 0) continue;
+    lines.push({ label: c.label, amount: c.amount, why: c.note.trim() || "من بنود تكلفة الحالة" });
   }
 
   return {

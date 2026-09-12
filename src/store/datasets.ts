@@ -1,12 +1,12 @@
 import { cairoToday, formatDate, money, moneyPlain, qty } from "@/lib/utils";
 import type { ExportCol, ExportDataset, ExportRow } from "@/lib/export";
-import { allAccountBalances, clientStatement, costEntryPaid, payables, receivables, workerAdvance, workerBalance } from "./compute";
+import { allAccountBalances, caseCostTotal, clientStatement, costEntryPaid, payables, receivables, repairCostOf, workerAdvance, workerBalance } from "./compute";
 import { profitRanking } from "./costing";
 import { LAY_STATUS_LABEL, layMath } from "./cutting";
 import { bundleState, defectPareto, opMinutes, wip as wipRows, workerEfficiency } from "./floor";
 import { SUB_STATUS_LABEL, subViews } from "./outsourcing";
 import { describe } from "./codes";
-import { itemName, partyName, returnImpact } from "./returns";
+import { itemName, partyName, returnImpact, unitCostOf } from "./returns";
 import { activeBom, bomLines, materialById, materialStock, operationById, orderStages, productById, stockQty, unitName } from "./manufacturing";
 import { customerStats, partyById, partyCredit } from "./parties";
 import { mrp, openOrders, orderLoad, schedule } from "./planning";
@@ -19,12 +19,16 @@ import {
   METHOD_LABEL,
   ORDER_STATUS_LABEL,
   PAY_TYPE_LABEL,
+  PROBLEM_LABEL,
+  PROBLEM_ORIGIN_LABEL,
+  REPAIR_STATUS_LABEL,
   RETURN_CONDITION_LABEL,
   RETURN_REASON_DEFS,
   RETURN_RESOLUTION_LABEL,
   RETURN_SOURCE_LABEL,
   RETURN_STATUS_LABEL,
   ROLE_LABEL,
+  ROOT_CAUSE_LABEL,
   SCAN_ACTION_LABEL,
   STOCK_KIND_LABEL,
   type Db,
@@ -1241,11 +1245,16 @@ export const DATASETS: DatasetDef[] = [
       text("condition", "الحالة"),
       text("reason", "السبب", 16),
       text("reasonNote", "تفاصيل السبب", 26),
+      text("problem", "المشكلة", 18),
+      text("origin", "مصدرها", 14),
+      text("rootCause", "الجذر", 16),
+      text("line", "الخط", 14),
+      text("worker", "العامل", 18),
       text("status", "الموقف"),
       text("resolution", "القرار", 16),
       cash("unitValue", "قيمة الوحدة", "none"),
       cash("settleAmount", "المبلغ المتسوّى"),
-      cash("extraCost", "مصاريف المرتجع"),
+      cash("caseCost", "مصاريف الحالة"),
       cash("impact", "أثره على الربح"),
       text("delivery", "التوريد", 18),
       text("order", "الأمر", 14),
@@ -1264,11 +1273,16 @@ export const DATASETS: DatasetDef[] = [
           condition: RETURN_CONDITION_LABEL[r.condition],
           reason: RETURN_REASON_DEFS[r.reason].label,
           reasonNote: r.reasonNote,
+          problem: r.problem ? PROBLEM_LABEL[r.problem] : "",
+          origin: r.origin ? PROBLEM_ORIGIN_LABEL[r.origin] : "",
+          rootCause: r.rootCause ? ROOT_CAUSE_LABEL[r.rootCause] : "",
+          line: r.line || (r.orderId ? db.orders.find((o) => o.id === r.orderId)?.line ?? "" : ""),
+          worker: r.workerId ? db.workers.find((w) => w.id === r.workerId)?.name ?? "" : "",
           status: RETURN_STATUS_LABEL[r.status],
           resolution: r.resolution ? RETURN_RESOLUTION_LABEL[r.resolution] : "لسه",
           unitValue: r.unitValue,
           settleAmount: r.settleAmount,
-          extraCost: r.extraCost,
+          caseCost: caseCostTotal(db, r),
           impact: returnImpact(db, r).total,
           delivery: del ? `${del.model} ${formatDate(del.date)}` : "",
           order: r.orderId ? db.orders.find((o) => o.id === r.orderId)?.code ?? "" : "",
@@ -1278,6 +1292,63 @@ export const DATASETS: DatasetDef[] = [
       "«أثره على الربح» بيتحسب بعد القرار بس — المرتجع اللي لسه مستني فحص أثره صفر مش مجهول.",
       "مرتجع العميل السليم اللي رجع المخزن أثره الهامش بس، لأن تكلفة القطعة اترجعت. والتالف أثره الفاتورة كلها.",
       "«قيمة الوحدة» مش مجموعة: هي سعر القطعة وقت المرتجع، ومجموع الأسعار مالوش معنى.",
+      "«المشكلة» و«مصدرها» و«الجذر» بيتكتبوا وقت الفحص. الحالة اللي لسه مافُحصتش بتبان فاضية، مش «مش معروف».",
+    ],
+  },
+  {
+    key: "repairs",
+    title: "أوامر الإصلاح",
+    about: "القطع اللي اتصلحت: مين صلّحها، قعدت قد إيه، كلّفت كام، وعدّت الفحص ولا لأ.",
+    area: "production",
+    module: "quality",
+    screen: "/repairs",
+    groupBy: "status",
+    cols: [
+      code("code", "رقم الأمر"),
+      code("returnCode", "الحالة"),
+      day("date", "التاريخ"),
+      text("item", "الصنف", 22),
+      count("qty", "الكمية"),
+      text("problem", "المشكلة", 18),
+      text("worker", "العامل", 18),
+      text("status", "الموقف", 14),
+      count("minutes", "دقايق الإصلاح"),
+      cash("labor", "أجر الإصلاح"),
+      cash("materials", "خامات الإصلاح"),
+      cash("total", "إجمالي التكلفة"),
+      cash("perPiece", "تكلفة القطعة", "none"),
+      cash("makeCost", "تكلفة إنتاجها", "none"),
+      count("qtyPassed", "عدّت الفحص"),
+      count("qtyFailed", "سقطت"),
+    ],
+    rows: (db) =>
+      (db.repairs ?? []).map((rep) => {
+        const parent = db.returns.find((r) => r.id === rep.returnId);
+        const c = repairCostOf(rep);
+        return {
+          id: rep.id,
+          code: rep.code,
+          returnCode: parent?.code ?? "",
+          date: rep.date,
+          item: parent ? itemName(db, parent) : "",
+          qty: rep.qty,
+          problem: rep.problem ? PROBLEM_LABEL[rep.problem] : "",
+          worker: rep.workerId ? db.workers.find((w) => w.id === rep.workerId)?.name ?? "" : "",
+          status: REPAIR_STATUS_LABEL[rep.status],
+          minutes: rep.minutes,
+          labor: c.labor,
+          materials: c.materials,
+          total: c.total,
+          perPiece: c.perPiece,
+          makeCost: parent ? unitCostOf(db, parent) : 0,
+          qtyPassed: rep.qtyPassed,
+          qtyFailed: rep.qtyFailed,
+        };
+      }),
+    notes: [
+      "«تكلفة القطعة» مش مجموعة، وهي الرقم اللي بيتقارن بـ«تكلفة إنتاجها»: لو الإصلاح قرّب من الإنتاج، الإهلاك أرخص.",
+      "الدقايق بتتحسب من وقت البدء والإقفال، مش بتتكتب بالإيد.",
+      "خامات الإصلاح بتطلع من المخزن بحركة صرف حقيقية وقت فتح الأمر.",
     ],
   },
   {

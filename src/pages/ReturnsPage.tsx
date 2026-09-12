@@ -32,6 +32,14 @@ import {
   COMPLAINT_STATUS_LABEL,
   METHOD_LABEL,
   PAY_METHODS,
+  PROBLEM_CATEGORY_LABEL,
+  PROBLEM_DEFS,
+  PROBLEM_KINDS,
+  PROBLEM_ORIGINS,
+  PROBLEM_ORIGIN_LABEL,
+  PRODUCTION_LINES,
+  ROOT_CAUSES,
+  ROOT_CAUSE_LABEL,
   RETURN_CONDITION_LABEL,
   RETURN_REASON_DEFS,
   RETURN_RESOLUTIONS,
@@ -42,6 +50,9 @@ import {
   type Complaint,
   type ComplaintKind,
   type PayMethod,
+  type ProblemKind,
+  type ProblemOrigin,
+  type RootCause,
   type ReturnCondition,
   type ReturnEntry,
   type ReturnReason,
@@ -346,6 +357,12 @@ function NewReturnPanel({ open, onClose }: { open: boolean; onClose: () => void 
   const [deliveryId, setDeliveryId] = useState("");
   const [costEntryId, setCostEntryId] = useState("");
   const [orderId, setOrderId] = useState("");
+  const [problem, setProblem] = useState<ProblemKind | "">("");
+  const [origin, setOrigin] = useState<ProblemOrigin | "">("");
+  const [color, setColor] = useState("");
+  const [size, setSize] = useState("");
+  const [line, setLine] = useState("");
+  const [ownerId, setOwnerId] = useState("");
   const [notes, setNotes] = useState("");
 
   const itemType = source === "customer" ? "product" : source === "supplier" ? "material" : "material";
@@ -366,6 +383,13 @@ function NewReturnPanel({ open, onClose }: { open: boolean; onClose: () => void 
     const list = reasonsFor(next);
     if (!list.some((x) => x.reason === reason)) setReason(list[0].reason);
     if (next === "production") setCondition("good");
+  };
+
+  /* أمر الإنتاج بيعرف خطه، فمافيش داعي المستخدم يختاره تاني */
+  const pickOrder = (id: string) => {
+    setOrderId(id);
+    const order = db.orders.find((o) => o.id === id);
+    if (order?.line) setLine(order.line);
   };
 
   /* التوريد المختار بيقول سعر القطعة — أحسن من إن المستخدم يدوّر عليه */
@@ -393,6 +417,14 @@ function NewReturnPanel({ open, onClose }: { open: boolean; onClose: () => void 
         bundleId: null,
         costEntryId: costEntryId || null,
         issueId: null,
+        problem: problem || null,
+        origin: origin || null,
+        color,
+        size,
+        line,
+        operationId: null,
+        workerId: null,
+        ownerId: ownerId || null,
         notes,
       });
       toast.success("المرتجع اتسجّل. افحصه قبل القرار.");
@@ -400,6 +432,8 @@ function NewReturnPanel({ open, onClose }: { open: boolean; onClose: () => void 
       setAmount("");
       setUnitValue("");
       setReasonNote("");
+      setColor("");
+      setSize("");
       setNotes("");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "مش قادر أسجّل المرتجع.");
@@ -492,8 +526,16 @@ function NewReturnPanel({ open, onClose }: { open: boolean; onClose: () => void 
           <Input value={unitValue} onChange={(e) => setUnitValue(e.target.value)} inputMode="decimal" />
         </Field>
       </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="اللون">
+          <Input value={color} onChange={(e) => setColor(e.target.value)} placeholder="كحلي" />
+        </Field>
+        <Field label="المقاس">
+          <Input value={size} onChange={(e) => setSize(e.target.value)} placeholder="L" />
+        </Field>
+      </div>
       <Field label="أمر الإنتاج (لو معروف)">
-        <select className={selectClass} value={orderId} onChange={(e) => setOrderId(e.target.value)}>
+        <select className={selectClass} value={orderId} onChange={(e) => pickOrder(e.target.value)}>
           <option value="">مش محدد</option>
           {db.orders.map((o) => (
             <option key={o.id} value={o.id}>
@@ -502,6 +544,16 @@ function NewReturnPanel({ open, onClose }: { open: boolean; onClose: () => void 
           ))}
         </select>
         <p className="mt-1 text-xs text-muted-foreground">منه بتتحسب تكلفة القطعة، فأثر المرتجع يطلع بالتكلفة الحقيقية.</p>
+      </Field>
+      <Field label="خط الإنتاج">
+        <select className={selectClass} value={line} onChange={(e) => setLine(e.target.value)}>
+          <option value="">مش محدد</option>
+          {PRODUCTION_LINES.map((l) => (
+            <option key={l} value={l}>
+              {l}
+            </option>
+          ))}
+        </select>
       </Field>
       <Field label="السبب">
         <select className={selectClass} value={reason} onChange={(e) => setReason(e.target.value as ReturnReason)}>
@@ -518,6 +570,39 @@ function NewReturnPanel({ open, onClose }: { open: boolean; onClose: () => void 
       <Field label="تفاصيل السبب">
         <Input value={reasonNote} onChange={(e) => setReasonNote(e.target.value)} placeholder="الدرزة بتفتح من تحت الكم" />
       </Field>
+      <Field label="المشكلة إيه (لو باينة دلوقتي)">
+        <select className={selectClass} value={problem} onChange={(e) => setProblem(e.target.value as ProblemKind | "")}>
+          <option value="">مستني الفحص</option>
+          {PROBLEM_KINDS.map((k) => (
+            <option key={k} value={k}>
+              {PROBLEM_DEFS[k].label} — {PROBLEM_CATEGORY_LABEL[PROBLEM_DEFS[k].category]}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-muted-foreground">
+          سيبها فاضية لو لسه محدش بصّ على القطعة. الفحص هو اللحظة المفروض فيها تتحدد، ومش كل مرتجع فيه عيب أصلًا.
+        </p>
+      </Field>
+      <Field label="جات منين">
+        <select className={selectClass} value={origin} onChange={(e) => setOrigin(e.target.value as ProblemOrigin | "")}>
+          <option value="">مستني الفحص</option>
+          {PROBLEM_ORIGINS.map((o) => (
+            <option key={o} value={o}>
+              {PROBLEM_ORIGIN_LABEL[o]}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="مسؤول متابعة الحالة">
+        <select className={selectClass} value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
+          <option value="">مش محدد</option>
+          {db.members.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
+        </select>
+      </Field>
       <Field label="ملاحظات">
         <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
       </Field>
@@ -531,14 +616,28 @@ function NewReturnPanel({ open, onClose }: { open: boolean; onClose: () => void 
 /* ── الفحص ─────────────────────────────────────────────────────── */
 
 function InspectPanel({ r, open, onClose }: { r: ReturnEntry; open: boolean; onClose: () => void }) {
-  const { inspectReturn } = useFactory();
+  const { db, inspectReturn } = useFactory();
   const [condition, setCondition] = useState<ReturnCondition>(r.condition);
   const [amount, setAmount] = useState(String(r.qty));
+  const [problem, setProblem] = useState<ProblemKind | "">(r.problem ?? "");
+  const [origin, setOrigin] = useState<ProblemOrigin | "">(r.origin ?? "");
+  const [rootCause, setRootCause] = useState<RootCause | "">(r.rootCause ?? "");
+  const [operationId, setOperationId] = useState(r.operationId ?? "");
+  const [workerId, setWorkerId] = useState(r.workerId ?? "");
   const [notes, setNotes] = useState("");
 
   const save = () => {
     try {
-      inspectReturn(r.id, { condition, qty: Number(amount) || 0, notes });
+      inspectReturn(r.id, {
+        condition,
+        qty: Number(amount) || 0,
+        problem: problem || null,
+        origin: origin || null,
+        rootCause: rootCause || null,
+        operationId: operationId || null,
+        workerId: workerId || null,
+        notes,
+      });
       toast.success("الفحص اتسجّل. القرار بقى متاح.");
       onClose();
     } catch (e) {
@@ -570,6 +669,70 @@ function InspectPanel({ r, open, onClose }: { r: ReturnEntry; open: boolean; onC
         <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" />
         <p className="mt-1 text-xs text-muted-foreground">جه {qty(r.qty, 0)} — الفحص ينقّص ومايزوّدش.</p>
       </Field>
+      <Field label={condition === "defective" ? "المشكلة إيه (مطلوبة)" : "المشكلة إيه"}>
+        <select className={selectClass} value={problem} onChange={(e) => setProblem(e.target.value as ProblemKind | "")}>
+          <option value="">مافيش عيب</option>
+          {PROBLEM_KINDS.map((k) => (
+            <option key={k} value={k}>
+              {PROBLEM_DEFS[k].label} — {PROBLEM_CATEGORY_LABEL[PROBLEM_DEFS[k].category]}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {condition === "defective"
+            ? "القطعة تالفة، فالمشكلة لازم تتقال — من غيرها المرتجع ده مش داخل في تحليل الجودة ولا في باريتو المشاكل."
+            : "القطعة سليمة، فممكن تكون رجعت بدون عيب خالص — زي عميل غيّر رأيه."}
+        </p>
+      </Field>
+      <Field label="جات منين">
+        <select className={selectClass} value={origin} onChange={(e) => setOrigin(e.target.value as ProblemOrigin | "")}>
+          <option value="">مش محدد</option>
+          {PROBLEM_ORIGINS.map((o) => (
+            <option key={o} value={o}>
+              {PROBLEM_ORIGIN_LABEL[o]}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="وليه حصلت">
+        <select className={selectClass} value={rootCause} onChange={(e) => setRootCause(e.target.value as RootCause | "")}>
+          <option value="">لسه مش محدَّد</option>
+          {ROOT_CAUSES.map((c) => (
+            <option key={c} value={c}>
+              {ROOT_CAUSE_LABEL[c]}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-muted-foreground">
+          «عيب خياطة من العامل» مكان مش سبب. الجذر هنا هو اللي بيمنع نفس المشكلة ترجع الشهر الجاي.
+        </p>
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="العملية">
+          <select className={selectClass} value={operationId} onChange={(e) => setOperationId(e.target.value)}>
+            <option value="">مش محددة</option>
+            {db.operations.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="العامل">
+          <select className={selectClass} value={workerId} onChange={(e) => setWorkerId(e.target.value)}>
+            <option value="">مش محدد</option>
+            {db.workers.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+      <p className="mb-3 text-xs text-muted-foreground">
+        ربط العامل ادّعاء له نتيجة: بيدخل في ملف جودته. ماتحدّدهوش غير لو فعلًا متأكد، وسيبه فاضي لو المشكلة من العملية
+        نفسها مش من اللي عملها.
+      </p>
       <Field label="ملاحظات الفحص">
         <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
       </Field>
@@ -585,8 +748,6 @@ function SettlePanel({ r, open, onClose }: { r: ReturnEntry; open: boolean; onCl
   const [settleAmount, setSettleAmount] = useState(String(Math.round(r.qty * r.unitValue)));
   const [accountId, setAccountId] = useState(db.accounts[0]?.id ?? "");
   const [method, setMethod] = useState<PayMethod>("cash");
-  const [extraCost, setExtraCost] = useState("0");
-  const [extraNote, setExtraNote] = useState("");
   const [restock, setRestock] = useState(r.condition === "good");
   const [replacementQty, setReplacementQty] = useState(String(r.qty));
   const [notes, setNotes] = useState("");
@@ -602,8 +763,6 @@ function SettlePanel({ r, open, onClose }: { r: ReturnEntry; open: boolean; onCl
         settleAmount: money$ ? Number(settleAmount) || 0 : 0,
         accountId: resolution === "refund" ? accountId : null,
         method: resolution === "refund" ? method : null,
-        extraCost: Number(extraCost) || 0,
-        extraNote,
         restock,
         warehouseId: null,
         replacementQty: Number(replacementQty) || 0,
@@ -703,14 +862,10 @@ function SettlePanel({ r, open, onClose }: { r: ReturnEntry; open: boolean; onCl
             : `أضف ${qty(r.qty, 0)} للمخزون بحركة مرتجع`}
         </label>
       </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="مصاريف المرتجع">
-          <Input value={extraCost} onChange={(e) => setExtraCost(e.target.value)} inputMode="decimal" />
-        </Field>
-        <Field label="بيان المصاريف">
-          <Input value={extraNote} onChange={(e) => setExtraNote(e.target.value)} placeholder="شحن الرجوع" />
-        </Field>
-      </div>
+      <p className="mb-3 rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+        مصاريف المرتجع بقت بنود منفصلة بتتسجّل من كارت الحالة نفسه — شحن رجوع، فحص، هالك — عشان تعرف المشكلة كلّفت كام
+        وفين بالظبط، مش رقم واحد مجمّع.
+      </p>
       <Field label="ملاحظات القرار">
         <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
       </Field>

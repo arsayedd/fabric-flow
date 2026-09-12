@@ -21,7 +21,7 @@
  */
 
 import { addDays, cairoToday, moneyPlain, qty as num } from "@/lib/utils";
-import { entryCredit, isEffective } from "./compute";
+import { caseCostTotal, entryCredit, isEffective } from "./compute";
 import { costSheet, modelVolume, profitScore } from "./costing";
 import { activeBom, bomLines } from "./manufacturing";
 import { returnImpact } from "./returns";
@@ -238,7 +238,7 @@ export function supplierRealCost(db: Db, partyId: string): SupplierRealCost {
     const settled = rows.filter(isEffective);
     const value = sum(settled.map((r) => r.qty * r.unitValue));
     const covered = sum(settled.map((r) => (r.resolution === "replacement" ? r.qty * r.unitValue : r.settleAmount)));
-    const extraCost = sum(rows.map((r) => r.extraCost));
+    const extraCost = sum(rows.map((r) => caseCostTotal(db, r)));
     const uncovered = Math.max(0, value - covered) + extraCost;
     factors.push({
       key: "returns",

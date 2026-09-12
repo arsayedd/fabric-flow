@@ -759,6 +759,205 @@ export const RETURN_REASON_DEFS: Record<ReturnReason, { label: string; sources: 
   other: { label: "سبب تاني", sources: ["customer", "supplier", "production"] },
 };
 
+/* ── تصنيف المشاكل ────────────────────────────────────────────
+ *
+ * القايمة دي هي **قايمة واحدة لكل المصنع**: نفس المشكلة اللي بتتسجّل على
+ * الباندل جوه الخط هي اللي بتتسجّل على المرتجع الراجع من العميل. ولو
+ * عملنا لكل ناحية قايمة، السؤال «أكتر مشكلة عندنا إيه؟» بيبقى ليه
+ * إجابتين مختلفتين، والباريتو بتاع الجودة بيفقد معناه.
+ *
+ * و**«مشكلة من المورّد» و«مشكلة من العميل» مش أنواع مشاكل** — دول
+ * **مصدر** المشكلة (`ProblemOrigin`) مش وصفها. لو حطيناهم في نفس القايمة،
+ * المرتجع اللي فيه عيب خياطة وجاي من خامة المورّد مش هيبقى له خانة: يا
+ * نكتب «عيب خياطة» ونضيّع إن المورّد سببها، يا نكتب «مشكلة من المورّد»
+ * ونضيّع إنها خياطة. فاتفصلوا: **إيه المشكلة** غير **جات منين**.
+ */
+
+export const PROBLEM_CATEGORIES = ["workmanship", "material", "spec", "handling", "other"] as const;
+export type ProblemCategory = (typeof PROBLEM_CATEGORIES)[number];
+
+export const PROBLEM_CATEGORY_LABEL: Record<ProblemCategory, string> = {
+  workmanship: "صنعة وتشغيل",
+  material: "خامة",
+  spec: "مواصفة وكمية",
+  handling: "تداول وتغليف",
+  other: "حاجة تانية",
+};
+
+export const PROBLEM_KINDS = [
+  "sewing",
+  "cutting",
+  "finishing",
+  "ironing",
+  "printing",
+  "embroidery",
+  "fabric",
+  "accessory",
+  "tear",
+  "size",
+  "color",
+  "wrong_item",
+  "shortage",
+  "packing",
+  "transit",
+  "other_problem",
+] as const;
+export type ProblemKind = (typeof PROBLEM_KINDS)[number];
+
+export const PROBLEM_DEFS: Record<ProblemKind, { label: string; category: ProblemCategory }> = {
+  sewing: { label: "عيب خياطة", category: "workmanship" },
+  cutting: { label: "عيب قص", category: "workmanship" },
+  finishing: { label: "عيب تشطيب", category: "workmanship" },
+  ironing: { label: "عيب مكوى", category: "workmanship" },
+  printing: { label: "عيب طباعة", category: "workmanship" },
+  embroidery: { label: "عيب تطريز", category: "workmanship" },
+  fabric: { label: "عيب قماش", category: "material" },
+  accessory: { label: "إكسسوار ناقص أو غلط", category: "material" },
+  tear: { label: "قطع أو تمزق", category: "material" },
+  size: { label: "مقاس مش مطابق", category: "spec" },
+  color: { label: "لون مختلف", category: "spec" },
+  wrong_item: { label: "منتج غلط", category: "spec" },
+  shortage: { label: "كمية ناقصة", category: "spec" },
+  packing: { label: "عيب تغليف", category: "handling" },
+  transit: { label: "تلف في النقل", category: "handling" },
+  other_problem: { label: "مشكلة تانية", category: "other" },
+};
+
+export const PROBLEM_LABEL = Object.fromEntries(
+  PROBLEM_KINDS.map((k) => [k, PROBLEM_DEFS[k].label]),
+) as Record<ProblemKind, string>;
+
+/**
+ * مصدر المشكلة — **مين أو إيه اللي جابها**، مش مين اللي بلّغ عنها.
+ *
+ * و`unknown` مقصودة وموجودة في القايمة: المشكلة اللي مصدرها مش معروف
+ * لازم يبقى لها خانة صريحة، لأن البديل إن المستخدم يختار أقرب حاجة
+ * فيطلع باريتو بيتّهم العامل في مشاكل محدش عارف مصدرها.
+ */
+export const PROBLEM_ORIGINS = [
+  "supplier",
+  "material",
+  "machine",
+  "line",
+  "operation",
+  "worker",
+  "qc",
+  "transport",
+  "customer",
+  "unknown",
+] as const;
+export type ProblemOrigin = (typeof PROBLEM_ORIGINS)[number];
+
+export const PROBLEM_ORIGIN_LABEL: Record<ProblemOrigin, string> = {
+  supplier: "المورّد",
+  material: "الخامة",
+  machine: "الماكينة",
+  line: "خط الإنتاج",
+  operation: "العملية",
+  worker: "العامل",
+  qc: "الفحص",
+  transport: "النقل",
+  customer: "العميل",
+  unknown: "لسه مش معروف",
+};
+
+/**
+ * جذر المشكلة — الطبقة اللي تحت المصدر.
+ *
+ * «عيب خياطة من العامل» مش سبب؛ ده مكان. السبب هو **ليه** العامل عملها:
+ * ماكينة مش مظبوطة، ولا تدريب ناقص، ولا خيط وحش، ولا شد قماش. من غير
+ * الطبقة دي بنصلح نفس المشكلة كل شهر ونفتكر إننا بنشتغل.
+ */
+export const ROOT_CAUSES = [
+  "calibration",
+  "training",
+  "material_quality",
+  "tension",
+  "spec_unclear",
+  "rush",
+  "storage",
+  "unknown_cause",
+] as const;
+export type RootCause = (typeof ROOT_CAUSES)[number];
+
+export const ROOT_CAUSE_LABEL: Record<RootCause, string> = {
+  calibration: "ضبط الماكينة",
+  training: "تدريب العامل",
+  material_quality: "جودة الخامة",
+  tension: "شد القماش أو الخيط",
+  spec_unclear: "المواصفة مش واضحة",
+  rush: "استعجال التسليم",
+  storage: "تخزين أو تداول",
+  unknown_cause: "لسه مش محدَّد",
+};
+
+/**
+ * بنود تكلفة المرتجع.
+ *
+ * تكلفة المرتجع مش رقم واحد، وعشان كده بقت **سطور** بدل خانة `extraCost`
+ * الواحدة: «رجع ١٠٠ قطعة» مابيقولش حاجة، لكن «شحن رجوع ٤٠٠ + فحص ١٥٠ +
+ * أجر إصلاح ٩٠٠ + خامات ٣٢٠» بتقول إن المشكلة دي كلّفت المصنع كام وفين
+ * بالظبط — وده اللي بيخلي تقليلها قرار له رقم.
+ *
+ * وبندين منهم **مايتكتبوش بالإيد لما يبقى فيه أمر إصلاح**: أجر الإصلاح
+ * وخامات الإصلاح بيتحسبوا من أمر الإصلاح نفسه، عشان مايتعدّوش مرتين.
+ */
+export const RETURN_COST_KINDS = [
+  "shipping_in",
+  "inspection",
+  "repair_labor",
+  "spare_materials",
+  "rework",
+  "packaging",
+  "shipping_out",
+  "scrap",
+  "admin",
+] as const;
+export type ReturnCostKind = (typeof RETURN_COST_KINDS)[number];
+
+export const RETURN_COST_LABEL: Record<ReturnCostKind, string> = {
+  shipping_in: "شحن الرجوع",
+  inspection: "الفحص",
+  repair_labor: "أجر الإصلاح",
+  spare_materials: "خامات الإصلاح",
+  rework: "إعادة تشغيل",
+  packaging: "إعادة تغليف",
+  shipping_out: "شحن إعادة الإرسال",
+  scrap: "الهالك",
+  admin: "مصاريف إدارية",
+};
+
+/** البنود اللي أمر الإصلاح بيحسبها، فمابتتكتبش بالإيد لو الأمر موجود */
+export const REPAIR_DERIVED_COSTS: ReturnCostKind[] = ["repair_labor", "spare_materials"];
+
+export type ReturnCostLine = {
+  id: string;
+  kind: ReturnCostKind;
+  amount: number;
+  note: string;
+};
+
+/**
+ * إثبات المشكلة.
+ *
+ * الصورة مش زينة: هي اللي بتخلي المطالبة على المورّد أو الرد على العميل
+ * قابل للإثبات بعد شهرين. و`phase` بتفرّق بين صورة **قبل** الإصلاح
+ * وصورة **بعده** — وده اللي بيخلي «اتصلحت» جملة عليها دليل.
+ */
+export const ATTACHMENT_PHASES = ["before", "after"] as const;
+export type AttachmentPhase = (typeof ATTACHMENT_PHASES)[number];
+
+export type Attachment = {
+  id: string;
+  name: string;
+  phase: AttachmentPhase;
+  /** صورة مصغّرة متخزّنة inline. الملفات الكبيرة مكانها التخزين على السيرفر */
+  dataUrl: string;
+  note: string;
+  at: string;
+  by: string;
+};
+
 /**
  * قرار المرتجع — وكل قرار له أثر مختلف تمامًا على الفلوس والمخزن:
  *
@@ -818,6 +1017,14 @@ export type ReturnEntry = {
   condition: ReturnCondition;
   reason: ReturnReason;
   reasonNote: string;
+  /* ── المشكلة: إيه، جات منين، وليه ──────────────────────────
+   * التلاتة منفصلين عن بعض عن قصد، وكل واحد بيجاوب سؤال تاني خالص.
+   * و`problem` ممكن تكون فاضية لأن مش كل مرتجع فيه عيب: العميل اللي
+   * غيّر رأيه رجّع قطعة سليمة مافيهاش مشكلة أصلًا.
+   */
+  problem: ProblemKind | null;
+  origin: ProblemOrigin | null;
+  rootCause: RootCause | null;
   /* الربط: كل واحد بيجاوب سؤال مختلف عن مصدر المشكلة */
   /** التوريد اللي القطعة خرجت فيه */
   deliveryId: string | null;
@@ -825,6 +1032,16 @@ export type ReturnEntry = {
   orderId: string | null;
   /** الباندل بالتحديد — منه نعرف العملية والعامل والخط */
   bundleId: string | null;
+  /** اللون والمقاس: بيتعبّوا من الباندل لو موجود، وبيتكتبوا لو مش موجود */
+  color: string;
+  size: string;
+  /** خط الإنتاج اللي طلعها — من الأمر أو مكتوب */
+  line: string;
+  /** العملية اللي المشكلة فيها، والعامل اللي عملها — ادّعاء لازم يتقال بصراحة */
+  operationId: string | null;
+  workerId: string | null;
+  /** المسؤول عن متابعة الحالة — عضو في المصنع */
+  ownerId: string | null;
   /** فاتورة الشراء لمرتجع المورّد */
   costEntryId: string | null;
   /** بلاغ الجودة المرتبط لو المرتجع طلع من فحص */
@@ -836,9 +1053,10 @@ export type ReturnEntry = {
   settleAmount: number;
   accountId: string | null;
   method: PayMethod | null;
-  /** مصاريف زيادة اتدفعت بسبب المرتجع: شحن رجوع، إصلاح، إعادة تعبئة */
-  extraCost: number;
-  extraNote: string;
+  /** مصاريف المرتجع مفصّلة ببنودها — المجموع بيتحسب مش بيتخزّن */
+  costs: ReturnCostLine[];
+  /** صور قبل وبعد الإصلاح */
+  attachments: Attachment[];
   /** رجع المخزن ولا لأ — الكمية التالفة مابتدخلش */
   restock: boolean;
   warehouseId: string | null;
@@ -850,6 +1068,73 @@ export type ReturnEntry = {
   settledBy: string | null;
   cancelledAt: string | null;
   cancelledBy: string | null;
+  cancelReason: string | null;
+  createdAt: string;
+  createdBy: string;
+  notes: string;
+};
+
+/* ── أوامر الإصلاح ─────────────────────────────────────────────
+ *
+ * المرتجع اللي قراره «إصلاح» بيفتح **أمر إصلاح** بدل ما تتكتب تكلفة
+ * تقديرية في خانة. والسبب إن الإصلاح شغل حقيقي: قطع بتتصلح، عامل بيقعد
+ * عليها وقت، خامات بتتصرف من المخزن، وفحص بيقرر عدّت ولا لأ. لو كتبنا
+ * «تكلفة الإصلاح ٩٠٠» ملهاش سند، الخامات دي بتفضل في المخزون على الورق
+ * وهي مصروفة فعلًا.
+ *
+ * ودورة الحياة هنا **منفصلة عن حالة المرتجع** عن قصد: المرتجع دفتر
+ * تجاري (رجع → اتفحص → اتسوّى)، وأمر الإصلاح دفتر تشغيلي (في الطابور →
+ * بيتصلح → فحص → جاهز → اترجّع). لو دمجناهم في عمود حالة واحد، كنا
+ * هنحتاج اتناشر حالة، والحالة اللي معناها «اتسوّى تجاريًا وبيتصلح
+ * تشغيليًا» مكانتش هتلاقي خانة.
+ */
+export const REPAIR_STATUSES = ["queued", "repairing", "qc", "ready", "shipped", "scrapped", "cancelled"] as const;
+export type RepairStatus = (typeof REPAIR_STATUSES)[number];
+
+export const REPAIR_STATUS_LABEL: Record<RepairStatus, string> = {
+  queued: "في الطابور",
+  repairing: "بيتصلح",
+  qc: "تحت الفحص",
+  ready: "جاهز",
+  shipped: "اترجّع للعميل",
+  scrapped: "مش قابل للإصلاح",
+  cancelled: "ملغي",
+};
+
+export type RepairMaterial = {
+  id: string;
+  materialId: string;
+  qty: number;
+  /** تكلفة الوحدة وقت الصرف — قرار وقتها، مش السعر النهارده */
+  unitCost: number;
+};
+
+export type RepairOrder = {
+  id: string;
+  factoryId: string;
+  /** الرقم المطبوع على أمر الإصلاح، زي REP-2026-000004 */
+  code: string;
+  returnId: string;
+  date: string;
+  qty: number;
+  problem: ProblemKind | null;
+  workerId: string | null;
+  operationId: string | null;
+  /** أجر إصلاح القطعة — قرار وقت فتح الأمر */
+  rate: number;
+  /** الوقت الفعلي اللي الإصلاح خده، بيتحسب من البداية والنهاية */
+  minutes: number;
+  materials: RepairMaterial[];
+  status: RepairStatus;
+  startedAt: string | null;
+  finishedAt: string | null;
+  /** نتيجة الفحص: عدّت كام وسقطت كام */
+  qtyPassed: number;
+  qtyFailed: number;
+  qcAt: string | null;
+  qcBy: string | null;
+  qcNote: string;
+  shippedAt: string | null;
   cancelReason: string | null;
   createdAt: string;
   createdBy: string;
@@ -1119,6 +1404,7 @@ export type Db = {
   subReceipts: SubReceipt[];
   subPayments: SubPayment[];
   returns: ReturnEntry[];
+  repairs: RepairOrder[];
   complaints: Complaint[];
   costItems: CostItem[];
   costEntries: CostEntry[];

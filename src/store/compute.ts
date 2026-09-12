@@ -1,5 +1,5 @@
 import { addDays, cairoToday, qty } from "@/lib/utils";
-import type { Collection, Db, Delivery, PayMethod, ReturnEntry } from "./types";
+import type { Collection, Db, Delivery, PayMethod, RepairOrder, ReturnEntry } from "./types";
 
 export type DeliveryRemain = Delivery & {
   remaining: number;
@@ -61,6 +61,32 @@ export function deliveriesOfModel(db: Db, productName: string): Delivery[] {
 /** المرتجع اللي بقى ليه أثر فعلي: اتسوّى، ومش مرفوض */
 export function isEffective(r: ReturnEntry): boolean {
   return r.status === "settled" && r.resolution !== null && r.resolution !== "reject";
+}
+
+/**
+ * تكلفة أمر الإصلاح — محسوبة من قرارين متخزّنين: أجر القطعة، وتكلفة
+ * الخامة وقت صرفها. ومكانها هنا عشان الأرباح والخسائر تقدر توصلها من
+ * غير ما تستورد طبقة المرتجعات.
+ */
+export function repairCostOf(rep: RepairOrder): { labor: number; materials: number; total: number; perPiece: number } {
+  const labor = rep.qty * rep.rate;
+  const materials = rep.materials.reduce((s, m) => s + m.qty * m.unitCost, 0);
+  const total = labor + materials;
+  return { labor, materials, total, perPiece: rep.qty > 0 ? total / rep.qty : 0 };
+}
+
+/**
+ * إجمالي مصاريف الحالة: السطور المكتوبة + اللي أوامر الإصلاح حسبتها.
+ *
+ * ومفيش جمع مزدوج لأن أجر الإصلاح وخاماته **ممنوعين** ككتابة يدوية طول
+ * ما فيه أمر إصلاح على الحالة — الشرط مفروض في الميوتيشن نفسها.
+ */
+export function caseCostTotal(db: Db, r: ReturnEntry): number {
+  const manual = (r.costs ?? []).reduce((s, c) => s + c.amount, 0);
+  const repairs = (db.repairs ?? [])
+    .filter((x) => x.returnId === r.id && x.status !== "cancelled")
+    .reduce((s, x) => s + repairCostOf(x).total, 0);
+  return manual + repairs;
 }
 
 export type Credit = { id: string; partyId: string; date: string; amount: number; code: string };
@@ -267,7 +293,7 @@ export function pnl(db: Db, from: string, to: string) {
     .reduce((s, r) => s + r.settleAmount, 0);
   const returnCosts = (db.returns ?? [])
     .filter((r) => r.status !== "cancelled" && inRange(r.date))
-    .reduce((s, r) => s + r.extraCost, 0);
+    .reduce((s, r) => s + caseCostTotal(db, r), 0);
   const revenue = db.deliveries.filter((d) => inRange(d.date)).reduce((s, d) => s + d.amount, 0) - returnCredits;
   const costs = db.costEntries.filter((d) => inRange(d.date)).reduce((s, d) => s + d.amount, 0);
   const labor = db.workerEarnings.filter((d) => inRange(d.date)).reduce((s, d) => s + d.amount, 0);

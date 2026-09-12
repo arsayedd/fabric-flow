@@ -62,12 +62,15 @@ import { bundleCode, layMath, nextBundleSeq, orderCutSummary, planBundles } from
 import { bundleState } from "./floor";
 import { KIND_MODULE } from "./codes";
 import { subMovement, subView } from "./outsourcing";
-import { RETURN_MODULE, nextComplaintCode, nextReturnCode, unitCostOf } from "./returns";
+import { RETURN_MODULE, nextComplaintCode, nextRepairCode, nextReturnCode, repairsOf, unitCostOf } from "./returns";
+import { repairCostOf } from "./compute";
 import { buildDoc, canTransition, DOC_DEFS, findDoc, type IssueInput } from "./documents";
 import { demoDb, emptyDb, templateData } from "./seed";
-import { PRODUCTION_LINES, RETURN_SOURCE_LABEL } from "./types";
+import { PRODUCTION_LINES, REPAIR_DERIVED_COSTS, RETURN_SOURCE_LABEL } from "./types";
 import type {
   Account,
+  Attachment,
+  AttachmentPhase,
   AuditEntry,
   Bom,
   BomItem,
@@ -80,7 +83,13 @@ import type {
   ComplaintKind,
   FloorIssue,
   FloorIssueKind,
+  ProblemKind,
+  ProblemOrigin,
+  RepairMaterial,
+  RepairOrder,
   ReturnCondition,
+  ReturnCostKind,
+  ReturnCostLine,
   ReturnEntry,
   ReturnReason,
   ReturnResolution,
@@ -118,6 +127,7 @@ import type {
   OrderStatus,
   PayMethod,
   Role,
+  RootCause,
   Session,
   Worker,
   WorkerEarning,
@@ -178,7 +188,33 @@ function migrate(db: Db): Db {
     subcontracts: db.subcontracts ?? [],
     subReceipts: db.subReceipts ?? [],
     subPayments: db.subPayments ?? [],
-    returns: db.returns ?? [],
+    /*
+     * الحالات القديمة اتسجّلت قبل ما يبقى فيه تصنيف مشاكل وبنود تكلفة.
+     * فبتتقرا بالحقول الجديدة فاضية، و`extraCost` القديمة بتتحوّل لسطر
+     * تكلفة واحد بدل ما تضيع — الترحيل بيقرا اللي مكتوب مش بيمسحه.
+     */
+    returns: (db.returns ?? []).map((r) => {
+      const legacy = r as ReturnEntry & { extraCost?: number; extraNote?: string };
+      const carried: ReturnCostLine[] =
+        !r.costs && legacy.extraCost && legacy.extraCost > 0
+          ? [{ id: `${r.id}-legacy`, kind: "admin", amount: legacy.extraCost, note: legacy.extraNote?.trim() || "مصاريف مرتجع قديمة" }]
+          : [];
+      return {
+        ...r,
+        problem: r.problem ?? null,
+        origin: r.origin ?? null,
+        rootCause: r.rootCause ?? null,
+        color: r.color ?? "",
+        size: r.size ?? "",
+        line: r.line ?? "",
+        operationId: r.operationId ?? null,
+        workerId: r.workerId ?? null,
+        ownerId: r.ownerId ?? null,
+        costs: r.costs ?? carried,
+        attachments: r.attachments ?? [],
+      };
+    }),
+    repairs: db.repairs ?? [],
     complaints: db.complaints ?? [],
     orders: (db.orders ?? []).map((o) => {
       const status: OrderStatus = (o.status as OrderStatus | "open") === "open" ? "running" : o.status;
@@ -523,10 +559,23 @@ type FactoryApi = {
   /* ── المرتجعات والشكاوى ── */
   addReturn: (input: ReturnInput) => string;
   /** الفحص: بيحدد رجع بأي حال وينفع يدخل المخزن ولا لأ */
-  inspectReturn: (id: string, input: { condition: ReturnCondition; qty: number; notes: string }) => void;
+  inspectReturn: (id: string, input: InspectInput) => void;
   /** التسوية: هي اللي بتحرّك الفلوس والمخزن — مش لحظة الوصول */
   settleReturn: (id: string, input: SettleInput) => void;
   cancelReturn: (id: string, reason: string) => void;
+  /** بنود تكلفة الحالة — بتتضاف وقت ما تحصل، مش كلها وقت القرار */
+  addReturnCost: (returnId: string, input: { kind: ReturnCostKind; amount: number; note: string }) => void;
+  removeReturnCost: (returnId: string, costId: string) => void;
+  addAttachment: (returnId: string, input: { name: string; phase: AttachmentPhase; dataUrl: string; note: string }) => void;
+  removeAttachment: (returnId: string, attachmentId: string) => void;
+  /* ── أوامر الإصلاح ── */
+  openRepair: (input: RepairInput) => string;
+  startRepair: (id: string) => void;
+  /** بيقفل الإصلاح ويوديه للفحص — والوقت بيتحسب من الساعة */
+  finishRepair: (id: string) => void;
+  qcRepair: (id: string, input: { qtyPassed: number; qtyFailed: number; qcNote: string }) => void;
+  shipRepair: (id: string) => void;
+  cancelRepair: (id: string, reason: string) => void;
   addComplaint: (input: ComplaintInput) => string;
   updateComplaint: (id: string, patch: Partial<Pick<Complaint, "status" | "severity" | "ownerId" | "dueDate" | "resolution" | "claimAmount" | "returnId">>) => void;
   /**
@@ -577,6 +626,15 @@ export type ReturnInput = {
   bundleId: string | null;
   costEntryId: string | null;
   issueId: string | null;
+  /* المشكلة ومصدرها — ممكن تتسجّل وقت الوصول، وممكن تستنى الفحص */
+  problem: ProblemKind | null;
+  origin: ProblemOrigin | null;
+  color: string;
+  size: string;
+  line: string;
+  operationId: string | null;
+  workerId: string | null;
+  ownerId: string | null;
   notes: string;
 };
 
@@ -585,11 +643,32 @@ export type SettleInput = {
   settleAmount: number;
   accountId: string | null;
   method: PayMethod | null;
-  extraCost: number;
-  extraNote: string;
   restock: boolean;
   warehouseId: string | null;
   replacementQty: number;
+  notes: string;
+};
+
+export type InspectInput = {
+  condition: ReturnCondition;
+  qty: number;
+  /* الفحص هو لحظة تحديد المشكلة — قبله كل ده تخمين */
+  problem: ProblemKind | null;
+  origin: ProblemOrigin | null;
+  rootCause: RootCause | null;
+  operationId: string | null;
+  workerId: string | null;
+  notes: string;
+};
+
+export type RepairInput = {
+  returnId: string;
+  qty: number;
+  problem: ProblemKind | null;
+  workerId: string | null;
+  operationId: string | null;
+  rate: number;
+  materials: { materialId: string; qty: number }[];
   notes: string;
 };
 
@@ -2229,6 +2308,15 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
           condition: input.condition,
           reason: input.reason,
           reasonNote: input.reasonNote.trim(),
+          problem: input.problem,
+          origin: input.origin,
+          rootCause: null,
+          color: input.color.trim(),
+          size: input.size.trim(),
+          line: input.line.trim(),
+          operationId: input.operationId,
+          workerId: input.workerId,
+          ownerId: input.ownerId,
           deliveryId: input.deliveryId,
           orderId: input.orderId,
           bundleId: input.bundleId,
@@ -2240,8 +2328,8 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
           settleAmount: 0,
           accountId: null,
           method: null,
-          extraCost: 0,
-          extraNote: "",
+          costs: [],
+          attachments: [],
           restock: false,
           warehouseId: null,
           replacementQty: 0,
@@ -2267,11 +2355,25 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         if (before.status === "cancelled") throw new Error("المرتجع ده ملغي.");
         if (input.qty <= 0) throw new Error("الكمية لازم تكون أكبر من صفر.");
         if (input.qty > before.qty) throw new Error(`المرتجع جه ${qtyText(before.qty)} — الفحص مايزوّدش الكمية.`);
+        /*
+         * الفحص بيقول إن القطعة تالفة، فلازم يقول **تالفة بإيه**. من غير
+         * الشرط ده تصنيف المشاكل بيفضل فاضي، وباريتو الجودة بيبقى سطر
+         * واحد اسمه «مش مكتوب» — وهي الحالة اللي بتخلي كل نظام جودة
+         * يتحوّل لأرشيف.
+         */
+        if (input.condition === "defective" && !input.problem) {
+          throw new Error("القطعة متفحوصة إنها تالفة — اختار المشكلة إيه، عشان تدخل في تحليل الجودة.");
+        }
         const after = {
           ...before,
           status: "inspected" as const,
           condition: input.condition,
           qty: input.qty,
+          problem: input.problem ?? before.problem,
+          origin: input.origin ?? before.origin,
+          rootCause: input.rootCause ?? before.rootCause,
+          operationId: input.operationId ?? before.operationId,
+          workerId: input.workerId ?? before.workerId,
           notes: input.notes.trim() || before.notes,
           inspectedAt: new Date().toISOString(),
           inspectedBy: session?.memberId ?? "",
@@ -2331,8 +2433,6 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
           settleAmount: money ? input.settleAmount : 0,
           accountId: input.resolution === "refund" ? input.accountId : null,
           method: input.resolution === "refund" ? input.method : null,
-          extraCost: Math.max(0, input.extraCost),
-          extraNote: input.extraNote.trim(),
           restock: input.restock,
           warehouseId: input.restock ? warehouseId : null,
           replacementQty: input.resolution === "replacement" ? input.replacementQty : 0,
@@ -2396,6 +2496,288 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
           { action: "update", table: "returns", recordId: id, before, after },
         );
       },
+      /* ── بنود التكلفة وإثبات المشكلة ── */
+      addReturnCost: (returnId, input) => {
+        const before = db.returns.find((r) => r.id === returnId);
+        if (!before) throw new Error("الحالة مش موجودة.");
+        need(RETURN_MODULE[before.source], "edit");
+        if (input.amount <= 0) throw new Error("المبلغ لازم يكون أكبر من صفر.");
+        /*
+         * أجر الإصلاح وخاماته بيتحسبوا من أمر الإصلاح. لو سمحنا بكتابتهم
+         * بالإيد كمان، نفس الجنيه بيتعدّ مرتين وتكلفة الجودة بتطلع مضخّمة
+         * — والرقم المضخّم بيوقف قرار صح زي ما الرقم الناقص بالظبط.
+         */
+        if (REPAIR_DERIVED_COSTS.includes(input.kind) && repairsOf(db, returnId).length > 0) {
+          throw new Error("البند ده بيتحسب من أمر الإصلاح — عدّل الأمر بدل ما تكتبه هنا.");
+        }
+        const line: ReturnCostLine = { id: nid(), kind: input.kind, amount: input.amount, note: input.note.trim() };
+        const after = { ...before, costs: [...(before.costs ?? []), line] };
+        mutate(
+          { returns: db.returns.map((r) => (r.id === returnId ? after : r)) },
+          { action: "update", table: "returns", recordId: returnId, before, after },
+        );
+      },
+      removeReturnCost: (returnId, costId) => {
+        const before = db.returns.find((r) => r.id === returnId);
+        if (!before) throw new Error("الحالة مش موجودة.");
+        need(RETURN_MODULE[before.source], "edit");
+        const after = { ...before, costs: (before.costs ?? []).filter((c) => c.id !== costId) };
+        mutate(
+          { returns: db.returns.map((r) => (r.id === returnId ? after : r)) },
+          { action: "update", table: "returns", recordId: returnId, before, after },
+        );
+      },
+      addAttachment: (returnId, input) => {
+        const before = db.returns.find((r) => r.id === returnId);
+        if (!before) throw new Error("الحالة مش موجودة.");
+        need(RETURN_MODULE[before.source], "edit");
+        if (!input.dataUrl.startsWith("data:image/")) throw new Error("الصورة مش مقروءة.");
+        /*
+         * الصور بتتصغّر قبل ما توصل هنا وبيتحطّ سقف على عددها، لأن الدفتر
+         * المحلي مساحته محدودة. والمكان الصح للملفات الكبيرة هو تخزين
+         * السيرفر — مكتوب في التوثيق إن ده الحد الحالي مش تصميم نهائي.
+         */
+        if ((before.attachments ?? []).length >= 6) {
+          throw new Error("أقصى ست صور للحالة الواحدة في النسخة المحلية.");
+        }
+        const row: Attachment = {
+          id: nid(),
+          name: input.name.trim() || "صورة",
+          phase: input.phase,
+          dataUrl: input.dataUrl,
+          note: input.note.trim(),
+          at: new Date().toISOString(),
+          by: session?.memberId ?? "",
+        };
+        const after = { ...before, attachments: [...(before.attachments ?? []), row] };
+        mutate(
+          { returns: db.returns.map((r) => (r.id === returnId ? after : r)) },
+          { action: "update", table: "returns", recordId: returnId, before, after },
+        );
+      },
+      removeAttachment: (returnId, attachmentId) => {
+        const before = db.returns.find((r) => r.id === returnId);
+        if (!before) throw new Error("الحالة مش موجودة.");
+        need(RETURN_MODULE[before.source], "edit");
+        const after = { ...before, attachments: (before.attachments ?? []).filter((a) => a.id !== attachmentId) };
+        mutate(
+          { returns: db.returns.map((r) => (r.id === returnId ? after : r)) },
+          { action: "update", table: "returns", recordId: returnId, before, after },
+        );
+      },
+
+      /* ── أوامر الإصلاح ── */
+      openRepair: (input) => {
+        need("quality", "create");
+        const parent = db.returns.find((r) => r.id === input.returnId);
+        if (!parent) throw new Error("الحالة مش موجودة.");
+        if (parent.status === "open") throw new Error("افحص الحالة الأول — الإصلاح بيتقرر بعد ما نعرف العيب إيه.");
+        if (parent.status === "cancelled") throw new Error("الحالة ملغية.");
+        if (input.qty <= 0) throw new Error("الكمية لازم تكون أكبر من صفر.");
+        const already = repairsOf(db, input.returnId).reduce((s, x) => s + x.qty, 0);
+        if (already + input.qty > parent.qty) {
+          throw new Error(`الحالة فيها ${qtyText(parent.qty)} قطعة، ومفتوح لها إصلاح ${qtyText(already)} — الباقي ${qtyText(parent.qty - already)}.`);
+        }
+        if (input.rate < 0) throw new Error("أجر الإصلاح مايكونش سالب.");
+
+        /*
+         * خامات الإصلاح بتطلع من المخزن **بحركة حقيقية** وقت فتح الأمر،
+         * زي أي صرف تاني. لو سجّلناها كرقم في الأمر بس، الخيط والزراير
+         * هيفضلوا في الرصيد على الورق وهم مصروفين فعلًا.
+         */
+        const materials: RepairMaterial[] = [];
+        const moves: StockMovement[] = [];
+        for (const m of input.materials) {
+          if (!m.materialId || m.qty <= 0) continue;
+          const mat = db.materials.find((x) => x.id === m.materialId);
+          if (!mat) throw new Error("خامة مش موجودة.");
+          const have = stockQty(db, "material", m.materialId);
+          if (m.qty > have) throw new Error(`${mat.name}: الرصيد ${qtyText(have)} والمطلوب ${qtyText(m.qty)}.`);
+          materials.push({ id: nid(), materialId: m.materialId, qty: m.qty, unitCost: mat.avgCost });
+        }
+
+        const row: RepairOrder = {
+          id: nid(),
+          factoryId: fid(db),
+          code: nextRepairCode(db.repairs ?? []),
+          returnId: input.returnId,
+          date: cairoToday(),
+          qty: input.qty,
+          problem: input.problem ?? parent.problem,
+          workerId: input.workerId,
+          operationId: input.operationId,
+          rate: input.rate,
+          minutes: 0,
+          materials,
+          status: "queued",
+          startedAt: null,
+          finishedAt: null,
+          qtyPassed: 0,
+          qtyFailed: 0,
+          qcAt: null,
+          qcBy: null,
+          qcNote: "",
+          shippedAt: null,
+          cancelReason: null,
+          createdAt: new Date().toISOString(),
+          createdBy: session?.memberId ?? "",
+          notes: input.notes.trim(),
+        };
+
+        for (const m of materials) {
+          moves.push({
+            id: nid(),
+            factoryId: fid(db),
+            date: cairoToday(),
+            itemType: "material",
+            itemId: m.materialId,
+            warehouseId: db.warehouses.find((w) => w.kind === "material")?.id ?? null,
+            kind: "issue",
+            qty: -m.qty,
+            unitCost: m.unitCost,
+            refType: "repair",
+            refId: row.id,
+            notes: `${row.code} — خامات إصلاح`,
+          });
+        }
+
+        mutate(
+          {
+            repairs: [row, ...(db.repairs ?? [])],
+            ...(moves.length ? { stockMovements: [...moves, ...db.stockMovements] } : {}),
+          },
+          { action: "create", table: "repairs", recordId: row.id, before: null, after: row },
+        );
+        return row.id;
+      },
+      startRepair: (id) => {
+        const before = (db.repairs ?? []).find((r) => r.id === id);
+        if (!before) throw new Error("أمر الإصلاح مش موجود.");
+        need("quality", "edit");
+        if (before.status !== "queued") throw new Error("الأمر ده مش في الطابور.");
+        const after = { ...before, status: "repairing" as const, startedAt: new Date().toISOString() };
+        mutate(
+          { repairs: (db.repairs ?? []).map((r) => (r.id === id ? after : r)) },
+          { action: "update", table: "repairs", recordId: id, before, after },
+        );
+      },
+      finishRepair: (id) => {
+        const before = (db.repairs ?? []).find((r) => r.id === id);
+        if (!before) throw new Error("أمر الإصلاح مش موجود.");
+        need("quality", "edit");
+        if (before.status !== "repairing") throw new Error("الأمر ده مش تحت الإصلاح.");
+        /* الوقت من الساعة مش من الكيبورد — نفس قاعدة الباندل */
+        const started = before.startedAt ? Date.parse(before.startedAt) : Date.now();
+        const minutes = Math.max(0, Math.round((Date.now() - started) / 60000));
+        const after = { ...before, status: "qc" as const, finishedAt: new Date().toISOString(), minutes };
+        mutate(
+          { repairs: (db.repairs ?? []).map((r) => (r.id === id ? after : r)) },
+          { action: "update", table: "repairs", recordId: id, before, after },
+        );
+      },
+      qcRepair: (id, input) => {
+        const before = (db.repairs ?? []).find((r) => r.id === id);
+        if (!before) throw new Error("أمر الإصلاح مش موجود.");
+        need("quality", "edit");
+        if (before.status !== "qc") throw new Error("الأمر ده مش تحت الفحص.");
+        if (input.qtyPassed < 0 || input.qtyFailed < 0) throw new Error("الكميات مايصحّش تكون سالبة.");
+        if (input.qtyPassed + input.qtyFailed !== before.qty) {
+          throw new Error(`الأمر فيه ${qtyText(before.qty)} قطعة — العدّت والساقطة لازم يجمعوا نفس الرقم.`);
+        }
+        if (input.qtyFailed > 0 && !input.qcNote.trim()) {
+          throw new Error("القطع اللي سقطت في الفحص لازم يتكتب ليه.");
+        }
+
+        /*
+         * القطعة اللي عدّت الفحص بتدخل المخزون **دلوقتي**، مش وقت المرتجع.
+         * وده الفرق المهم: القطعة رجعت تالفة فمادخلتش المخزن، واتصلحت
+         * فبقت بضاعة تتباع. ولو حسبناها وقت الرجوع كان الرصيد هيقول إن
+         * فيه بضاعة جاهزة وهي لسه في الورشة.
+         */
+        const parent = db.returns.find((r) => r.id === before.returnId);
+        const moves: StockMovement[] = [];
+        if (input.qtyPassed > 0 && parent && parent.itemType === "product") {
+          moves.push({
+            id: nid(),
+            factoryId: fid(db),
+            date: cairoToday(),
+            itemType: "product",
+            itemId: parent.itemId,
+            warehouseId: db.warehouses.find((w) => w.kind === "finished")?.id ?? null,
+            kind: "return",
+            qty: input.qtyPassed,
+            unitCost: unitCostOf(db, parent) + repairCostOf(before).perPiece,
+            refType: "repair",
+            refId: before.id,
+            notes: `${before.code} — عدّت الفحص بعد الإصلاح`,
+          });
+        }
+
+        const after: RepairOrder = {
+          ...before,
+          status: input.qtyPassed > 0 ? "ready" : "scrapped",
+          qtyPassed: input.qtyPassed,
+          qtyFailed: input.qtyFailed,
+          qcAt: new Date().toISOString(),
+          qcBy: session?.memberId ?? "",
+          qcNote: input.qcNote.trim(),
+        };
+        mutate(
+          {
+            repairs: (db.repairs ?? []).map((r) => (r.id === id ? after : r)),
+            ...(moves.length ? { stockMovements: [...moves, ...db.stockMovements] } : {}),
+          },
+          { action: "update", table: "repairs", recordId: id, before, after },
+        );
+      },
+      shipRepair: (id) => {
+        const before = (db.repairs ?? []).find((r) => r.id === id);
+        if (!before) throw new Error("أمر الإصلاح مش موجود.");
+        need("quality", "edit");
+        if (before.status !== "ready") throw new Error("الأمر لازم يعدّي الفحص الأول.");
+        const parent = db.returns.find((r) => r.id === before.returnId);
+        const moves: StockMovement[] = [];
+        /* طلعت للعميل تاني — فبتخرج من المخزون زي أي تسليم */
+        if (parent && parent.itemType === "product" && before.qtyPassed > 0) {
+          moves.push({
+            id: nid(),
+            factoryId: fid(db),
+            date: cairoToday(),
+            itemType: "product",
+            itemId: parent.itemId,
+            warehouseId: db.warehouses.find((w) => w.kind === "finished")?.id ?? null,
+            kind: "delivery",
+            qty: -before.qtyPassed,
+            unitCost: unitCostOf(db, parent),
+            refType: "repair",
+            refId: before.id,
+            notes: `${before.code} — اترجّع للعميل بعد الإصلاح`,
+          });
+        }
+        const after = { ...before, status: "shipped" as const, shippedAt: new Date().toISOString() };
+        mutate(
+          {
+            repairs: (db.repairs ?? []).map((r) => (r.id === id ? after : r)),
+            ...(moves.length ? { stockMovements: [...moves, ...db.stockMovements] } : {}),
+          },
+          { action: "update", table: "repairs", recordId: id, before, after },
+        );
+      },
+      cancelRepair: (id, reason) => {
+        const before = (db.repairs ?? []).find((r) => r.id === id);
+        if (!before) throw new Error("أمر الإصلاح مش موجود.");
+        need("quality", "edit");
+        if (!reason.trim()) throw new Error("الإلغاء لازم له سبب مكتوب.");
+        if (before.status === "shipped" || before.status === "ready") {
+          throw new Error("الأمر ده خلص وخاماته اتصرفت — سجّل حركة مضادة بدل الإلغاء.");
+        }
+        const after = { ...before, status: "cancelled" as const, cancelReason: reason.trim() };
+        mutate(
+          { repairs: (db.repairs ?? []).map((r) => (r.id === id ? after : r)) },
+          { action: "update", table: "repairs", recordId: id, before, after },
+        );
+      },
+
       addComplaint: (input) => {
         need("parties", "create");
         if (!input.partyId) throw new Error("اختار الجهة صاحبة الشكوى.");
@@ -2587,6 +2969,7 @@ function emptyShell(): Db {
     subReceipts: [],
     subPayments: [],
     returns: [],
+    repairs: [],
     complaints: [],
     auditLog: [],
   };
