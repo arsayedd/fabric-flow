@@ -100,7 +100,9 @@ export function ExceptionsCard({ limit = 5 }: { limit?: number }) {
       <Card>
         <div className="flex items-center gap-2 text-ok">
           <CircleCheck className="h-4 w-4 shrink-0" />
-          <span className="text-sm">مفيش حاجة محتاجة تدخّل: مواعيدك في الجدول، خاماتك كفاية، ومفيش تحصيل متأخر.</span>
+          {/* «تشغيلية» مش «حاجة»: الكارت ده بيتكلم عن حوادث اليوم بس، وفوقه
+              ممكن يبقى فيه ثقوب تجهيز — فـ«مفيش حاجة» كانت بتناقضها */}
+          <span className="text-sm">مفيش حادثة تشغيلية النهارده: مواعيدك في الجدول، خاماتك كفاية، ومفيش تحصيل متأخر.</span>
         </div>
       </Card>
     );
