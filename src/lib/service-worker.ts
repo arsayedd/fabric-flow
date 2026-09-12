@@ -26,6 +26,9 @@
  * الحالة اللي بنحاول نحلّها.
  */
 export function registerServiceWorker(): void {
+  /* سيرفر التطوير مابيبنيش `sw.js`، فبيرد بـ`index.html` على أي مسار —
+   * والمتصفح بيرفضه وبيسيب خطأ MIME في الكونسول. */
+  if (!import.meta.env.PROD) return;
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
 
   const sw = navigator.serviceWorker;
