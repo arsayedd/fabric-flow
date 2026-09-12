@@ -15,12 +15,13 @@
       name="description"
       content="صنعة — نظام إدارة خطوط الإنتاج: أوامر الإنتاج، العملاء والتحصيل، التكاليف، العمال، والخزينة."
     />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap"
-      rel="stylesheet"
-    />
+    <!--
+      الخط من عندنا مش من CDN — التفاصيل في أول `src/index.css`.
+      الوزنين ٤٠٠ و٥٠٠ متحمّلين مسبقًا لأنهم اللي كل الواجهة مكتوبة بيهم،
+      والباقي (٦٠٠ واللاتيني) بيتحمّل لما يحتاجه المتصفح.
+    -->
+    <link rel="preload" href="/fonts/plex-arabic-arabic-400.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/plex-arabic-arabic-500.woff2" as="font" type="font/woff2" crossorigin />
     <title>صنعة — نظام إدارة خطوط الإنتاج</title>
   </head>
   <body>

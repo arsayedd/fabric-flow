@@ -14,6 +14,15 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["favicon-32.png", "apple-touch-icon.png", "brand/sanaa-mark.png"],
+      /*
+       * الخطوط لازم تدخل الكاش مع باقي الملفات.
+       * الافتراضي في workbox مابياخدش `woff2`، ومن غيرها النظام بيفتح
+       * أوفلاين على أرض المصنع بخط النظام: العناوين بتفقد وزن الـ٥٠٠،
+       * والأرقام العربية بتبان بعرض مختلف فالجداول بترقص.
+       */
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,webmanifest}"],
+      },
       manifest: {
         name: "صنعة — نظام إدارة خطوط الإنتاج",
         short_name: "صنعة",
